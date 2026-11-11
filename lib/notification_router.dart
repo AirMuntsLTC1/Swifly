@@ -25,6 +25,7 @@ class NotificationRouter {
           builder: (_) => PostDetailScreen(
             postId: n.postId ?? '',
             highlightId: n.commentId,
+            flashPost: true,
           ),
         ));
         break;
@@ -41,7 +42,7 @@ class NotificationRouter {
         break;
       case NotifType.tag:
         nav.push(MaterialPageRoute(
-          builder: (_) => PostDetailScreen(postId: n.postId ?? ''),
+          builder: (_) => PostDetailScreen(postId: n.postId ?? '', flashPost: true),
         ));
         break;
     }

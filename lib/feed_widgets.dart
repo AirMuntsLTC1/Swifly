@@ -12,6 +12,7 @@ import 'user_profile_screen.dart';
 import 'tag_friends_screen.dart';
 import 'typing_indicator.dart';
 import 'follow_button.dart';
+import 'post_detail_screen.dart';
 
 const Color _saveOrange = Color(0xFFFF9800);
 
@@ -279,7 +280,7 @@ class _PostCardState extends State<PostCard> {
           _actionCell(
             icon: const Icon(LucideIcons.messageCircle, color: Colors.black, size: 22),
             label: 'Comment',
-            onTap: () => showCommentsSheet(context, p.id),
+            onTap: () => Navigator.push(context, postDetailRoute(p.id)),
           ),
           _actionCell(
             icon: _iconStack(

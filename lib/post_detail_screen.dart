@@ -12,7 +12,15 @@ class PostDetailScreen extends StatefulWidget {
   final String postId;
   final String? highlightId;
 
-  const PostDetailScreen({super.key, required this.postId, this.highlightId});
+  /// Flash the whole post when it opens. Used by notifications, not by the Comment button.
+  final bool flashPost;
+
+  const PostDetailScreen({
+    super.key,
+    required this.postId,
+    this.highlightId,
+    this.flashPost = false,
+  });
 
   @override
   State<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -50,8 +58,9 @@ class _PostDetailScreenState extends State<PostDetailScreen>
 
   void _highlight() {
     if (!mounted) return;
-    _flash.forward(from: 0);
     final id = widget.highlightId;
+    if (id == null && !widget.flashPost) return;
+    _flash.forward(from: 0);
     if (id == null) return;
     final ctx = _keys[id]?.currentContext;
     if (ctx != null) {
@@ -285,7 +294,7 @@ class _PostDetailScreenState extends State<PostDetailScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _flashable(
-                        active: widget.highlightId == null,
+                        active: widget.highlightId == null && widget.flashPost,
                         child: PostCard(post: post),
                       ),
                       _commentsSection(post),
@@ -300,4 +309,25 @@ class _PostDetailScreenState extends State<PostDetailScreen>
       ),
     );
   }
+}
+
+/// Opens the post page from the feed. The page slides in from the right with a
+/// short fade, and slides back out the same way.
+Route<void> postDetailRoute(String postId) {
+  return PageRouteBuilder<void>(
+    transitionDuration: const Duration(milliseconds: 320),
+    reverseTransitionDuration: const Duration(milliseconds: 260),
+    pageBuilder: (_, __, ___) => PostDetailScreen(postId: postId),
+    transitionsBuilder: (_, animation, __, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
+        child: FadeTransition(opacity: curved, child: child),
+      );
+    },
+  );
 }
