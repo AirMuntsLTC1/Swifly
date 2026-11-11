@@ -200,7 +200,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
   }
 }
 
-/// Follow button: squeezes on press, then the color and label animate to the new state.
+/// Follow button: squeezes on press, then color and label animate to the new state.
 class _FollowButton extends StatefulWidget {
   final bool following;
   final VoidCallback onTap;

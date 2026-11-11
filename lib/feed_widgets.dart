@@ -287,116 +287,130 @@ class _CommentsSheetState extends State<_CommentsSheet> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    return Padding(
-      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
-      child: SizedBox(
-        height: media.size.height * 0.7,
-        child: ListenableBuilder(
-          listenable: PostStore.instance,
-          builder: (context, _) {
-            final post = PostStore.instance.byId(widget.postId);
-            final comments = post?.comments ?? const <CommentItem>[];
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text('Comments (${comments.length})',
-                            style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.black)),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(LucideIcons.x, color: Colors.black),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1, color: Color(0xFFEAEAEA)),
-                Expanded(
-                  child: comments.isEmpty
-                      ? const Center(
-                          child: Text('No comments yet',
-                              style: TextStyle(color: Color(0xFF8E8E8E))),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: comments.length,
-                          itemBuilder: (context, i) {
-                            final c = comments[i];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor: Colors.black,
-                                    child: Icon(LucideIcons.user,
-                                        color: Colors.white, size: 16),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(c.name,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 14,
-                                                color: Colors.black)),
-                                        const SizedBox(height: 2),
-                                        Text(c.text,
-                                            style: const TextStyle(
-                                                fontSize: 14, color: Colors.black)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+        child: SizedBox(
+          height: media.size.height * 0.7,
+          child: ListenableBuilder(
+            listenable: PostStore.instance,
+            builder: (context, _) {
+              final post = PostStore.instance.byId(widget.postId);
+              final comments = post?.comments ?? const <CommentItem>[];
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text('Comments (${comments.length})',
+                              style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.black)),
                         ),
-                ),
-                const Divider(height: 1, color: Color(0xFFEAEAEA)),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _controller,
-                          cursorColor: Colors.black,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: (_) => _send(),
-                          decoration: const InputDecoration(
-                            hintText: 'Write a comment',
-                            filled: true,
-                            fillColor: Color(0xFFF2F2F2),
-                            isDense: true,
-                            contentPadding:
-                                EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.all(Radius.circular(30)),
-                              borderSide: BorderSide.none,
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(LucideIcons.x, color: Colors.black),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFFEAEAEA)),
+                  Expanded(
+                    child: comments.isEmpty
+                        ? const Center(
+                            child: Text('No comments yet',
+                                style: TextStyle(color: Color(0xFF8E8E8E))),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: comments.length,
+                            itemBuilder: (context, i) {
+                              final c = comments[i];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: Colors.black,
+                                      child: Icon(LucideIcons.user,
+                                          color: Colors.white, size: 16),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(c.name,
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 14,
+                                                  color: Colors.black)),
+                                          const SizedBox(height: 2),
+                                          Text(c.text,
+                                              style: const TextStyle(
+                                                  fontSize: 14, color: Colors.black)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFFEAEAEA)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 4, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            cursorColor: Colors.black,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _send(),
+                            decoration: const InputDecoration(
+                              hintText: 'Write a comment',
+                              filled: true,
+                              fillColor: Color(0xFFF2F2F2),
+                              isDense: true,
+                              contentPadding:
+                                  EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(30)),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: _send,
-                        icon: const Icon(LucideIcons.send, color: Colors.black),
-                      ),
-                    ],
+                        IconButton(
+                          tooltip: 'Emoji',
+                          onPressed: () {},
+                          icon: const Icon(LucideIcons.smile, color: Colors.black),
+                        ),
+                        IconButton(
+                          tooltip: 'GIF',
+                          onPressed: () {},
+                          icon: const Icon(LucideIcons.clapperboard, color: Colors.black),
+                        ),
+                        IconButton(
+                          tooltip: 'Send',
+                          onPressed: _send,
+                          icon: const Icon(LucideIcons.send, color: Colors.black),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
