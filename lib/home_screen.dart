@@ -351,7 +351,6 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  final Set<String> _followed = {};
 
   @override
   Widget build(BuildContext context) {
@@ -441,14 +440,16 @@ class _ProfileTabState extends State<ProfileTab> {
             ],
           ),
           const SizedBox(height: 12),
-          SizedBox(
+          ListenableBuilder(
+            listenable: PostStore.instance,
+            builder: (context, _) => SizedBox(
             height: 180,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: kFriends.take(10).length,
               itemBuilder: (context, i) {
                 final f = kFriends[i];
-                final isFollowing = _followed.contains(f.handle);
+                final isFollowing = PostStore.instance.isFollowing(f.handle);
                 return Container(
                   width: 130,
                   margin: const EdgeInsets.only(right: 12),
@@ -485,15 +486,7 @@ class _ProfileTabState extends State<ProfileTab> {
                           width: double.infinity,
                           height: 32,
                           child: ElevatedButton(
-                            onPressed: () {
-                              setState(() {
-                                if (isFollowing) {
-                                  _followed.remove(f.handle);
-                                } else {
-                                  _followed.add(f.handle);
-                                }
-                              });
-                            },
+                            onPressed: () => PostStore.instance.toggleFollow(f.handle),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: isFollowing ? Colors.white : const Color(0xFF1D6FDC),
                               foregroundColor: isFollowing ? const Color(0xFF1D6FDC) : Colors.white,
@@ -511,6 +504,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 );
               },
             ),
+          ),
           ),
         ],
       ),

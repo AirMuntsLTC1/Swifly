@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'feed_widgets.dart';
 import 'post_model.dart';
+import 'typing_indicator.dart';
 
 /// One post with its full comment thread. When [highlightId] is a comment or
 /// reply id, that item scrolls into view and flashes. When it is null, the post
@@ -148,10 +149,7 @@ class _PostDetailScreenState extends State<PostDetailScreen>
   }
 
   Widget _commentsSection(Post post) {
-    var total = post.comments.length;
-    for (final c in post.comments) {
-      total += c.replies.length;
-    }
+    final total = post.totalComments;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
@@ -204,6 +202,7 @@ class _PostDetailScreenState extends State<PostDetailScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            TypingIndicator(postId: post.id),
             if (target != null)
               Row(
                 children: [

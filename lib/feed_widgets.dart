@@ -10,6 +10,7 @@ import 'native_bridge.dart';
 import 'post_model.dart';
 import 'user_profile_screen.dart';
 import 'tag_friends_screen.dart';
+import 'typing_indicator.dart';
 
 const Color _saveOrange = Color(0xFFFF9800);
 
@@ -193,7 +194,7 @@ class _PostCardState extends State<PostCard> {
 
   String _countsLine(Post p) {
     final likes = NativeCore.formatCount(p.likes);
-    final comments = NativeCore.formatCount(p.comments.length);
+    final comments = NativeCore.formatCount(p.totalComments);
     final saves = NativeCore.formatCount(p.saves);
     return '$likes likes · $comments comments · $saves saves';
   }
@@ -604,6 +605,14 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     );
   }
 
+  /// Sheet height that still fits above the keyboard and below the status bar.
+  double _sheetHeight(MediaQueryData media) {
+    final preferred = media.size.height * 0.7;
+    final available =
+        media.size.height - media.viewInsets.bottom - media.padding.top - 24;
+    return available < preferred ? available : preferred;
+  }
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
@@ -612,7 +621,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       child: Padding(
         padding: EdgeInsets.only(bottom: _showEmojiPicker ? 0 : media.viewInsets.bottom),
         child: SizedBox(
-          height: media.size.height * 0.7,
+          height: _sheetHeight(media),
           child: ListenableBuilder(
             listenable: PostStore.instance,
             builder: (context, _) {
@@ -657,6 +666,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         ],
                       ),
                     ),
+                  TypingIndicator(postId: widget.postId),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 8, 4, 12),
                     child: Row(

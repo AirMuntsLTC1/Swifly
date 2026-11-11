@@ -21,3 +21,20 @@ the APK in the run's Artifacts section.
 - Tapping a like, save, comment or reply opens the post. The matching comment or reply scrolls into view and flashes yellow.
 - Follow opens the person's profile. Message opens the chat. Story reaction opens your story.
 - `lib/inbox_store.dart` has `LiveEvents.demo`. It simulates other people's activity every 15 seconds so you can test without a server. Set it to `false` when a real backend sends these events.
+
+## Realtime and test data
+
+All changes from other people go through one stream, `Realtime.instance` in `lib/realtime.dart`. Every screen listens to the stores, so a like, comment, typing indicator, follow, or message updates everywhere at once.
+
+### Test data (remove when going live)
+- `lib/app_config.dart`: `kUseMockData` switches sample data on or off.
+- `lib/mock_data.dart`: all sample posts, notifications, chats, story, and followers.
+- `lib/mock_realtime.dart`: simulated activity (likes, comments, typing, follows, messages).
+- Also sample data (not yet switched off by `kUseMockData`): `kFriends` in `lib/tag_friends_screen.dart`, the follower/following counts in `lib/discover_panel.dart`, `kPeopleStats` in `lib/user_profile_screen.dart`, and the profile stats in `lib/home_screen.dart`.
+
+### Connecting the real database
+1. Set `kUseMockData = false` in `lib/app_config.dart`.
+2. Delete `lib/mock_data.dart` and `lib/mock_realtime.dart`.
+3. Load real posts, people, and notifications at startup, calling `PostStore.instance.load(...)`, `NotificationStore.instance.load(...)`, and so on.
+4. In `lib/database_service.dart`, replace each simulated method with a real call.
+5. Subscribe to your database's realtime channel and call `Realtime.instance.publish(...)` with the matching event (for example `CommentAddedEvent`). The screens need no other changes.

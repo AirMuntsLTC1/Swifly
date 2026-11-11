@@ -43,23 +43,20 @@ class AppNotification {
   String get title => switch (type) {
         NotifType.like => '$actorName liked your post',
         NotifType.comment => '$actorName commented on your post',
-        NotifType.reply => '$actorName replied to your comment',
+        NotifType.reply => '$actorName replied to a comment',
         NotifType.save => '$actorName saved your post',
         NotifType.follow => '$actorName started following you',
         NotifType.message => '$actorName sent you a message',
-        NotifType.storyReact => '$actorName reacted ' + (emoji ?? '') + ' to your story',
+        NotifType.storyReact => '$actorName reacted ${emoji ?? ""} to your story',
       };
 
   String get timeLabel => timeAgoLabel(created);
 }
 
-/// All notifications, newest first. Every new one is also pushed on [onNew],
+/// All notifications, newest first. Each new one is also pushed on [onNew],
 /// which drives the popup banner.
 class NotificationStore extends ChangeNotifier {
-  NotificationStore._() {
-    _seed();
-  }
-
+  NotificationStore._();
   static final NotificationStore instance = NotificationStore._();
 
   final List<AppNotification> _items = [];
@@ -70,6 +67,14 @@ class NotificationStore extends ChangeNotifier {
   Stream<AppNotification> get onNew => _incoming.stream;
   List<AppNotification> get items => List.unmodifiable(_items);
   int get unreadCount => _items.where((n) => !n.read).length;
+
+  /// Replaces the list with saved notifications. Does not show banners.
+  void load(List<AppNotification> saved) {
+    _items
+      ..clear()
+      ..addAll(saved);
+    notifyListeners();
+  }
 
   void add({
     required NotifType type,
@@ -108,55 +113,6 @@ class NotificationStore extends ChangeNotifier {
     }
     notifyListeners();
   }
-
-  void _seed() {
-    final now = DateTime.now();
-    _items.addAll([
-      AppNotification(
-        id: 'n${++_seq}',
-        type: NotifType.like,
-        actorName: 'Ava Stone',
-        actorHandle: '@avastone',
-        postId: kMyPostId,
-        created: now.subtract(const Duration(minutes: 10)),
-      ),
-      AppNotification(
-        id: 'n${++_seq}',
-        type: NotifType.comment,
-        actorName: 'Liam Park',
-        actorHandle: '@liampark',
-        postId: kMyPostId,
-        commentId: 'demo-c1',
-        preview: 'Welcome to Swifly!',
-        created: now.subtract(const Duration(minutes: 30)),
-      ),
-      AppNotification(
-        id: 'n${++_seq}',
-        type: NotifType.follow,
-        actorName: 'Mia Chen',
-        actorHandle: '@miachen',
-        created: now.subtract(const Duration(hours: 1)),
-      ),
-      AppNotification(
-        id: 'n${++_seq}',
-        type: NotifType.message,
-        actorName: 'Ava Stone',
-        actorHandle: '@avastone',
-        preview: 'See you at the hike!',
-        created: now.subtract(const Duration(hours: 2)),
-        read: true,
-      ),
-      AppNotification(
-        id: 'n${++_seq}',
-        type: NotifType.storyReact,
-        actorName: 'Noah Reed',
-        actorHandle: '@noahreed',
-        emoji: '🔥',
-        created: now.subtract(const Duration(hours: 3)),
-        read: true,
-      ),
-    ]);
-  }
 }
 
 class ChatMessage {
@@ -169,10 +125,7 @@ class ChatMessage {
 
 /// Direct message threads keyed by the other person's handle.
 class ChatStore extends ChangeNotifier {
-  ChatStore._() {
-    _seed();
-  }
-
+  ChatStore._();
   static final ChatStore instance = ChatStore._();
 
   final Map<String, List<ChatMessage>> _threads = {};
@@ -189,6 +142,13 @@ class ChatStore extends ChangeNotifier {
   List<ChatMessage> thread(String handle) =>
       List.unmodifiable(_threads[handle] ?? const <ChatMessage>[]);
 
+  void load(Map<String, List<ChatMessage>> threads) {
+    _threads
+      ..clear()
+      ..addAll(threads.map((k, v) => MapEntry(k, List<ChatMessage>.of(v))));
+    notifyListeners();
+  }
+
   void send(String handle, String text) {
     _add(handle, ChatMessage(text: text, fromMe: true, time: DateTime.now()));
   }
@@ -200,32 +160,6 @@ class ChatStore extends ChangeNotifier {
   void _add(String handle, ChatMessage m) {
     _threads.putIfAbsent(handle, () => <ChatMessage>[]).add(m);
     notifyListeners();
-  }
-
-  void _seed() {
-    final now = DateTime.now();
-    _threads['@avastone'] = [
-      ChatMessage(
-          text: 'Did you see the sunrise pics?',
-          fromMe: false,
-          time: now.subtract(const Duration(days: 1))),
-      ChatMessage(
-          text: 'See you at the hike!',
-          fromMe: false,
-          time: now.subtract(const Duration(hours: 2))),
-    ];
-    _threads['@liampark'] = [
-      ChatMessage(
-          text: 'Check out my new build',
-          fromMe: false,
-          time: now.subtract(const Duration(hours: 8))),
-    ];
-    _threads['@miachen'] = [
-      ChatMessage(
-          text: 'Coffee on Saturday?',
-          fromMe: false,
-          time: now.subtract(const Duration(days: 1))),
-    ];
   }
 }
 
@@ -246,20 +180,20 @@ class StoryReaction {
 /// The user's single active story and the reactions it has received.
 class StoryStore extends ChangeNotifier {
   StoryStore._();
-
   static final StoryStore instance = StoryStore._();
 
-  final String caption = 'My weekend so far';
-  final List<StoryReaction> _reactions = [
-    StoryReaction(
-      name: 'Noah Reed',
-      handle: '@noahreed',
-      emoji: '🔥',
-      time: DateTime.now().subtract(const Duration(hours: 3)),
-    ),
-  ];
+  String caption = '';
+  final List<StoryReaction> _reactions = [];
 
   List<StoryReaction> get reactions => List.unmodifiable(_reactions);
+
+  void load({required String caption, required List<StoryReaction> reactions}) {
+    this.caption = caption;
+    _reactions
+      ..clear()
+      ..addAll(reactions);
+    notifyListeners();
+  }
 
   void react(String name, String handle, String emoji) {
     _reactions.insert(
@@ -267,114 +201,5 @@ class StoryStore extends ChangeNotifier {
       StoryReaction(name: name, handle: handle, emoji: emoji, time: DateTime.now()),
     );
     notifyListeners();
-  }
-}
-
-/// Simulates other people's activity so the notification flow can be tested
-/// without a server. Each step changes the real stores and then notifies.
-/// Set [demo] to false once a backend delivers these events instead.
-class LiveEvents {
-  static const bool demo = true;
-  static const Duration interval = Duration(seconds: 15);
-
-  static Timer? _timer;
-  static int _step = 0;
-
-  static void start() {
-    if (!demo || _timer != null) return;
-    _timer = Timer.periodic(interval, (_) => _runNext());
-  }
-
-  static void _runNext() {
-    final steps = <void Function()>[
-      _like,
-      _comment,
-      _reply,
-      _save,
-      _follow,
-      _message,
-      _storyReact,
-    ];
-    steps[_step % steps.length]();
-    _step++;
-  }
-
-  static void _like() {
-    if (!PostStore.instance.receiveLike(kMyPostId)) return;
-    NotificationStore.instance.add(
-      type: NotifType.like,
-      actorName: 'Ava Stone',
-      actorHandle: '@avastone',
-      postId: kMyPostId,
-    );
-  }
-
-  static void _comment() {
-    const text = 'Congrats on the new post!';
-    final cid = PostStore.instance.receiveComment(kMyPostId, 'Liam Park', text);
-    if (cid == null) return;
-    NotificationStore.instance.add(
-      type: NotifType.comment,
-      actorName: 'Liam Park',
-      actorHandle: '@liampark',
-      postId: kMyPostId,
-      commentId: cid,
-      preview: text,
-    );
-  }
-
-  static void _reply() {
-    const text = 'Thanks Liam, appreciate it!';
-    final rid = PostStore.instance
-        .receiveReply(kMyPostId, 'demo-c1', 'Noah Reed', text);
-    if (rid == null) return;
-    NotificationStore.instance.add(
-      type: NotifType.reply,
-      actorName: 'Noah Reed',
-      actorHandle: '@noahreed',
-      postId: kMyPostId,
-      commentId: rid,
-      preview: text,
-    );
-  }
-
-  static void _save() {
-    if (!PostStore.instance.receiveSave(kMyPostId)) return;
-    NotificationStore.instance.add(
-      type: NotifType.save,
-      actorName: 'Mia Chen',
-      actorHandle: '@miachen',
-      postId: kMyPostId,
-    );
-  }
-
-  static void _follow() {
-    PostStore.instance.receiveFollower('@omarkh');
-    NotificationStore.instance.add(
-      type: NotifType.follow,
-      actorName: 'Omar Khalid',
-      actorHandle: '@omarkh',
-    );
-  }
-
-  static void _message() {
-    const text = 'Are we still on for Saturday?';
-    ChatStore.instance.receive('@sofial', text);
-    NotificationStore.instance.add(
-      type: NotifType.message,
-      actorName: 'Sofia Lopez',
-      actorHandle: '@sofial',
-      preview: text,
-    );
-  }
-
-  static void _storyReact() {
-    StoryStore.instance.react('Max Turner', '@maxturner', '❤️');
-    NotificationStore.instance.add(
-      type: NotifType.storyReact,
-      actorName: 'Max Turner',
-      actorHandle: '@maxturner',
-      emoji: '❤️',
-    );
   }
 }

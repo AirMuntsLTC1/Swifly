@@ -124,7 +124,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       Color bg = const Color(0xFF1D6FDC);
                       Color fg = Colors.white;
 
-                      if (status == 1) {
+                      // Following and mutual follow look the same, and both can be tapped to unfollow.
+                      if (status == 1 || status == 3) {
                         label = 'Following';
                         bg = Colors.white;
                         fg = const Color(0xFF1D6FDC);
@@ -137,13 +138,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       }
 
                       return ElevatedButton(
-                        onPressed: status == 3
-                            ? null
-                            : () => PostStore.instance.toggleFollow(f.handle),
+                        onPressed: () => PostStore.instance.toggleFollow(f.handle),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              status == 3 ? const Color(0xFFF2F2F2) : bg,
-                          foregroundColor: status == 3 ? Colors.grey : fg,
+                          backgroundColor: bg,
+                          foregroundColor: fg,
                           side: status == 1 || status == 3
                               ? const BorderSide(color: Color(0xFF1D6FDC))
                               : null,

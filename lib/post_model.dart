@@ -71,6 +71,9 @@ class Post {
   bool hasHashtag(String tag) => NativeCore.countHashtag(text, tag) > 0;
   double get hoursOld => DateTime.now().difference(created).inSeconds / 3600.0;
 
+  /// Top-level comments plus all replies. Every count on screen uses this.
+  int get totalComments => comments.fold<int>(0, (n, c) => n + 1 + c.replies.length);
+
   String get timeLabel {
     final d = DateTime.now().difference(created);
     if (d.inMinutes < 1) return 'now';
@@ -91,8 +94,8 @@ class PostStore extends ChangeNotifier {
   int _nextId = 1;
 
   // Social Graph
-  final Set<String> _myFollowing = {'@liampark', '@zaraali'};
-  final Set<String> _myFollowers = {'@avastone', '@zaraali'};
+  final Set<String> _myFollowing = <String>{};
+  final Set<String> _myFollowers = <String>{};
 
   bool isFollowing(String handle) => _myFollowing.contains(handle);
   bool isFollower(String handle) => _myFollowers.contains(handle);
@@ -101,86 +104,25 @@ class PostStore extends ChangeNotifier {
 
   void _seed() {
     // TODO: Replace _seed() with DatabaseService.instance.fetchPosts() when connecting DB
-    final now = DateTime.now();
-    _posts.add(
-      Post(
-        id: kMyPostId,
-        authorName: kMeName,
-        authorHandle: kMeHandle,
-        text: 'My first post on Swifly! #hello',
-        audience: 'Everyone',
-        created: now.subtract(const Duration(hours: 3)),
-        likes: 5,
-        saves: 1,
-        comments: [
-          CommentItem(
-            id: 'demo-c1',
-            name: 'Liam Park',
-            text: 'Welcome to Swifly!',
-            created: now.subtract(const Duration(minutes: 30)),
-          ),
-        ],
-      ),
-    );
-    _posts.addAll([
-      Post(
-        id: 's1',
-        authorName: 'Ava Stone',
-        authorHandle: '@avastone',
-        text: 'Sunrise hike done. Worth every step. #hiking #travel',
-        audience: 'Everyone',
-        taggedHandles: const ['@liampark'],
-        created: now.subtract(const Duration(hours: 2)),
-        likes: 42,
-        saves: 6,
-        comments: [
-          CommentItem(name: 'Liam Park', text: 'Looks amazing!', created: now),
-        ],
-      ),
-      Post(
-        id: 's2',
-        authorName: 'Liam Park',
-        authorHandle: '@liampark',
-        text: 'Just shipped my first app! Feedback welcome. #coding #design',
-        audience: 'Followers',
-        taggedHandles: const ['@avastone', '@noahreed'],
-        created: now.subtract(const Duration(hours: 4)),
-        likes: 88,
-        saves: 12,
-      ),
-      Post(
-        id: 's3',
-        authorName: 'Mia Chen',
-        authorHandle: '@miachen',
-        text: 'New coffee spot downtown. Highly recommend. #coffee',
-        audience: 'Everyone',
-        created: now.subtract(const Duration(hours: 6)),
-        likes: 19,
-        saves: 3,
-      ),
-      Post(
-        id: 's4',
-        authorName: 'Noah Reed',
-        authorHandle: '@noahreed',
-        text: 'Weekend project: a tiny plant-care tracker. #coding',
-        audience: 'Followers',
-        taggedHandles: const ['@zaraali'],
-        created: now.subtract(const Duration(hours: 8)),
-        likes: 7,
-        saves: 1,
-      ),
-      Post(
-        id: 's5',
-        authorName: 'Zara Ali',
-        authorHandle: '@zaraali',
-        text: 'Books that changed how I think about design. #books #design',
-        audience: 'Everyone',
-        taggedHandles: const ['@hanasato'],
-        created: now.subtract(const Duration(days: 1)),
-        likes: 130,
-        saves: 25,
-      ),
-    ]);
+    // Sample data lives in mock_data.dart (see kUseMockData in app_config.dart).
+  }
+
+  /// Replaces all posts and the social graph. Called with mock data or database results.
+  void load({
+    required List<Post> posts,
+    Set<String> following = const <String>{},
+    Set<String> followers = const <String>{},
+  }) {
+    _posts
+      ..clear()
+      ..addAll(posts);
+    _myFollowing
+      ..clear()
+      ..addAll(following);
+    _myFollowers
+      ..clear()
+      ..addAll(followers);
+    notifyListeners();
   }
 
   /// Your own new posts first (newest), then everyone else ranked by the C++ core.
@@ -190,7 +132,7 @@ class PostStore extends ChangeNotifier {
     final others = _posts.where((p) => p.authorHandle != kMeHandle).toList();
     final order = NativeCore.rankOrder(
       others.map((p) => p.likes).toList(),
-      others.map((p) => p.comments.length).toList(),
+      others.map((p) => p.totalComments).toList(),
       others.map((p) => p.saves).toList(),
       others.map((p) => p.hoursOld).toList(),
     );
@@ -231,7 +173,7 @@ class PostStore extends ChangeNotifier {
   }
 
   // --- INCOMING ACTIVITY FROM OTHER PEOPLE ---
-  // A real backend would deliver these as push events. LiveEvents calls them in demo mode.
+  // A real backend would deliver these as push events. MockRealtime calls them in demo mode.
 
   bool receiveLike(String postId) {
     final p = byId(postId);
@@ -249,29 +191,37 @@ class PostStore extends ChangeNotifier {
     return true;
   }
 
-  /// Returns the new comment id so a notification can point at it.
-  String? receiveComment(String postId, String name, String text) {
+  /// Adds a comment or reply from another person. Returns false if the post or
+  /// parent comment is missing, or if this id was already applied.
+  bool applyComment({
+    required String postId,
+    required String id,
+    required String name,
+    required String text,
+    String? parentId,
+  }) {
     final p = byId(postId);
-    if (p == null) return null;
-    final c = CommentItem(name: name, text: text, created: DateTime.now());
-    p.comments.add(c);
-    notifyListeners();
-    return c.id;
-  }
+    if (p == null) return false;
+    final exists = p.comments.any(
+        (c) => c.id == id || c.replies.any((r) => r.id == id));
+    if (exists) return false;
 
-  /// Returns the new reply id, or null if the parent comment is missing.
-  String? receiveReply(String postId, String commentId, String name, String text) {
-    final p = byId(postId);
-    if (p == null) return null;
-    for (final c in p.comments) {
-      if (c.id == commentId) {
-        final r = CommentItem(name: name, text: text, created: DateTime.now());
-        c.replies.add(r);
-        notifyListeners();
-        return r.id;
+    final item = CommentItem(id: id, name: name, text: text, created: DateTime.now());
+    if (parentId == null) {
+      p.comments.add(item);
+    } else {
+      CommentItem? parent;
+      for (final c in p.comments) {
+        if (c.id == parentId) {
+          parent = c;
+          break;
+        }
       }
+      if (parent == null) return false;
+      parent.replies.add(item);
     }
-    return null;
+    notifyListeners();
+    return true;
   }
 
   void receiveFollower(String handle) {
