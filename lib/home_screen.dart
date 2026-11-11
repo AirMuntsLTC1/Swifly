@@ -534,9 +534,9 @@ class _ProfileTabState extends State<ProfileTab> {
                               });
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: isFollowing ? Colors.white : Colors.black,
-                              foregroundColor: isFollowing ? Colors.black : Colors.white,
-                              side: const BorderSide(color: Colors.black),
+                              backgroundColor: isFollowing ? Colors.white : const Color(0xFF1D6FDC),
+                              foregroundColor: isFollowing ? const Color(0xFF1D6FDC) : Colors.white,
+                              side: BorderSide(color: const Color(0xFF1D6FDC)),
                               elevation: 0,
                               padding: EdgeInsets.zero,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

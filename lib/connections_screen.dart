@@ -13,6 +13,10 @@ class ConnectionsScreen extends StatefulWidget {
 class _ConnectionsScreenState extends State<ConnectionsScreen> {
   late bool _showFollowers;
 
+  // Split the friends list into two different lists for the demo
+  final List<Friend> _followersList = kFriends.sublist(0, 5);
+  final List<Friend> _followingList = kFriends.sublist(5, 10);
+
   @override
   void initState() {
     super.initState();
@@ -59,10 +63,10 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
           Expanded(
             child: ListView.separated(
               padding: const EdgeInsets.all(16),
-              itemCount: kFriends.length,
+              itemCount: (_showFollowers ? _followersList : _followingList).length,
               separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
               itemBuilder: (context, i) {
-                final f = kFriends[i];
+                final f = (_showFollowers ? _followersList : _followingList)[i];
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const CircleAvatar(
@@ -74,11 +78,12 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
                   trailing: ElevatedButton(
                     onPressed: () {},
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
+                      backgroundColor: const Color(0xFF1D6FDC),
                       foregroundColor: Colors.white,
+                      elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
-                    child: const Text('Follow'),
+                    child: const Text('Follow', style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 );
               },

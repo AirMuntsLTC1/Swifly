@@ -39,11 +39,12 @@ class SuggestionsScreen extends StatelessWidget {
             trailing: ElevatedButton(
               onPressed: () {},
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
+                backgroundColor: const Color(0xFF1D6FDC),
                 foregroundColor: Colors.white,
+                elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
-              child: const Text('Follow'),
+              child: const Text('Follow', style: TextStyle(fontWeight: FontWeight.w700)),
             ),
           );
         },
