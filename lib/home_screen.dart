@@ -13,6 +13,8 @@ import 'suggestions_screen.dart';
 import 'search_history.dart';
 import 'upload_manager.dart';
 import 'tag_friends_screen.dart';
+import 'messages_tab.dart';
+import 'notifications_tab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -312,89 +314,34 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             width: 44,
             height: 44,
-            child: IconButton(
-              tooltip: labels[i],
-              onPressed: () => _selectTab(i),
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              icon: Icon(icons[i], color: Colors.black, size: 22),
-              style: IconButton.styleFrom(
-                backgroundColor:
-                    _index == i ? const Color(0xFFE6E6E6) : Colors.transparent,
-                minimumSize: const Size(40, 40),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: const CircleBorder(),
-              ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: IconButton(
+                    tooltip: labels[i],
+                    onPressed: () => _selectTab(i),
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(icons[i], color: Colors.black, size: 22),
+                    style: IconButton.styleFrom(
+                      backgroundColor:
+                          _index == i ? const Color(0xFFE6E6E6) : Colors.transparent,
+                      minimumSize: const Size(40, 40),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: const CircleBorder(),
+                    ),
+                  ),
+                ),
+                // Red unread count on the bell.
+                if (i == 2) const Positioned(top: 2, right: 2, child: UnreadBadge()),
+              ],
             ),
           ),
       ],
     );
   }
-
 }
-
-class MessagesTab extends StatelessWidget {
-  const MessagesTab({super.key});
-
-  static const List<Map<String, String>> _chats = [
-    {'name': 'Ava Stone', 'msg': 'See you at the hike!', 'time': '9:12'},
-    {'name': 'Liam Park', 'msg': 'Check out my new build', 'time': '8:40'},
-    {'name': 'Mia Chen', 'msg': 'Coffee on Saturday?', 'time': 'Yesterday'},
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 96),
-      itemCount: _chats.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
-      itemBuilder: (context, i) {
-        final c = _chats[i];
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          leading: const CircleAvatar(
-            backgroundColor: Colors.black,
-            child: Icon(LucideIcons.user, color: Colors.white, size: 20),
-          ),
-          title: Text(c['name']!,
-              style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black)),
-          subtitle: Text(c['msg']!, style: const TextStyle(color: Color(0xFF6E6E6E))),
-          trailing: Text(c['time']!,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-        );
-      },
-    );
-  }
-}
-
-class NotificationsTab extends StatelessWidget {
-  const NotificationsTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    const items = [
-      ('Ava Stone liked your post', 0),
-      ('Liam Park commented: "Nice work!"', 1),
-      ('Mia Chen started following you', 2),
-      ('Noah Reed liked your photo', 0),
-    ];
-    final icons = [LucideIcons.heart, LucideIcons.messageCircle, LucideIcons.userPlus];
-    return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 96),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
-      itemBuilder: (context, i) {
-        final n = items[i];
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: Icon(icons[n.$2], color: Colors.black),
-          title: Text(n.$1, style: const TextStyle(color: Colors.black, fontSize: 15)),
-        );
-      },
-    );
-  }
-}
-
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});

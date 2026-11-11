@@ -7,6 +7,9 @@ import 'database_service.dart';
 const String kMeName = 'Your Name';
 const String kMeHandle = '@yourhandle';
 
+/// The user's own demo post. Incoming likes, comments and saves land here.
+const String kMyPostId = 'm1';
+
 String nameForHandle(String handle) {
   for (final f in kFriends) {
     if (f.handle == handle) return f.name;
@@ -99,6 +102,26 @@ class PostStore extends ChangeNotifier {
   void _seed() {
     // TODO: Replace _seed() with DatabaseService.instance.fetchPosts() when connecting DB
     final now = DateTime.now();
+    _posts.add(
+      Post(
+        id: kMyPostId,
+        authorName: kMeName,
+        authorHandle: kMeHandle,
+        text: 'My first post on Swifly! #hello',
+        audience: 'Everyone',
+        created: now.subtract(const Duration(hours: 3)),
+        likes: 5,
+        saves: 1,
+        comments: [
+          CommentItem(
+            id: 'demo-c1',
+            name: 'Liam Park',
+            text: 'Welcome to Swifly!',
+            created: now.subtract(const Duration(minutes: 30)),
+          ),
+        ],
+      ),
+    );
     _posts.addAll([
       Post(
         id: 's1',
@@ -205,6 +228,55 @@ class PostStore extends ChangeNotifier {
       }
       return false;
     }).toList();
+  }
+
+  // --- INCOMING ACTIVITY FROM OTHER PEOPLE ---
+  // A real backend would deliver these as push events. LiveEvents calls them in demo mode.
+
+  bool receiveLike(String postId) {
+    final p = byId(postId);
+    if (p == null) return false;
+    p.likes++;
+    notifyListeners();
+    return true;
+  }
+
+  bool receiveSave(String postId) {
+    final p = byId(postId);
+    if (p == null) return false;
+    p.saves++;
+    notifyListeners();
+    return true;
+  }
+
+  /// Returns the new comment id so a notification can point at it.
+  String? receiveComment(String postId, String name, String text) {
+    final p = byId(postId);
+    if (p == null) return null;
+    final c = CommentItem(name: name, text: text, created: DateTime.now());
+    p.comments.add(c);
+    notifyListeners();
+    return c.id;
+  }
+
+  /// Returns the new reply id, or null if the parent comment is missing.
+  String? receiveReply(String postId, String commentId, String name, String text) {
+    final p = byId(postId);
+    if (p == null) return null;
+    for (final c in p.comments) {
+      if (c.id == commentId) {
+        final r = CommentItem(name: name, text: text, created: DateTime.now());
+        c.replies.add(r);
+        notifyListeners();
+        return r.id;
+      }
+    }
+    return null;
+  }
+
+  void receiveFollower(String handle) {
+    _myFollowers.add(handle);
+    notifyListeners();
   }
 
   // --- ASYNC ACTIONS (Optimistic UI) ---
