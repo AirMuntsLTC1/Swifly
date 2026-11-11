@@ -11,7 +11,7 @@ class SocialApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Social',
+      title: 'Swifly',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

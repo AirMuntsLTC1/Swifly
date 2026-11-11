@@ -82,7 +82,7 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Social',
+                  'Swifly',
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.w800,

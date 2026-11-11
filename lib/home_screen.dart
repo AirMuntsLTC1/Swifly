@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'create_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -61,6 +62,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        onPressed: () => showCreateSheet(context),
+        child: const Icon(LucideIcons.plus, size: 26),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -131,7 +143,7 @@ class FeedTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.only(top: 8, bottom: 96),
       itemCount: _posts.length,
       separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
       itemBuilder: (context, i) {
@@ -199,6 +211,7 @@ class MessagesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 96),
       itemCount: _chats.length,
       separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
       itemBuilder: (context, i) {
@@ -212,7 +225,8 @@ class MessagesTab extends StatelessWidget {
           title: Text(c['name']!,
               style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black)),
           subtitle: Text(c['msg']!, style: const TextStyle(color: Color(0xFF6E6E6E))),
-          trailing: Text(c['time']!, style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
+          trailing: Text(c['time']!,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
         );
       },
     );
@@ -233,6 +247,7 @@ class NotificationsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     const icons = [LucideIcons.heart, LucideIcons.messageCircle, LucideIcons.userPlus];
     return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 96),
       itemCount: _items.length,
       separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
       itemBuilder: (context, i) {
@@ -254,7 +269,7 @@ class ProfileTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
       child: Column(
         children: [
           const CircleAvatar(
