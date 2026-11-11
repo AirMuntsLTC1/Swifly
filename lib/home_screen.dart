@@ -19,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   static const Duration _anim = Duration(milliseconds: 320);
   static const double _pill = 44;
-  static const double _navWidth = 162;
+  static const double _navWidth = 176;
 
   int _index = 0;
   bool _searchOpen = false;
@@ -260,21 +260,27 @@ class _HomeScreenState extends State<HomeScreen> {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         for (int i = 0; i < 4; i++)
-          IconButton(
-            tooltip: labels[i],
-            onPressed: () => _selectTab(i),
-            icon: Icon(icons[i], color: Colors.black, size: 22),
-            style: IconButton.styleFrom(
-              backgroundColor:
-                  _index == i ? const Color(0xFFE6E6E6) : Colors.transparent,
-              minimumSize: const Size(40, 40),
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: IconButton(
+              tooltip: labels[i],
+              onPressed: () => _selectTab(i),
               padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              icon: Icon(icons[i], color: Colors.black, size: 22),
+              style: IconButton.styleFrom(
+                backgroundColor:
+                    _index == i ? const Color(0xFFE6E6E6) : Colors.transparent,
+                minimumSize: const Size(40, 40),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: const CircleBorder(),
+              ),
             ),
           ),
       ],
     );
   }
-}
 
 class MessagesTab extends StatelessWidget {
   const MessagesTab({super.key});

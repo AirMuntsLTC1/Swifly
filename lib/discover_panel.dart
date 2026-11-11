@@ -14,6 +14,20 @@ const List<String> kTrendingTags = [
   'books',
 ];
 
+/// Mock follower and following counts per handle. Replace with database values later.
+const Map<String, (int, int)> kPeopleStats = {
+  '@avastone': (1243, 310),
+  '@liampark': (856, 402),
+  '@miachen': (3120, 198),
+  '@noahreed': (412, 260),
+  '@zaraali': (9800, 121),
+  '@ethanb': (67, 88),
+  '@sofial': (2210, 540),
+  '@maxturner': (533, 97),
+  '@hanasato': (1540, 376),
+  '@omarkh': (98, 143),
+};
+
 class DiscoverPanel extends StatefulWidget {
   final String query;
   const DiscoverPanel({super.key, required this.query});
@@ -23,7 +37,24 @@ class DiscoverPanel extends StatefulWidget {
 }
 
 class _DiscoverPanelState extends State<DiscoverPanel> {
-  final Set<String> _following = {};
+  final Map<String, int> _followers = {
+    for (final f in kFriends) f.handle: kPeopleStats[f.handle]?.$1 ?? 0,
+  };
+  final Map<String, int> _following = {
+    for (final f in kFriends) f.handle: kPeopleStats[f.handle]?.$2 ?? 0,
+  };
+  final Set<String> _followed = {};
+
+  void _toggleFollow(String handle) {
+    setState(() {
+      if (_followed.remove(handle)) {
+        _followers[handle] = (_followers[handle] ?? 1) - 1;
+      } else {
+        _followed.add(handle);
+        _followers[handle] = (_followers[handle] ?? 0) + 1;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +101,8 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
 
   Widget _results(String q) {
     final people = kFriends
-        .where((f) => NativeCore.containsCI(f.name, q) || NativeCore.containsCI(f.handle, q))
+        .where((f) =>
+            NativeCore.containsCI(f.name, q) || NativeCore.containsCI(f.handle, q))
         .toList();
     final posts = PostStore.instance.search(q);
     return ListView(
@@ -110,49 +142,42 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     );
   }
 
-  Widget _followButton(String handle) {
-    final on = _following.contains(handle);
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (on) {
-            _following.remove(handle);
-          } else {
-            _following.add(handle);
-          }
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: on ? Colors.white : Colors.black,
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: Colors.black),
-        ),
-        child: Text(
-          on ? 'Following' : 'Follow',
-          style: TextStyle(
-            color: on ? Colors.black : Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _personTile(Friend f) {
+    final followers = _followers[f.handle] ?? 0;
+    final following = _following[f.handle] ?? 0;
+    final isFollowing = _followed.contains(f.handle);
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       leading: const CircleAvatar(
         backgroundColor: Colors.black,
         child: Icon(LucideIcons.user, color: Colors.white, size: 20),
       ),
       title: Text(f.name,
           style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black)),
-      subtitle: Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
-      trailing: _followButton(f.handle),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
+          const SizedBox(height: 3),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, anim) =>
+                FadeTransition(opacity: anim, child: child),
+            child: Text(
+              '${NativeCore.formatCount(followers)} followers · '
+              '${NativeCore.formatCount(following)} following',
+              key: ValueKey('$followers-$following'),
+              style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black),
+            ),
+          ),
+        ],
+      ),
+      trailing: _FollowButton(
+        following: isFollowing,
+        onTap: () => _toggleFollow(f.handle),
+      ),
     );
   }
 
@@ -171,6 +196,65 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
           style: const TextStyle(color: Color(0xFF6E6E6E))),
       trailing: Text(p.timeLabel,
           style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
+    );
+  }
+}
+
+/// Follow button: squeezes on press, then the color and label animate to the new state.
+class _FollowButton extends StatefulWidget {
+  final bool following;
+  final VoidCallback onTap;
+
+  const _FollowButton({required this.following, required this.onTap});
+
+  @override
+  State<_FollowButton> createState() => _FollowButtonState();
+}
+
+class _FollowButtonState extends State<_FollowButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = widget.following;
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      child: AnimatedScale(
+        scale: _pressed ? 0.88 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: on ? Colors.white : Colors.black,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.black),
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, anim) => ScaleTransition(
+              scale: anim,
+              child: FadeTransition(opacity: anim, child: child),
+            ),
+            child: Text(
+              on ? 'Following' : 'Follow',
+              key: ValueKey<bool>(on),
+              style: TextStyle(
+                color: on ? Colors.black : Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
