@@ -70,7 +70,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !_searchOpen,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _searchOpen) _closeSearch();
+      },
+      child: Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
@@ -105,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Icon(LucideIcons.plus, size: 26),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      ),
     );
   }
 
