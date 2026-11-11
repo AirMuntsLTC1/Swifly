@@ -8,6 +8,7 @@ import 'hashtag_screen.dart';
 import 'burst_icons.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
+import 'user_profile_screen.dart';
 
 const Color _saveOrange = Color(0xFFFF9800);
 
@@ -130,7 +131,16 @@ class _PostCardState extends State<PostCard> {
 
   Widget _header(Post p) {
     final tagNames = p.taggedHandles.map(nameForHandle).toList();
-    return Row(
+    Friend? author;
+    for (final f in kFriends) {
+      if (f.handle == p.authorHandle) author = f;
+    }
+
+    return InkWell(
+      onTap: author != null
+          ? () => Navigator.push(context, UserProfileScreen.route(author!))
+          : null,
+      child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const CircleAvatar(
@@ -175,6 +185,7 @@ class _PostCardState extends State<PostCard> {
           FeedFollowButton(handle: p.authorHandle),
         ],
       ],
+    ),
     );
   }
 

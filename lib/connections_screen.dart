@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'tag_friends_screen.dart';
+import 'user_profile_screen.dart';
 
 class ConnectionsScreen extends StatefulWidget {
   final bool initialFollowers;
-  const ConnectionsScreen({super.key, required this.initialFollowers});
+  final String userHandle;
+  final String userName;
+  const ConnectionsScreen({
+    super.key,
+    required this.initialFollowers,
+    this.userHandle = kMeHandle,
+    this.userName = kMeName,
+  });
 
   @override
   State<ConnectionsScreen> createState() => _ConnectionsScreenState();
@@ -35,9 +43,9 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
           icon: const Icon(LucideIcons.arrowLeft, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Connections',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
+        title: Text(
+          '${widget.userName}\'s Connections',
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
         ),
       ),
       body: Column(
@@ -68,6 +76,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
               itemBuilder: (context, i) {
                 final f = (_showFollowers ? _followersList : _followingList)[i];
                 return ListTile(
+                  onTap: () => Navigator.push(context, UserProfileScreen.route(f)),
                   contentPadding: EdgeInsets.zero,
                   leading: const CircleAvatar(
                     backgroundColor: Colors.black,

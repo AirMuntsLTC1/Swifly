@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'tag_friends_screen.dart';
+import 'user_profile_screen.dart';
 
 class SuggestionsScreen extends StatelessWidget {
   const SuggestionsScreen({super.key});
@@ -29,6 +30,7 @@ class SuggestionsScreen extends StatelessWidget {
         itemBuilder: (context, i) {
           final f = kFriends[i];
           return ListTile(
+            onTap: () => Navigator.push(context, UserProfileScreen.route(f)),
             contentPadding: EdgeInsets.zero,
             leading: const CircleAvatar(
               backgroundColor: Colors.black,

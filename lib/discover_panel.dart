@@ -6,6 +6,7 @@ import 'native_bridge.dart';
 import 'post_model.dart';
 import 'search_history.dart';
 import 'tag_friends_screen.dart';
+import 'user_profile_screen.dart';
 
 const List<String> kTrendingTags = [
   'travel',
@@ -332,6 +333,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     final status = PostStore.instance.getFollowStatus(f.handle);
     final isFollowing = status == 1 || status == 3;
     return ListTile(
+      onTap: () => Navigator.push(context, UserProfileScreen.route(f)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       leading: const CircleAvatar(
         backgroundColor: Colors.black,
