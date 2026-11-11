@@ -127,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
             ),
           ),
-          const Positioned.fill(child: IgnorePointer(child: UploadBanner())),
+          const UploadBanner(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
