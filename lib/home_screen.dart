@@ -282,6 +282,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+}
+
 class MessagesTab extends StatelessWidget {
   const MessagesTab({super.key});
 
