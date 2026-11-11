@@ -57,6 +57,42 @@ jobs:
         run: |
           sed -i 's/android:label="[^"]*"/android:label="Swifly"/' android/app/src/main/AndroidManifest.xml
 
+      - name: Install CMake for the C++ core
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" > /dev/null || true
+
+      - name: Wire C++ core into the Android build
+        run: |
+          mkdir -p android/app/src/main/cpp
+          cp cpp/CMakeLists.txt cpp/swifly_core.cpp android/app/src/main/cpp/
+          python3 - << 'PY'
+          import os
+          path = None
+          for name in ["android/app/build.gradle.kts", "android/app/build.gradle"]:
+              if os.path.exists(name):
+                  path = name
+                  break
+          src = open(path).read()
+          if "externalNativeBuild" not in src:
+              if path.endswith(".kts"):
+                  block = ('    externalNativeBuild {\n'
+                           '        cmake {\n'
+                           '            path = file("src/main/cpp/CMakeLists.txt")\n'
+                           '            version = "3.22.1"\n'
+                           '        }\n'
+                           '    }\n')
+              else:
+                  block = ('    externalNativeBuild {\n'
+                           '        cmake {\n'
+                           '            path "src/main/cpp/CMakeLists.txt"\n'
+                           '            version "3.22.1"\n'
+                           '        }\n'
+                           '    }\n')
+              src = src.replace("android {\n", "android {\n" + block, 1)
+              open(path, "w").write(src)
+          print("C++ core wired into", path)
+          PY
+
       - name: Get dependencies
         run: flutter pub get
 

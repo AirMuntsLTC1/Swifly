@@ -1,6 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
 import 'create_sheet.dart';
+import 'discover_panel.dart';
+import 'feed_widgets.dart';
+import 'tag_friends_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,21 +16,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const Duration _animDuration = Duration(milliseconds: 320);
-  static const double _collapsedSearch = 44;
+  static const Duration _anim = Duration(milliseconds: 320);
+  static const double _pill = 44;
   static const double _navWidth = 162;
 
   int _index = 0;
   bool _searchOpen = false;
+  String _query = '';
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
-
-  static const List<String> _labels = [
-    'Home',
-    'Messages',
-    'Notifications',
-    'Profile',
-  ];
 
   @override
   void dispose() {
@@ -33,34 +33,38 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  void _openSearch() {
+    setState(() => _searchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocus.requestFocus();
+    });
+  }
+
+  void _closeSearch() {
+    _searchFocus.unfocus();
+    _searchController.clear();
+    setState(() {
+      _searchOpen = false;
+      _query = '';
+    });
+  }
+
   void _toggleSearch() {
     if (_searchOpen) {
       _closeSearch();
     } else {
-      setState(() => _searchOpen = true);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _searchFocus.requestFocus();
-      });
+      _openSearch();
     }
   }
 
-  void _closeSearch() {
-    if (!_searchOpen) return;
+  void _selectTab(int i) {
     _searchFocus.unfocus();
-    setState(() => _searchOpen = false);
-  }
-
-  IconData _iconFor(int i) {
-    switch (i) {
-      case 0:
-        return LucideIcons.house;
-      case 1:
-        return LucideIcons.messageCircle;
-      case 2:
-        return LucideIcons.bell;
-      default:
-        return LucideIcons.user;
-    }
+    _searchController.clear();
+    setState(() {
+      _index = i;
+      _searchOpen = false;
+      _query = '';
+    });
   }
 
   @override
@@ -73,18 +77,19 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildTopBar(),
             const Divider(height: 1, color: Color(0xFFEAEAEA)),
             Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: _closeSearch,
-                child: IndexedStack(
-                  index: _index,
-                  children: const [
-                    FeedTab(),
-                    MessagesTab(),
-                    NotificationsTab(),
-                    ProfileTab(),
-                  ],
-                ),
+              child: Stack(
+                children: [
+                  IndexedStack(
+                    index: _index,
+                    children: const [
+                      FeedTab(),
+                      MessagesTab(),
+                      NotificationsTab(),
+                      ProfileTab(),
+                    ],
+                  ),
+                  _buildDiscoverOverlay(),
+                ],
               ),
             ),
           ],
@@ -102,190 +107,170 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTopBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final fullWidth = constraints.maxWidth;
-          return Row(
-            children: [
-              // Search: circle icon when closed, expands to full bar when open
-              AnimatedContainer(
-                duration: _animDuration,
-                curve: Curves.easeInOutCubic,
-                width: _searchOpen ? fullWidth : _collapsedSearch,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF2F2F2),
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: _collapsedSearch,
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: _toggleSearch,
-                          child: const Center(
-                            child: Icon(LucideIcons.search,
-                                size: 20, color: Colors.black),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: _collapsedSearch,
-                        right: 12,
-                        top: 0,
-                        bottom: 0,
-                        child: AnimatedOpacity(
-                          opacity: _searchOpen ? 1 : 0,
-                          duration: _animDuration,
-                          child: IgnorePointer(
-                            ignoring: !_searchOpen,
-                            child: TextField(
-                              controller: _searchController,
-                              focusNode: _searchFocus,
-                              cursorColor: Colors.black,
-                              textInputAction: TextInputAction.search,
-                              onSubmitted: (_) => _closeSearch(),
-                              style: const TextStyle(
-                                  color: Colors.black, fontSize: 15),
-                              decoration: const InputDecoration(
-                                hintText: 'Search',
-                                hintStyle: TextStyle(color: Color(0xFF8E8E8E)),
-                                border: InputBorder.none,
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Fills the space between search and the nav icons when closed
-              const Expanded(child: SizedBox()),
-
-              // Nav icons: slide out to the right when search opens
-              AnimatedContainer(
-                duration: _animDuration,
-                curve: Curves.easeInOutCubic,
-                width: _searchOpen ? 0 : _navWidth,
-                child: ClipRect(
-                  child: OverflowBox(
-                    alignment: Alignment.centerRight,
-                    minWidth: _navWidth,
-                    maxWidth: _navWidth,
-                    child: SizedBox(
-                      width: _navWidth,
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 2),
-                          for (int i = 0; i < 4; i++)
-                            IconButton(
-                              tooltip: _labels[i],
-                              onPressed: () => setState(() {
-                                _index = i;
-                                _searchOpen = false;
-                              }),
-                              icon: Icon(_iconFor(i),
-                                  color: Colors.black, size: 22),
-                              style: IconButton.styleFrom(
-                                backgroundColor: _index == i
-                                    ? const Color(0xFFE6E6E6)
-                                    : Colors.transparent,
-                                minimumSize: const Size(40, 40),
-                                padding: EdgeInsets.zero,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+  /// Discover panel: expands from the top to fill the screen when search opens.
+  Widget _buildDiscoverOverlay() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: !_searchOpen,
+        child: AnimatedOpacity(
+          opacity: _searchOpen ? 1 : 0,
+          duration: _anim,
+          child: AnimatedScale(
+            scale: _searchOpen ? 1 : 0.94,
+            alignment: Alignment.topCenter,
+            duration: _anim,
+            curve: Curves.easeOutCubic,
+            child: Container(
+              color: Colors.white,
+              child: DiscoverPanel(query: _query),
+            ),
+          ),
+        ),
       ),
     );
   }
-}
 
-class FeedTab extends StatelessWidget {
-  const FeedTab({super.key});
+  /// Fixed-height top bar. Search expands to the right; nav icons slide out.
+  Widget _buildTopBar() {
+    return SizedBox(
+      height: 56,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final fullWidth = constraints.maxWidth;
+            return Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                AnimatedPositioned(
+                  duration: _anim,
+                  curve: Curves.easeInOutCubic,
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: _searchOpen ? fullWidth : _pill,
+                  child: _searchPill(_searchOpen ? fullWidth : _pill),
+                ),
+                AnimatedPositioned(
+                  duration: _anim,
+                  curve: Curves.easeInOutCubic,
+                  top: 0,
+                  bottom: 0,
+                  right: _searchOpen ? -(_navWidth + 16) : 0,
+                  width: _navWidth,
+                  child: _navRow(),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
 
-  static const List<Map<String, String>> _posts = [
-    {'name': 'Ava Stone', 'handle': '@avastone', 'time': '2h', 'text': 'Sunrise hike done. Worth every step.'},
-    {'name': 'Liam Park', 'handle': '@liampark', 'time': '4h', 'text': 'Just shipped my first app! Feedback welcome.'},
-    {'name': 'Mia Chen', 'handle': '@miachen', 'time': '6h', 'text': 'New coffee spot downtown. Highly recommend.'},
-    {'name': 'Noah Reed', 'handle': '@noahreed', 'time': '8h', 'text': 'Weekend project: a tiny plant-care tracker.'},
-    {'name': 'Zara Ali', 'handle': '@zaraali', 'time': '1d', 'text': 'Books that changed how I think about design.'},
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.only(top: 8, bottom: 96),
-      itemCount: _posts.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
-      itemBuilder: (context, i) {
-        final p = _posts[i];
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.black,
-                child: Icon(LucideIcons.user, color: Colors.white, size: 20),
+  Widget _searchPill(double width) {
+    final fieldWidth = math.max(0.0, width - 2 * _pill);
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F2F2),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          // Search icon (left). Tapping it opens or closes search.
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _pill,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _toggleSearch,
+              child: const Center(
+                child: Icon(LucideIcons.search, size: 20, color: Colors.black),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(p['name']!,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700, color: Colors.black)),
-                        const SizedBox(width: 6),
-                        Text('${p['handle']} · ${p['time']}',
-                            style: const TextStyle(
-                                fontSize: 13, color: Color(0xFF8E8E8E))),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(p['text']!,
-                        style: const TextStyle(
-                            fontSize: 15, height: 1.4, color: Colors.black)),
-                    const SizedBox(height: 12),
-                    const Row(
-                      children: [
-                        Icon(LucideIcons.heart, size: 19, color: Colors.black),
-                        SizedBox(width: 22),
-                        Icon(LucideIcons.messageCircle, size: 19, color: Colors.black),
-                        SizedBox(width: 22),
-                        Icon(LucideIcons.share2, size: 19, color: Colors.black),
-                      ],
-                    ),
-                  ],
+            ),
+          ),
+          // Text field, visible only while open.
+          Positioned(
+            left: _pill,
+            top: 0,
+            bottom: 0,
+            width: fieldWidth,
+            child: AnimatedOpacity(
+              opacity: _searchOpen ? 1 : 0,
+              duration: _anim,
+              child: IgnorePointer(
+                ignoring: !_searchOpen,
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocus,
+                  cursorColor: Colors.black,
+                  textInputAction: TextInputAction.search,
+                  onChanged: (v) => setState(() => _query = v),
+                  style: const TextStyle(color: Colors.black, fontSize: 15),
+                  decoration: const InputDecoration(
+                    hintText: 'Search',
+                    hintStyle: TextStyle(color: Color(0xFF8E8E8E)),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
-        );
-      },
+          // X button (right). Shows only while search is open.
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: _pill,
+            child: AnimatedOpacity(
+              opacity: _searchOpen ? 1 : 0,
+              duration: _anim,
+              child: IgnorePointer(
+                ignoring: !_searchOpen,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _closeSearch,
+                  child: const Center(
+                    child: Icon(LucideIcons.x, size: 20, color: Colors.black),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _navRow() {
+    const labels = ['Home', 'Messages', 'Notifications', 'Profile'];
+    final icons = [
+      LucideIcons.house,
+      LucideIcons.messageCircle,
+      LucideIcons.bell,
+      LucideIcons.user,
+    ];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        for (int i = 0; i < 4; i++)
+          IconButton(
+            tooltip: labels[i],
+            onPressed: () => _selectTab(i),
+            icon: Icon(icons[i], color: Colors.black, size: 22),
+            style: IconButton.styleFrom(
+              backgroundColor:
+                  _index == i ? const Color(0xFFE6E6E6) : Colors.transparent,
+              minimumSize: const Size(40, 40),
+              padding: EdgeInsets.zero,
+            ),
+          ),
+      ],
     );
   }
 }
@@ -327,27 +312,25 @@ class MessagesTab extends StatelessWidget {
 class NotificationsTab extends StatelessWidget {
   const NotificationsTab({super.key});
 
-  static const List<Map<String, dynamic>> _items = [
-    {'icon': 0, 'text': 'Ava Stone liked your post'},
-    {'icon': 1, 'text': 'Liam Park commented: "Nice work!"'},
-    {'icon': 2, 'text': 'Mia Chen started following you'},
-    {'icon': 0, 'text': 'Noah Reed liked your photo'},
-  ];
-
   @override
   Widget build(BuildContext context) {
-    const icons = [LucideIcons.heart, LucideIcons.messageCircle, LucideIcons.userPlus];
+    const items = [
+      ('Ava Stone liked your post', 0),
+      ('Liam Park commented: "Nice work!"', 1),
+      ('Mia Chen started following you', 2),
+      ('Noah Reed liked your photo', 0),
+    ];
+    final icons = [LucideIcons.heart, LucideIcons.messageCircle, LucideIcons.userPlus];
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 96),
-      itemCount: _items.length,
+      itemCount: items.length,
       separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
       itemBuilder: (context, i) {
-        final n = _items[i];
+        final n = items[i];
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: Icon(icons[n['icon'] as int], color: Colors.black),
-          title: Text(n['text'] as String,
-              style: const TextStyle(color: Colors.black, fontSize: 15)),
+          leading: Icon(icons[n.$2], color: Colors.black),
+          title: Text(n.$1, style: const TextStyle(color: Colors.black, fontSize: 15)),
         );
       },
     );
@@ -369,10 +352,10 @@ class ProfileTab extends StatelessWidget {
             child: Icon(LucideIcons.user, color: Colors.white, size: 40),
           ),
           const SizedBox(height: 14),
-          const Text('Your Name',
+          const Text(kMeName,
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black)),
           const SizedBox(height: 4),
-          const Text('@yourhandle', style: TextStyle(color: Color(0xFF8E8E8E))),
+          const Text(kMeHandle, style: TextStyle(color: Color(0xFF8E8E8E))),
           const SizedBox(height: 10),
           const Text('Building something cool. Coffee and code.',
               textAlign: TextAlign.center,

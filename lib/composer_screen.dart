@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import 'post_model.dart';
 import 'tag_friends_screen.dart';
 
 /// Opens from the center, growing to full screen with rounded corners flattening out.
@@ -48,9 +50,26 @@ class _ComposerScreenState extends State<ComposerScreen> {
   List<String> _tagged = [];
 
   @override
+  void initState() {
+    super.initState();
+    _textController.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
     super.dispose();
+  }
+
+  void _publish() {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return;
+    PostStore.instance.addPost(
+      text: text,
+      audience: _audience,
+      taggedHandles: _tagged,
+    );
+    Navigator.pop(context);
   }
 
   void _pickAudience() {
@@ -95,8 +114,8 @@ class _ComposerScreenState extends State<ComposerScreen> {
   }
 
   Future<void> _pickTagPeople() async {
-    final result = await Navigator.of(context)
-        .push<List<String>>(tagFriendsRoute(_tagged));
+    final result =
+        await Navigator.of(context).push<List<String>>(tagFriendsRoute(_tagged));
     if (result != null) {
       setState(() => _tagged = result);
     }
@@ -105,13 +124,13 @@ class _ComposerScreenState extends State<ComposerScreen> {
   @override
   Widget build(BuildContext context) {
     final tagLabel = _tagged.isEmpty ? 'Tag people' : '${_tagged.length} tagged';
+    final canPost = _textController.text.trim().isNotEmpty;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           children: [
-            // Top bar
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
               child: Row(
@@ -122,13 +141,14 @@ class _ComposerScreenState extends State<ComposerScreen> {
                   ),
                   const Spacer(),
                   ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: canPost ? _publish : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFFD9D9D9),
+                      disabledForegroundColor: Colors.white,
                       elevation: 0,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30)),
                     ),
@@ -139,8 +159,6 @@ class _ComposerScreenState extends State<ComposerScreen> {
               ),
             ),
             const Divider(height: 1, color: Color(0xFFEAEAEA)),
-
-            // Header: avatar on the left, name and handle with chips beside it
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
               child: Row(
@@ -156,15 +174,14 @@ class _ComposerScreenState extends State<ComposerScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Your Name',
+                        const Text(kMeName,
                             style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,
                                 color: Colors.black)),
                         const SizedBox(height: 2),
-                        const Text('@yourhandle',
-                            style: TextStyle(
-                                fontSize: 14, color: Color(0xFF8E8E8E))),
+                        const Text(kMeHandle,
+                            style: TextStyle(fontSize: 14, color: Color(0xFF8E8E8E))),
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
@@ -189,8 +206,6 @@ class _ComposerScreenState extends State<ComposerScreen> {
                 ],
               ),
             ),
-
-            // Big writing area: fills the rest of the screen and shrinks with the keyboard
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -202,8 +217,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
                   minLines: null,
                   textAlignVertical: TextAlignVertical.top,
                   cursorColor: Colors.black,
-                  style: const TextStyle(
-                      fontSize: 18, height: 1.4, color: Colors.black),
+                  style: const TextStyle(fontSize: 18, height: 1.4, color: Colors.black),
                   decoration: const InputDecoration(
                     hintText: "What's happening?",
                     hintStyle: TextStyle(color: Color(0xFF8E8E8E)),
@@ -212,8 +226,6 @@ class _ComposerScreenState extends State<ComposerScreen> {
                 ),
               ),
             ),
-
-            // Bottom toolbar: stays directly above the keyboard
             const Divider(height: 1, color: Color(0xFFEAEAEA)),
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
@@ -270,9 +282,7 @@ class _Chip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label,
                 style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black)),
+                    fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
             if (trailing != null) ...[
               const SizedBox(width: 4),
               Icon(trailing, size: 15, color: Colors.black),

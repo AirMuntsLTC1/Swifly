@@ -1,0 +1,212 @@
+import 'package:flutter/foundation.dart';
+
+import 'native_bridge.dart';
+import 'tag_friends_screen.dart';
+
+const String kMeName = 'Your Name';
+const String kMeHandle = '@yourhandle';
+
+String nameForHandle(String handle) {
+  for (final f in kFriends) {
+    if (f.handle == handle) return f.name;
+  }
+  return handle;
+}
+
+class CommentItem {
+  final String name;
+  final String text;
+  final DateTime created;
+
+  const CommentItem({required this.name, required this.text, required this.created});
+}
+
+class Post {
+  final String id;
+  final String authorName;
+  final String authorHandle;
+  final String text;
+  final String audience;
+  final List<String> taggedHandles;
+  final DateTime created;
+  final List<CommentItem> comments;
+  int likes;
+  bool liked;
+  int saves;
+  bool saved;
+
+  Post({
+    required this.id,
+    required this.authorName,
+    required this.authorHandle,
+    required this.text,
+    required this.audience,
+    required this.created,
+    this.taggedHandles = const [],
+    this.likes = 0,
+    this.liked = false,
+    this.saves = 0,
+    this.saved = false,
+    List<CommentItem>? comments,
+  }) : comments = comments ?? <CommentItem>[];
+
+  double get hoursOld => DateTime.now().difference(created).inSeconds / 3600.0;
+
+  String get timeLabel {
+    final d = DateTime.now().difference(created);
+    if (d.inMinutes < 1) return 'now';
+    if (d.inHours < 1) return '${d.inMinutes}m';
+    if (d.inHours < 24) return '${d.inHours}h';
+    return '${d.inDays}d';
+  }
+}
+
+class PostStore extends ChangeNotifier {
+  PostStore._() {
+    _seed();
+  }
+
+  static final PostStore instance = PostStore._();
+
+  final List<Post> _posts = [];
+  int _nextId = 1;
+
+  void _seed() {
+    final now = DateTime.now();
+    _posts.addAll([
+      Post(
+        id: 's1',
+        authorName: 'Ava Stone',
+        authorHandle: '@avastone',
+        text: 'Sunrise hike done. Worth every step.',
+        audience: 'Everyone',
+        taggedHandles: const ['@liampark'],
+        created: now.subtract(const Duration(hours: 2)),
+        likes: 42,
+        saves: 6,
+        comments: [
+          CommentItem(name: 'Liam Park', text: 'Looks amazing!', created: now),
+        ],
+      ),
+      Post(
+        id: 's2',
+        authorName: 'Liam Park',
+        authorHandle: '@liampark',
+        text: 'Just shipped my first app! Feedback welcome.',
+        audience: 'Followers',
+        taggedHandles: const ['@avastone', '@noahreed'],
+        created: now.subtract(const Duration(hours: 4)),
+        likes: 88,
+        saves: 12,
+      ),
+      Post(
+        id: 's3',
+        authorName: 'Mia Chen',
+        authorHandle: '@miachen',
+        text: 'New coffee spot downtown. Highly recommend.',
+        audience: 'Everyone',
+        created: now.subtract(const Duration(hours: 6)),
+        likes: 19,
+        saves: 3,
+      ),
+      Post(
+        id: 's4',
+        authorName: 'Noah Reed',
+        authorHandle: '@noahreed',
+        text: 'Weekend project: a tiny plant-care tracker.',
+        audience: 'Followers',
+        taggedHandles: const ['@zaraali'],
+        created: now.subtract(const Duration(hours: 8)),
+        likes: 7,
+        saves: 1,
+      ),
+      Post(
+        id: 's5',
+        authorName: 'Zara Ali',
+        authorHandle: '@zaraali',
+        text: 'Books that changed how I think about design.',
+        audience: 'Everyone',
+        taggedHandles: const ['@hanasato'],
+        created: now.subtract(const Duration(days: 1)),
+        likes: 130,
+        saves: 25,
+      ),
+    ]);
+  }
+
+  /// Your own new posts first (newest), then everyone else ranked by the C++ core.
+  List<Post> get ranked {
+    final mine = _posts.where((p) => p.authorHandle == kMeHandle).toList()
+      ..sort((a, b) => b.created.compareTo(a.created));
+    final others = _posts.where((p) => p.authorHandle != kMeHandle).toList();
+    final order = NativeCore.rankOrder(
+      others.map((p) => p.likes).toList(),
+      others.map((p) => p.comments.length).toList(),
+      others.map((p) => p.saves).toList(),
+      others.map((p) => p.hoursOld).toList(),
+    );
+    return [...mine, for (final i in order) others[i]];
+  }
+
+  Post? byId(String id) {
+    for (final p in _posts) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  List<Post> search(String query) {
+    return _posts.where((p) {
+      if (NativeCore.containsCI(p.text, query)) return true;
+      if (NativeCore.containsCI(p.authorName, query)) return true;
+      for (final h in p.taggedHandles) {
+        if (NativeCore.containsCI(nameForHandle(h), query)) return true;
+        if (NativeCore.containsCI(h, query)) return true;
+      }
+      return false;
+    }).toList();
+  }
+
+  void addPost({
+    required String text,
+    required String audience,
+    required List<String> taggedHandles,
+  }) {
+    _posts.insert(
+      0,
+      Post(
+        id: 'p${_nextId++}',
+        authorName: kMeName,
+        authorHandle: kMeHandle,
+        text: text,
+        audience: audience,
+        taggedHandles: List<String>.of(taggedHandles),
+        created: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+  }
+
+  void toggleLike(String id) {
+    final p = byId(id);
+    if (p == null) return;
+    p.liked = !p.liked;
+    p.likes += p.liked ? 1 : -1;
+    notifyListeners();
+  }
+
+  void toggleSave(String id) {
+    final p = byId(id);
+    if (p == null) return;
+    p.saved = !p.saved;
+    p.saves += p.saved ? 1 : -1;
+    notifyListeners();
+  }
+
+  void addComment(String id, String text) {
+    final p = byId(id);
+    if (p == null) return;
+    p.comments.add(CommentItem(name: kMeName, text: text, created: DateTime.now()));
+    notifyListeners();
+  }
+}

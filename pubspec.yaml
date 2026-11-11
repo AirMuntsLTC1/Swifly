@@ -1,5 +1,5 @@
 name: swifly
-description: A fast, clean social media app UI.
+description: A fast, clean social media app.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   lucide_icons_flutter: any
+  ffi: any
 
 dev_dependencies:
   flutter_test:
