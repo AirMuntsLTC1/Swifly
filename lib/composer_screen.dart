@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'tag_friends_screen.dart';
 
-/// Expanding full-screen route: scales up from the center and
-/// the rounded corners shrink to square as it opens.
+/// Opens from the center, growing to full screen with rounded corners flattening out.
 Route<void> composerRoute() {
   return PageRouteBuilder(
     transitionDuration: const Duration(milliseconds: 380),
@@ -22,7 +22,7 @@ Route<void> composerRoute() {
           builder: (context, child) {
             final t = curved.value;
             return Transform.scale(
-              scale: 0.82 + 0.18 * t,
+              scale: 0.9 + 0.1 * t,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(28 * (1 - t)),
                 child: child,
@@ -45,7 +45,7 @@ class ComposerScreen extends StatefulWidget {
 class _ComposerScreenState extends State<ComposerScreen> {
   final TextEditingController _textController = TextEditingController();
   String _audience = 'Everyone';
-  String? _tag;
+  List<String> _tagged = [];
 
   @override
   void dispose() {
@@ -94,52 +94,24 @@ class _ComposerScreenState extends State<ComposerScreen> {
     );
   }
 
-  Future<void> _pickTag() async {
-    final controller = TextEditingController(text: _tag ?? '');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Add tag',
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          cursorColor: Colors.black,
-          decoration: const InputDecoration(
-            hintText: 'e.g. travel',
-            prefixText: '#',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Save',
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
+  Future<void> _pickTagPeople() async {
+    final result = await Navigator.of(context)
+        .push<List<String>>(tagFriendsRoute(_tagged));
     if (result != null) {
-      setState(() => _tag = result.isEmpty ? null : result);
+      setState(() => _tagged = result);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final tagLabel = _tagged.isEmpty ? 'Tag people' : '${_tagged.length} tagged';
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
-            // Top bar: close on the left, post button on the right
+            // Top bar
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
               child: Row(
@@ -155,7 +127,8 @@ class _ComposerScreenState extends State<ComposerScreen> {
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30)),
                     ),
@@ -167,80 +140,83 @@ class _ComposerScreenState extends State<ComposerScreen> {
             ),
             const Divider(height: 1, color: Color(0xFFEAEAEA)),
 
-            // Composer body: scrolls, and shrinks when the keyboard opens
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                child: Column(
-                  children: [
-                    Row(
+            // Header: avatar on the left, name and handle with chips beside it
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.black,
+                    child: Icon(LucideIcons.user, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text('Your Name',
-                                  style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.black)),
-                              SizedBox(height: 2),
-                              Text('@yourhandle',
-                                  style: TextStyle(
-                                      fontSize: 14, color: Color(0xFF8E8E8E))),
-                            ],
-                          ),
-                        ),
-                        const CircleAvatar(
-                          radius: 22,
-                          backgroundColor: Colors.black,
-                          child: Icon(LucideIcons.user,
-                              color: Colors.white, size: 20),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _textController,
-                      autofocus: true,
-                      maxLines: null,
-                      cursorColor: Colors.black,
-                      style: const TextStyle(
-                          fontSize: 18, height: 1.4, color: Colors.black),
-                      decoration: const InputDecoration(
-                        hintText: "What's happening?",
-                        hintStyle: TextStyle(color: Color(0xFF8E8E8E)),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _Chip(
-                          icon: LucideIcons.globe,
-                          label: _audience,
-                          trailing: LucideIcons.chevronDown,
-                          onTap: _pickAudience,
-                        ),
-                        _Chip(
-                          icon: LucideIcons.hash,
-                          label: _tag == null ? 'Add tag' : '#$_tag',
-                          onTap: _pickTag,
+                        const Text('Your Name',
+                            style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.black)),
+                        const SizedBox(height: 2),
+                        const Text('@yourhandle',
+                            style: TextStyle(
+                                fontSize: 14, color: Color(0xFF8E8E8E))),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _Chip(
+                              icon: LucideIcons.globe,
+                              label: _audience,
+                              trailing: LucideIcons.chevronDown,
+                              onTap: _pickAudience,
+                            ),
+                            _Chip(
+                              icon: LucideIcons.userPlus,
+                              label: tagLabel,
+                              onTap: _pickTagPeople,
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Big writing area: fills the rest of the screen and shrinks with the keyboard
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: TextField(
+                  controller: _textController,
+                  autofocus: true,
+                  expands: true,
+                  maxLines: null,
+                  minLines: null,
+                  textAlignVertical: TextAlignVertical.top,
+                  cursorColor: Colors.black,
+                  style: const TextStyle(
+                      fontSize: 18, height: 1.4, color: Colors.black),
+                  decoration: const InputDecoration(
+                    hintText: "What's happening?",
+                    hintStyle: TextStyle(color: Color(0xFF8E8E8E)),
+                    border: InputBorder.none,
+                  ),
                 ),
               ),
             ),
 
-            // Bottom toolbar: sits directly above the keyboard
+            // Bottom toolbar: stays directly above the keyboard
             const Divider(height: 1, color: Color(0xFFEAEAEA)),
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
               child: Row(
                 children: [
                   IconButton(
@@ -282,7 +258,7 @@ class _Chip extends StatelessWidget {
       borderRadius: BorderRadius.circular(30),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: const Color(0xFFF2F2F2),
           borderRadius: BorderRadius.circular(30),
@@ -290,16 +266,16 @@ class _Chip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: Colors.black),
+            Icon(icon, size: 15, color: Colors.black),
             const SizedBox(width: 6),
             Text(label,
                 style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: Colors.black)),
             if (trailing != null) ...[
               const SizedBox(width: 4),
-              Icon(trailing, size: 16, color: Colors.black),
+              Icon(trailing, size: 15, color: Colors.black),
             ],
           ],
         ),
