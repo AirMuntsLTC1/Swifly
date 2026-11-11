@@ -7,6 +7,7 @@ import 'create_sheet.dart';
 import 'discover_panel.dart';
 import 'feed_widgets.dart';
 import 'post_model.dart';
+import 'search_history.dart';
 import 'tag_friends_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -41,7 +42,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _recordQuery() {
+    final q = _query.trim();
+    if (q.isNotEmpty) SearchHistory.instance.add(q);
+  }
+
   void _closeSearch() {
+    _recordQuery();
     _searchFocus.unfocus();
     _searchController.clear();
     setState(() {
@@ -59,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectTab(int i) {
+    _recordQuery();
     _searchFocus.unfocus();
     _searchController.clear();
     setState(() {
@@ -66,6 +74,18 @@ class _HomeScreenState extends State<HomeScreen> {
       _searchOpen = false;
       _query = '';
     });
+  }
+
+  void _applyQuery(String value) {
+    final q = value.trim();
+    _searchController.text = q;
+    _searchController.selection =
+        TextSelection.collapsed(offset: q.length);
+    setState(() {
+      _query = q;
+      _searchOpen = true;
+    });
+    _searchFocus.requestFocus();
   }
 
   @override
@@ -129,7 +149,10 @@ class _HomeScreenState extends State<HomeScreen> {
             curve: Curves.easeOutCubic,
             child: Container(
               color: Colors.white,
-              child: DiscoverPanel(query: _query),
+              child: DiscoverPanel(
+                query: _query,
+                onPickQuery: _applyQuery,
+              ),
             ),
           ),
         ),
@@ -216,6 +239,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   cursorColor: Colors.black,
                   textInputAction: TextInputAction.search,
                   onChanged: (v) => setState(() => _query = v),
+                  onSubmitted: (v) {
+                    final q = v.trim();
+                    if (q.isNotEmpty) SearchHistory.instance.add(q);
+                  },
                   style: const TextStyle(color: Colors.black, fontSize: 15),
                   decoration: const InputDecoration(
                     hintText: 'Search',

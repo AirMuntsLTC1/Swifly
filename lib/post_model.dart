@@ -61,6 +61,10 @@ class Post {
     List<CommentItem>? comments,
   }) : comments = comments ?? <CommentItem>[];
 
+  List<String> get hashtags => NativeCore.extractHashtags(text);
+
+  bool hasHashtag(String tag) => NativeCore.countHashtag(text, tag) > 0;
+
   double get hoursOld => DateTime.now().difference(created).inSeconds / 3600.0;
 
   String get timeLabel {
@@ -89,7 +93,7 @@ class PostStore extends ChangeNotifier {
         id: 's1',
         authorName: 'Ava Stone',
         authorHandle: '@avastone',
-        text: 'Sunrise hike done. Worth every step.',
+        text: 'Sunrise hike done. Worth every step. #hiking #travel',
         audience: 'Everyone',
         taggedHandles: const ['@liampark'],
         created: now.subtract(const Duration(hours: 2)),
@@ -103,7 +107,7 @@ class PostStore extends ChangeNotifier {
         id: 's2',
         authorName: 'Liam Park',
         authorHandle: '@liampark',
-        text: 'Just shipped my first app! Feedback welcome.',
+        text: 'Just shipped my first app! Feedback welcome. #coding #design',
         audience: 'Followers',
         taggedHandles: const ['@avastone', '@noahreed'],
         created: now.subtract(const Duration(hours: 4)),
@@ -114,7 +118,7 @@ class PostStore extends ChangeNotifier {
         id: 's3',
         authorName: 'Mia Chen',
         authorHandle: '@miachen',
-        text: 'New coffee spot downtown. Highly recommend.',
+        text: 'New coffee spot downtown. Highly recommend. #coffee',
         audience: 'Everyone',
         created: now.subtract(const Duration(hours: 6)),
         likes: 19,
@@ -124,7 +128,7 @@ class PostStore extends ChangeNotifier {
         id: 's4',
         authorName: 'Noah Reed',
         authorHandle: '@noahreed',
-        text: 'Weekend project: a tiny plant-care tracker.',
+        text: 'Weekend project: a tiny plant-care tracker. #coding',
         audience: 'Followers',
         taggedHandles: const ['@zaraali'],
         created: now.subtract(const Duration(hours: 8)),
@@ -135,7 +139,7 @@ class PostStore extends ChangeNotifier {
         id: 's5',
         authorName: 'Zara Ali',
         authorHandle: '@zaraali',
-        text: 'Books that changed how I think about design.',
+        text: 'Books that changed how I think about design. #books #design',
         audience: 'Everyone',
         taggedHandles: const ['@hanasato'],
         created: now.subtract(const Duration(days: 1)),
@@ -157,6 +161,22 @@ class PostStore extends ChangeNotifier {
       others.map((p) => p.hoursOld).toList(),
     );
     return [...mine, for (final i in order) others[i]];
+  }
+
+  /// Number of distinct users (authors) that used [tag].
+  int hashtagUsage(String tag) {
+    final users = <String>{};
+    for (final p in _posts) {
+      if (p.hasHashtag(tag)) users.add(p.authorHandle);
+    }
+    return users.length;
+  }
+
+  /// All posts (newest first) that contain [tag].
+  List<Post> postsWithHashtag(String tag) {
+    final list = _posts.where((p) => p.hasHashtag(tag)).toList()
+      ..sort((a, b) => b.created.compareTo(a.created));
+    return list;
   }
 
   Post? byId(String id) {
@@ -183,6 +203,11 @@ class PostStore extends ChangeNotifier {
     required String audience,
     required List<String> taggedHandles,
   }) {
+    final duplicate = _posts.any((p) =>
+        p.authorHandle == kMeHandle &&
+        p.text == text &&
+        DateTime.now().difference(p.created).inSeconds < 2);
+    if (duplicate) return;
     _posts.insert(
       0,
       Post(

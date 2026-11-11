@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <numeric>
+#include <string>
 #include <vector>
 
 #define SWIFLY_EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
@@ -99,4 +100,87 @@ SWIFLY_EXPORT int32_t swifly_contains_ci(const char* haystack, const char* needl
         if (j == nn) return 1;
     }
     return 0;
+}
+
+
+// Counts how many lines in joined_texts (separated by newline) contain the hashtag.
+// The hashtag must not be glued to a word character on either side.
+SWIFLY_EXPORT int32_t swifly_count_hashtag(const char* joined_texts, const char* tag) {
+    if (joined_texts == nullptr || tag == nullptr) return 0;
+    std::string needle(tag);
+    if (needle.empty()) return 0;
+    if (needle[0] != '#') needle.insert(needle.begin(), '#');
+    std::transform(needle.begin(), needle.end(), needle.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    int32_t count = 0;
+    const char* p = joined_texts;
+    while (*p) {
+        const char* line_end = std::strchr(p, '\n');
+        const size_t len = line_end ? static_cast<size_t>(line_end - p) : std::strlen(p);
+        std::string line(p, len);
+        std::transform(line.begin(), line.end(), line.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+        size_t pos = 0;
+        while ((pos = line.find(needle, pos)) != std::string::npos) {
+            bool left_ok = true;
+            bool right_ok = true;
+            if (pos > 0) {
+                const unsigned char c = static_cast<unsigned char>(line[pos - 1]);
+                if (std::isalnum(c) || c == '_') left_ok = false;
+            }
+            const size_t end = pos + needle.size();
+            if (end < line.size()) {
+                const unsigned char c = static_cast<unsigned char>(line[end]);
+                if (std::isalnum(c) || c == '_') right_ok = false;
+            }
+            if (left_ok && right_ok) {
+                ++count;
+                break;
+            }
+            pos = end;
+        }
+
+        if (line_end == nullptr) break;
+        p = line_end + 1;
+    }
+    return count;
+}
+
+// Extracts hashtags from text as lowercase tokens separated by spaces.
+SWIFLY_EXPORT int32_t swifly_extract_hashtags(const char* text, char* out, int32_t out_len) {
+    if (out == nullptr || out_len <= 0) return 0;
+    out[0] = '\0';
+    if (text == nullptr) return 0;
+
+    std::string result;
+    const char* p = text;
+    while (*p) {
+        if (*p == '#') {
+            const char* start = p;
+            ++p;
+            while (*p && (std::isalnum(static_cast<unsigned char>(*p)) || *p == '_')) {
+                ++p;
+            }
+            const size_t len = static_cast<size_t>(p - start);
+            if (len > 1) {
+                if (!result.empty()) result += ' ';
+                for (size_t i = 0; i < len; ++i) {
+                    result += static_cast<char>(
+                        std::tolower(static_cast<unsigned char>(start[i])));
+                }
+            }
+        } else {
+            ++p;
+        }
+    }
+
+    const int32_t copy = std::min<int32_t>(
+        static_cast<int32_t>(result.size()), out_len - 1);
+    if (copy > 0) {
+        std::memcpy(out, result.data(), static_cast<size_t>(copy));
+    }
+    out[copy] = '\0';
+    return copy;
 }

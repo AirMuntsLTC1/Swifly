@@ -25,6 +25,14 @@ typedef _RankDart = void Function(
 typedef _ContainsNative = Int32 Function(Pointer<Utf8> haystack, Pointer<Utf8> needle);
 typedef _ContainsDart = int Function(Pointer<Utf8> haystack, Pointer<Utf8> needle);
 
+typedef _CountHashtagNative = Int32 Function(Pointer<Utf8> joined, Pointer<Utf8> tag);
+typedef _CountHashtagDart = int Function(Pointer<Utf8> joined, Pointer<Utf8> tag);
+
+typedef _ExtractHashtagsNative = Int32 Function(
+    Pointer<Utf8> text, Pointer<Utf8> out, Int32 outLen);
+typedef _ExtractHashtagsDart = int Function(
+    Pointer<Utf8> text, Pointer<Utf8> out, int outLen);
+
 /// Bridge to the C++ core (cpp/swifly_core.cpp, built as libswifly_core.so).
 /// Every function falls back to pure Dart if the native library is missing.
 class NativeCore {
@@ -58,6 +66,12 @@ class NativeCore {
       (l) => l.lookupFunction<_RankNative, _RankDart>('swifly_rank'));
   static final _ContainsDart? _contains = _safe<_ContainsDart>(
       (l) => l.lookupFunction<_ContainsNative, _ContainsDart>('swifly_contains_ci'));
+  static final _CountHashtagDart? _countHashtag = _safe<_CountHashtagDart>(
+      (l) => l.lookupFunction<_CountHashtagNative, _CountHashtagDart>(
+          'swifly_count_hashtag'));
+  static final _ExtractHashtagsDart? _extractHashtags = _safe<_ExtractHashtagsDart>(
+      (l) => l.lookupFunction<_ExtractHashtagsNative, _ExtractHashtagsDart>(
+          'swifly_extract_hashtags'));
 
   static bool get isNativeReady => _library != null;
 
@@ -125,7 +139,88 @@ class NativeCore {
     }
   }
 
+  /// Counts how many texts in [joinedTexts] (separated by newline) contain [tag].
+  static int countHashtag(String joinedTexts, String tag) {
+    final f = _countHashtag;
+    if (f == null) return _dartCountHashtag(joinedTexts, tag);
+    final j = joinedTexts.toNativeUtf8();
+    final t = tag.toNativeUtf8();
+    try {
+      return f(j, t);
+    } finally {
+      malloc.free(j);
+      malloc.free(t);
+    }
+  }
+
+  /// Extracts all hashtags from [text] as lowercase strings, e.g. "#travel".
+  static List<String> extractHashtags(String text) {
+    final f = _extractHashtags;
+    if (f == null) return _dartExtractHashtags(text);
+    final t = text.toNativeUtf8();
+    final buffer = calloc<Uint8>(2048).cast<Utf8>();
+    try {
+      final len = f(t, buffer, 2048);
+      if (len <= 0) return const [];
+      final s = buffer.toDartString(length: len);
+      if (s.isEmpty) return const [];
+      return s.split(' ');
+    } finally {
+      malloc.free(t);
+      calloc.free(buffer);
+    }
+  }
+
   // ---- Pure Dart fallbacks (used if the native library is not present) ----
+
+  static int _dartCountHashtag(String joinedTexts, String tag) {
+    final lowerTag = tag.toLowerCase();
+    final needle = lowerTag.startsWith('#') ? lowerTag : '#' + lowerTag;
+    var count = 0;
+    for (final line in joinedTexts.split('\n')) {
+      final lower = line.toLowerCase();
+      var pos = 0;
+      while (true) {
+        final idx = lower.indexOf(needle, pos);
+        if (idx < 0) break;
+        final leftOk = idx == 0 || !_isWordChar(lower.codeUnitAt(idx - 1));
+        final end = idx + needle.length;
+        final rightOk = end >= lower.length || !_isWordChar(lower.codeUnitAt(end));
+        if (leftOk && rightOk) {
+          count++;
+          break;
+        }
+        pos = end;
+      }
+    }
+    return count;
+  }
+
+  static bool _isWordChar(int c) =>
+      (c >= 48 && c <= 57) ||
+      (c >= 65 && c <= 90) ||
+      (c >= 97 && c <= 122) ||
+      c == 95;
+
+  static List<String> _dartExtractHashtags(String text) {
+    final out = <String>[];
+    var i = 0;
+    while (i < text.length) {
+      if (text.codeUnitAt(i) == 35) {
+        var j = i + 1;
+        while (j < text.length && _isWordChar(text.codeUnitAt(j))) {
+          j++;
+        }
+        if (j > i + 1) {
+          out.add(text.substring(i, j).toLowerCase());
+        }
+        i = j;
+      } else {
+        i++;
+      }
+    }
+    return out;
+  }
 
   static String _dartFormat(int n) {
     if (n < 0) n = 0;
