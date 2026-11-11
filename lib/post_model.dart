@@ -40,7 +40,7 @@ class Post {
   final String text;
   final String audience;
   final List<String> taggedHandles;
-  final String? imagePath;
+  final List<String> mediaPaths;
   final DateTime created;
   final List<CommentItem> comments;
   int likes;
@@ -56,7 +56,7 @@ class Post {
     required this.audience,
     required this.created,
     this.taggedHandles = const [],
-    this.imagePath,
+    this.mediaPaths = const [],
     this.likes = 0,
     this.liked = false,
     this.saves = 0,
@@ -213,7 +213,7 @@ class PostStore extends ChangeNotifier {
     required String text,
     required String audience,
     required List<String> taggedHandles,
-    String? imagePath,
+    List<String> mediaPaths = const [],
   }) async {
     final duplicate = _posts.any((p) =>
         p.authorHandle == kMeHandle &&
@@ -228,7 +228,7 @@ class PostStore extends ChangeNotifier {
       text: text,
       audience: audience,
       taggedHandles: List<String>.of(taggedHandles),
-      imagePath: imagePath,
+      mediaPaths: mediaPaths,
       created: DateTime.now(),
     );
 
@@ -237,7 +237,7 @@ class PostStore extends ChangeNotifier {
 
     // DB Sync
     try {
-      await DatabaseService.instance.savePost(text, audience, taggedHandles, imagePath);
+      await DatabaseService.instance.savePost(text, audience, taggedHandles, mediaPaths);
     } catch (e) {
       _posts.removeWhere((p) => p.id == newPost.id);
       notifyListeners(); // Rollback on error

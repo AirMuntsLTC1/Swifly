@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'post_model.dart';
 import 'tag_friends_screen.dart';
+import 'upload_manager.dart';
 
 Route<void> composerRoute() {
   return PageRouteBuilder(
@@ -51,8 +52,9 @@ class _ComposerScreenState extends State<ComposerScreen> {
   final FocusNode _focusNode = FocusNode();
   String _audience = 'Everyone';
   List<String> _tagged = [];
-  File? _selectedImage;
+  List<File> _selectedMedia = [];
   bool _showEmojiPicker = false;
+  bool _isPicking = false;
 
   @override
   void initState() {
@@ -69,21 +71,123 @@ class _ComposerScreenState extends State<ComposerScreen> {
 
   void _publish() {
     final text = _textController.text.trim();
-    if (text.isEmpty && _selectedImage == null) return;
+    if (text.isEmpty && _selectedMedia.isEmpty) return;
+    
+    final mediaPaths = _selectedMedia.map((f) => f.path).toList();
+    
+    // Trigger the top banner
+    UploadManager.instance.start(
+      mediaPaths.isNotEmpty ? mediaPaths.first : null,
+    );
+    
     PostStore.instance.addPost(
       text: text,
       audience: _audience,
       taggedHandles: _tagged,
-      imagePath: _selectedImage?.path,
+      mediaPaths: mediaPaths,
     );
+    
+    // Simulate background processing finish
+    Future.delayed(const Duration(seconds: 2), () {
+      UploadManager.instance.success();
+    });
+
     Navigator.pop(context);
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _openMediaPicker() async {
+    if (_selectedMedia.length >= 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You can only select up to 10 items')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAEAEA),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: const Icon(LucideIcons.image, color: Colors.black),
+                    title: const Text('Photos', style: TextStyle(fontWeight: FontWeight.w600)),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await _pickMedia(ImageSource.gallery);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(LucideIcons.video, color: Colors.black),
+                    title: const Text('Video', style: TextStyle(fontWeight: FontWeight.w600)),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await _pickMedia(ImageSource.gallery);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(LucideIcons.camera, color: Colors.black),
+                    title: const Text('Camera', style: TextStyle(fontWeight: FontWeight.w600)),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await _pickMedia(ImageSource.camera);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickMedia(ImageSource source) async {
+    setState(() => _isPicking = true);
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() => _selectedImage = File(pickedFile.path));
+    
+    try {
+      if (source == ImageSource.gallery) {
+        final List<XFile> pickedFiles = await picker.pickMultipleMedia(
+          limit: 10 - _selectedMedia.length,
+        );
+        if (pickedFiles.isNotEmpty) {
+          setState(() {
+            _selectedMedia.addAll(pickedFiles.map((x) => File(x.path)));
+          });
+        }
+      } else {
+        final XFile? pickedFile = await picker.pickImage(source: source);
+        if (pickedFile != null) {
+          setState(() {
+            _selectedMedia.add(File(pickedFile.path));
+          });
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Permission denied or error picking media')),
+      );
+    } finally {
+      setState(() => _isPicking = false);
     }
   }
 
@@ -149,7 +253,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
   @override
   Widget build(BuildContext context) {
     final tagLabel = _tagged.isEmpty ? 'Tag people' : '${_tagged.length} tagged';
-    final canPost = _textController.text.trim().isNotEmpty || _selectedImage != null;
+    final canPost = _textController.text.trim().isNotEmpty || _selectedMedia.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -231,28 +335,55 @@ class _ComposerScreenState extends State<ComposerScreen> {
                 ],
               ),
             ),
-            if (_selectedImage != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Stack(
-                  alignment: Alignment.topRight,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(_selectedImage!,
-                          height: 200, width: double.infinity, fit: BoxFit.cover),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: IconButton(
-                        onPressed: () => setState(() => _selectedImage = null),
-                        icon: const Icon(LucideIcons.x, color: Colors.white),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.black54,
+            if (_selectedMedia.isNotEmpty)
+              Container(
+                height: 120,
+                margin: const EdgeInsets.only(top: 12),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _selectedMedia.length,
+                  itemBuilder: (context, i) {
+                    return Stack(
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: const Color(0xFFF2F2F2),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              _selectedMedia[i],
+                              fit: BoxFit.cover,
+                              cacheWidth: 200,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
+                        Positioned(
+                          top: 4,
+                          right: 12,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => _selectedMedia.removeAt(i));
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(LucideIcons.x,
+                                  size: 14, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             Expanded(
@@ -264,7 +395,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
                   onTap: () {
                     if (_showEmojiPicker) setState(() => _showEmojiPicker = false);
                   },
-                  autofocus: _selectedImage == null,
+                  autofocus: _selectedMedia.isEmpty,
                   expands: true,
                   maxLines: null,
                   minLines: null,
@@ -286,14 +417,32 @@ class _ComposerScreenState extends State<ComposerScreen> {
                 children: [
                   IconButton(
                     tooltip: 'Media',
-                    onPressed: _pickImage,
-                    icon: const Icon(LucideIcons.image, color: Colors.black),
+                    onPressed: _isPicking ? null : _openMediaPicker,
+                    icon: _isPicking
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(LucideIcons.image, color: Colors.black),
                   ),
                   IconButton(
                     tooltip: 'Emoji',
                     onPressed: _toggleEmoji,
                     icon: Icon(_showEmojiPicker ? LucideIcons.keyboard : LucideIcons.smile, color: Colors.black),
                   ),
+                  const Spacer(),
+                  if (_selectedMedia.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Text(
+                        '${_selectedMedia.length}/10',
+                        style: const TextStyle(
+                          color: Color(0xFF8E8E8E),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -12,7 +12,7 @@ class DatabaseService {
     // Example: final response = await http.get(Uri.parse('https://api.swifly.com/posts'));
   }
 
-  Future<void> savePost(String text, String audience, List<String> taggedHandles, String? imagePath) async {
+  Future<void> savePost(String text, String audience, List<String> taggedHandles, List<String> mediaPaths) async {
     await Future.delayed(const Duration(milliseconds: 300));
   }
 

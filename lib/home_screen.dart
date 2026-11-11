@@ -10,6 +10,7 @@ import 'post_model.dart';
 import 'connections_screen.dart';
 import 'suggestions_screen.dart';
 import 'search_history.dart';
+import 'upload_manager.dart';
 import 'tag_friends_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -99,8 +100,10 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       child: Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
           children: [
             _buildTopBar(),
             const Divider(height: 1, color: Color(0xFFEAEAEA)),
@@ -121,7 +124,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
-        ),
+            ),
+          ),
+          const Positioned.fill(child: IgnorePointer(child: UploadBanner())),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black,
@@ -572,6 +578,89 @@ class _Stat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(label, style: const TextStyle(color: Color(0xFF8E8E8E), fontSize: 13)),
       ],
+    );
+  }
+}
+
+
+class UploadBanner extends StatelessWidget {
+  const UploadBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: UploadManager.instance,
+      builder: (context, _) {
+        final isUploading = UploadManager.instance.isUploading;
+        final isSuccess = UploadManager.instance.isSuccess;
+        final thumb = UploadManager.instance.thumbnailPath;
+        final show = isUploading || isSuccess;
+
+        return AnimatedPositioned(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+          top: show ? 8 : -100,
+          left: 16,
+          right: 16,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(30),
+            color: Colors.black,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  if (thumb != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(thumb),
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        cacheWidth: 100,
+                      ),
+                    )
+                  else
+                    const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Icon(LucideIcons.image, color: Colors.white),
+                    ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isSuccess ? 'Successfully posted!' : 'Posting...',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        if (isUploading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4),
+                            child: LinearProgressIndicator(
+                              minHeight: 2,
+                              backgroundColor: Colors.white24,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (isSuccess)
+                    const Icon(LucideIcons.checkCircle2, color: Colors.green, size: 20),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

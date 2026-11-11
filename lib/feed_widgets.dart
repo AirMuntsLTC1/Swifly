@@ -314,22 +314,45 @@ class _PostCardState extends State<PostCard> {
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: RichText(text: _textSpan),
             ),
-          if (p.imagePath != null)
+          if (p.mediaPaths.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  File(p.imagePath!),
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 200,
-                    color: const Color(0xFFF2F2F2),
-                    alignment: Alignment.center,
-                    child: const Icon(LucideIcons.image, color: Colors.grey),
-                  ),
-                ),
+                child: p.mediaPaths.length == 1
+                    ? Image.file(
+                        File(p.mediaPaths.first),
+                        width: double.infinity,
+                        height: 350,
+                        fit: BoxFit.cover,
+                        cacheWidth: 800,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 200,
+                          color: const Color(0xFFF2F2F2),
+                          alignment: Alignment.center,
+                          child: const Icon(LucideIcons.image, color: Colors.grey),
+                        ),
+                      )
+                    : SizedBox(
+                        height: 350,
+                        width: double.infinity,
+                        child: PageView.builder(
+                          itemCount: p.mediaPaths.length,
+                          itemBuilder: (context, index) {
+                            return Image.file(
+                              File(p.mediaPaths[index]),
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              cacheWidth: 800,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: const Color(0xFFF2F2F2),
+                                alignment: Alignment.center,
+                                child: const Icon(LucideIcons.image, color: Colors.grey),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
               ),
             ),
           const SizedBox(height: 10),
