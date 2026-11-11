@@ -11,7 +11,6 @@ dependencies:
     sdk: flutter
   lucide_icons_flutter: any
   ffi: any
-  image_picker: ^1.0.7
   emoji_picker_flutter: ^2.1.0
   wechat_assets_picker: ^9.1.0
   photo_manager: ^3.3.0

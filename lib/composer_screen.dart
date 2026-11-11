@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
@@ -307,6 +306,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
                               _selectedMedia[i],
                               fit: BoxFit.cover,
                               cacheWidth: 200,
+                              errorBuilder: (_, __, ___) => const Icon(LucideIcons.image),
                             ),
                           ),
                         ),
