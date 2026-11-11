@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'native_bridge.dart';
 import 'tag_friends_screen.dart';
+import 'database_service.dart';
 
 const String kMeName = 'Your Name';
 const String kMeHandle = '@yourhandle';
@@ -64,9 +65,7 @@ class Post {
   }) : comments = comments ?? <CommentItem>[];
 
   List<String> get hashtags => NativeCore.extractHashtags(text);
-
   bool hasHashtag(String tag) => NativeCore.countHashtag(text, tag) > 0;
-
   double get hoursOld => DateTime.now().difference(created).inSeconds / 3600.0;
 
   String get timeLabel {
@@ -88,22 +87,17 @@ class PostStore extends ChangeNotifier {
   final List<Post> _posts = [];
   int _nextId = 1;
 
+  // Social Graph
   final Set<String> _myFollowing = {'@liampark', '@zaraali'};
   final Set<String> _myFollowers = {'@avastone', '@zaraali'};
 
   bool isFollowing(String handle) => _myFollowing.contains(handle);
   bool isFollower(String handle) => _myFollowers.contains(handle);
-  int getFollowStatus(String handle) => NativeCore.getFollowStatus(isFollowing(handle), isFollower(handle));
-  void toggleFollow(String handle) {
-    if (_myFollowing.contains(handle)) {
-      _myFollowing.remove(handle);
-    } else {
-      _myFollowing.add(handle);
-    }
-    notifyListeners();
-  }
+  int getFollowStatus(String handle) =>
+      NativeCore.getFollowStatus(isFollowing(handle), isFollower(handle));
 
   void _seed() {
+    // TODO: Replace _seed() with DatabaseService.instance.fetchPosts() when connecting DB
     final now = DateTime.now();
     _posts.addAll([
       Post(
@@ -180,7 +174,6 @@ class PostStore extends ChangeNotifier {
     return [...mine, for (final i in order) others[i]];
   }
 
-  /// Number of distinct users (authors) that used [tag].
   int hashtagUsage(String tag) {
     final users = <String>{};
     for (final p in _posts) {
@@ -189,7 +182,6 @@ class PostStore extends ChangeNotifier {
     return users.length;
   }
 
-  /// All posts (newest first) that contain [tag].
   List<Post> postsWithHashtag(String tag) {
     final list = _posts.where((p) => p.hasHashtag(tag)).toList()
       ..sort((a, b) => b.created.compareTo(a.created));
@@ -215,65 +207,131 @@ class PostStore extends ChangeNotifier {
     }).toList();
   }
 
-  void addPost({
+  // --- ASYNC ACTIONS (Optimistic UI) ---
+
+  Future<void> addPost({
     required String text,
     required String audience,
     required List<String> taggedHandles,
     String? imagePath,
-  }) {
+  }) async {
     final duplicate = _posts.any((p) =>
         p.authorHandle == kMeHandle &&
         p.text == text &&
         DateTime.now().difference(p.created).inSeconds < 2);
     if (duplicate) return;
-    _posts.insert(
-      0,
-      Post(
-        id: 'p${_nextId++}',
-        authorName: kMeName,
-        authorHandle: kMeHandle,
-        text: text,
-        audience: audience,
-        taggedHandles: List<String>.of(taggedHandles),
-        imagePath: imagePath,
-        created: DateTime.now(),
-      ),
+
+    final newPost = Post(
+      id: 'p${_nextId++}',
+      authorName: kMeName,
+      authorHandle: kMeHandle,
+      text: text,
+      audience: audience,
+      taggedHandles: List<String>.of(taggedHandles),
+      imagePath: imagePath,
+      created: DateTime.now(),
     );
-    notifyListeners();
+
+    _posts.insert(0, newPost);
+    notifyListeners(); // Instantly update UI
+
+    // DB Sync
+    try {
+      await DatabaseService.instance.savePost(text, audience, taggedHandles, imagePath);
+    } catch (e) {
+      _posts.removeWhere((p) => p.id == newPost.id);
+      notifyListeners(); // Rollback on error
+    }
   }
 
-  void toggleLike(String id) {
+  Future<void> toggleLike(String id) async {
     final p = byId(id);
     if (p == null) return;
+
     p.liked = !p.liked;
     p.likes += p.liked ? 1 : -1;
     notifyListeners();
+
+    try {
+      await DatabaseService.instance.toggleLike(id, p.liked);
+    } catch (e) {
+      p.liked = !p.liked;
+      p.likes += p.liked ? 1 : -1;
+      notifyListeners();
+    }
   }
 
-  void toggleSave(String id) {
+  Future<void> toggleSave(String id) async {
     final p = byId(id);
     if (p == null) return;
+
     p.saved = !p.saved;
     p.saves += p.saved ? 1 : -1;
     notifyListeners();
+
+    try {
+      await DatabaseService.instance.toggleSave(id, p.saved);
+    } catch (e) {
+      p.saved = !p.saved;
+      p.saves += p.saved ? 1 : -1;
+      notifyListeners();
+    }
   }
 
-  void addReply(String postId, String commentId, String text) {
+  Future<void> toggleFollow(String handle) async {
+    final wasFollowing = _myFollowing.contains(handle);
+    if (wasFollowing) {
+      _myFollowing.remove(handle);
+    } else {
+      _myFollowing.add(handle);
+    }
+    notifyListeners();
+
+    try {
+      await DatabaseService.instance.toggleFollow(handle, !wasFollowing);
+    } catch (e) {
+      if (wasFollowing) {
+        _myFollowing.add(handle);
+      } else {
+        _myFollowing.remove(handle);
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<void> addReply(String postId, String commentId, String text) async {
     final p = byId(postId);
     if (p == null) return;
+    
+    final newReply = CommentItem(name: kMeName, text: text, created: DateTime.now());
     for (final c in p.comments) {
       if (c.id == commentId) {
-        c.replies.add(CommentItem(name: kMeName, text: text, created: DateTime.now()));
+        c.replies.add(newReply);
         break;
       }
     }
     notifyListeners();
+
+    try {
+      await DatabaseService.instance.addComment(postId, text);
+    } catch (e) {
+      // Rollback logic if needed
+    }
   }
 
-  void addComment(String id, String text) {
+  Future<void> addComment(String id, String text) async {
     final p = byId(id);
     if (p == null) return;
-    p.comments.add(CommentItem(name: kMeName, text: text, created: DateTime.now()));
+
+    final newComment = CommentItem(name: kMeName, text: text, created: DateTime.now());
+    p.comments.add(newComment);
     notifyListeners();
+
+    try {
+      await DatabaseService.instance.addComment(id, text);
+    } catch (e) {
+      p.comments.remove(newComment);
+      notifyListeners();
+    }
   }
 }
