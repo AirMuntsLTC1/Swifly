@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'hashtag_screen.dart';
 
 import 'burst_icons.dart';
 import 'native_bridge.dart';
@@ -38,6 +40,15 @@ class PostCard extends StatefulWidget {
 class _PostCardState extends State<PostCard> {
   int _heartBurst = 0;
   int _saveBurst = 0;
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void dispose() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    super.dispose();
+  }
 
   void _onLike() {
     PostStore.instance.toggleLike(widget.post.id);
@@ -214,6 +225,45 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
+  Widget _buildPostText(String text) {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+
+    final spans = <InlineSpan>[];
+    final regex = RegExp(r'(#[a-zA-Z0-9_]+)');
+    int lastMatchEnd = 0;
+
+    for (final match in regex.allMatches(text)) {
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(text: text.substring(lastMatchEnd, match.start)));
+      }
+      final hashtag = match.group(0)!;
+      final recognizer = TapGestureRecognizer();
+      _recognizers.add(recognizer);
+      recognizer.onTap = () => HashtagScreen.navigate(context, hashtag);
+      spans.add(TextSpan(
+        text: hashtag,
+        style: const TextStyle(
+            color: Color(0xFF1D6FDC), fontWeight: FontWeight.w600),
+        recognizer: recognizer,
+      ));
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastMatchEnd)));
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(fontSize: 15, height: 1.4, color: Colors.black),
+        children: spans,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.post;
@@ -229,8 +279,7 @@ class _PostCardState extends State<PostCard> {
           if (p.text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-              child: Text(p.text,
-                  style: const TextStyle(fontSize: 15, height: 1.4, color: Colors.black)),
+              child: _buildPostText(p.text),
             ),
           const SizedBox(height: 10),
           Padding(

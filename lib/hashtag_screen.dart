@@ -31,6 +31,18 @@ class HashtagScreen extends StatelessWidget {
   final String tag;
   const HashtagScreen({super.key, required this.tag});
 
+  static DateTime? _lastNavigated;
+
+  static void navigate(BuildContext context, String tag) {
+    final now = DateTime.now();
+    if (_lastNavigated != null &&
+        now.difference(_lastNavigated!).inMilliseconds < 600) {
+      return;
+    }
+    _lastNavigated = now;
+    Navigator.of(context).push(hashtagRoute(tag));
+  }
+
   String get _label {
     final t = tag.replaceFirst('#', '');
     if (t.isEmpty) return tag;
