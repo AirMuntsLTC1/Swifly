@@ -13,12 +13,23 @@ String nameForHandle(String handle) {
   return handle;
 }
 
+int _commentSeq = 0;
+
 class CommentItem {
+  final String id;
   final String name;
   final String text;
   final DateTime created;
+  final List<CommentItem> replies;
 
-  const CommentItem({required this.name, required this.text, required this.created});
+  CommentItem({
+    required this.name,
+    required this.text,
+    required this.created,
+    String? id,
+    List<CommentItem>? replies,
+  })  : id = id ?? 'c${++_commentSeq}',
+        replies = replies ?? <CommentItem>[];
 }
 
 class Post {
@@ -200,6 +211,18 @@ class PostStore extends ChangeNotifier {
     if (p == null) return;
     p.saved = !p.saved;
     p.saves += p.saved ? 1 : -1;
+    notifyListeners();
+  }
+
+  void addReply(String postId, String commentId, String text) {
+    final p = byId(postId);
+    if (p == null) return;
+    for (final c in p.comments) {
+      if (c.id == commentId) {
+        c.replies.add(CommentItem(name: kMeName, text: text, created: DateTime.now()));
+        break;
+      }
+    }
     notifyListeners();
   }
 

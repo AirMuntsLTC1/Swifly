@@ -270,6 +270,8 @@ class _CommentsSheet extends StatefulWidget {
 
 class _CommentsSheetState extends State<_CommentsSheet> {
   final TextEditingController _controller = TextEditingController();
+  final Set<String> _expanded = {};
+  CommentItem? _replyingTo;
 
   @override
   void dispose() {
@@ -280,8 +282,153 @@ class _CommentsSheetState extends State<_CommentsSheet> {
   void _send() {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
-    PostStore.instance.addComment(widget.postId, text);
+    final target = _replyingTo;
+    if (target == null) {
+      PostStore.instance.addComment(widget.postId, text);
+    } else {
+      PostStore.instance.addReply(widget.postId, target.id, text);
+      setState(() => _expanded.add(target.id));
+    }
     _controller.clear();
+    setState(() => _replyingTo = null);
+  }
+
+  void _toggleReplies(String id) {
+    setState(() {
+      if (!_expanded.remove(id)) _expanded.add(id);
+    });
+  }
+
+  Widget _avatar(double radius) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: Colors.black,
+      child: Icon(LucideIcons.user, color: Colors.white, size: radius * 0.9),
+    );
+  }
+
+  Widget _commentTile(CommentItem c, {required bool isReply}) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isReply ? 10 : 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _avatar(isReply ? 13 : 16),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(c.name,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: isReply ? 13 : 14,
+                        color: Colors.black)),
+                const SizedBox(height: 2),
+                Text(c.text,
+                    style: TextStyle(
+                        fontSize: isReply ? 13 : 14, color: Colors.black)),
+                if (!isReply)
+                  GestureDetector(
+                    onTap: () => setState(() => _replyingTo = c),
+                    child: const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text('Reply',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF8E8E8E))),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _thread(CommentItem c) {
+    final expanded = _expanded.contains(c.id);
+    final replies = c.replies;
+    final hasMore = replies.length > 1;
+    final visible = expanded ? replies : replies.take(1).toList();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _commentTile(c, isReply: false),
+          if (replies.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 26, top: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (final r in visible) _commentTile(r, isReply: true),
+                      ],
+                    ),
+                  ),
+                  if (hasMore)
+                    GestureDetector(
+                      onTap: () => _toggleReplies(c.id),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text(
+                          expanded
+                              ? 'Hide replies'
+                              : 'See all ${replies.length} replies',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.black),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _header(Post? post, int totalComments) {
+    final likes = NativeCore.formatCount(post?.likes ?? 0);
+    final comments = NativeCore.formatCount(totalComments);
+    const countStyle = TextStyle(
+        fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
+      child: Row(
+        children: [
+          const Text('Comments',
+              style: TextStyle(
+                  fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black)),
+          const SizedBox(width: 12),
+          const Icon(LucideIcons.heart, size: 15, color: Colors.black),
+          const SizedBox(width: 4),
+          Text(likes, style: countStyle),
+          const SizedBox(width: 12),
+          const Icon(LucideIcons.messageCircle, size: 15, color: Colors.black),
+          const SizedBox(width: 4),
+          Text(comments, style: countStyle),
+          const Spacer(),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(LucideIcons.x, color: Colors.black),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -298,26 +445,14 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             builder: (context, _) {
               final post = PostStore.instance.byId(widget.postId);
               final comments = post?.comments ?? const <CommentItem>[];
+              var total = comments.length;
+              for (final c in comments) {
+                total += c.replies.length;
+              }
+              final replyTo = _replyingTo;
               return Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text('Comments (${comments.length})',
-                              style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.black)),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(LucideIcons.x, color: Colors.black),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _header(post, total),
                   const Divider(height: 1, color: Color(0xFFEAEAEA)),
                   Expanded(
                     child: comments.isEmpty
@@ -325,46 +460,30 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                             child: Text('No comments yet',
                                 style: TextStyle(color: Color(0xFF8E8E8E))),
                           )
-                        : ListView.builder(
+                        : ListView(
                             padding: const EdgeInsets.all(16),
-                            itemCount: comments.length,
-                            itemBuilder: (context, i) {
-                              final c = comments[i];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const CircleAvatar(
-                                      radius: 16,
-                                      backgroundColor: Colors.black,
-                                      child: Icon(LucideIcons.user,
-                                          color: Colors.white, size: 16),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(c.name,
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 14,
-                                                  color: Colors.black)),
-                                          const SizedBox(height: 2),
-                                          Text(c.text,
-                                              style: const TextStyle(
-                                                  fontSize: 14, color: Colors.black)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
+                            children: [for (final c in comments) _thread(c)],
                           ),
                   ),
                   const Divider(height: 1, color: Color(0xFFEAEAEA)),
+                  if (replyTo != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text('Replying to ${replyTo.name}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Color(0xFF8E8E8E))),
+                          ),
+                          GestureDetector(
+                            onTap: () => setState(() => _replyingTo = null),
+                            child: const Icon(LucideIcons.x,
+                                size: 16, color: Colors.black),
+                          ),
+                        ],
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 8, 4, 12),
                     child: Row(
@@ -375,15 +494,18 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                             cursorColor: Colors.black,
                             textInputAction: TextInputAction.send,
                             onSubmitted: (_) => _send(),
-                            decoration: const InputDecoration(
-                              hintText: 'Write a comment',
+                            decoration: InputDecoration(
+                              hintText: replyTo == null
+                                  ? 'Write a comment'
+                                  : 'Write a reply',
                               filled: true,
-                              fillColor: Color(0xFFF2F2F2),
+                              fillColor: const Color(0xFFF2F2F2),
                               isDense: true,
-                              contentPadding:
-                                  EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(30)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                              border: const OutlineInputBorder(
+                                borderRadius:
+                                    BorderRadius.all(Radius.circular(30)),
                                 borderSide: BorderSide.none,
                               ),
                             ),
@@ -397,7 +519,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         IconButton(
                           tooltip: 'GIF',
                           onPressed: () {},
-                          icon: const Icon(LucideIcons.clapperboard, color: Colors.black),
+                          icon: const Icon(LucideIcons.clapperboard,
+                              color: Colors.black),
                         ),
                         IconButton(
                           tooltip: 'Send',
