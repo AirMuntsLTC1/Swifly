@@ -45,8 +45,6 @@ class HashtagScreen extends StatelessWidget {
         listenable: PostStore.instance,
         builder: (context, _) {
           final posts = PostStore.instance.postsWithHashtag(tag);
-          final users = PostStore.instance.hashtagUsage(tag);
-          final userLabel = users == 1 ? 'user' : 'users';
           final postLabel = posts.length == 1 ? 'post' : 'posts';
 
           return CustomScrollView(
@@ -107,8 +105,6 @@ class HashtagScreen extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(30),
                                   ),
                                   child: Text(
-                                    '${NativeCore.formatCount(users)} $userLabel'
-                                    '  ·  '
                                     '${NativeCore.formatCount(posts.length)} $postLabel',
                                     style: const TextStyle(
                                       fontSize: 13,

@@ -184,7 +184,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
 
   Widget _trendChip(String tag) {
     final hashtag = '#' + tag.toLowerCase();
-    final users = PostStore.instance.hashtagUsage(hashtag);
+    final postCount = PostStore.instance.postsWithHashtag(hashtag).length;
     return InkWell(
       borderRadius: BorderRadius.circular(30),
       onTap: () => Navigator.of(context).push(hashtagRoute(hashtag)),
@@ -204,7 +204,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
                     color: Color(0xFF1D6FDC))),
             const SizedBox(width: 6),
             Text(
-              NativeCore.formatCount(users),
+              NativeCore.formatCount(postCount),
               style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
