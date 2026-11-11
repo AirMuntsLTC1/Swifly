@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,7 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   IconData _iconFor(int i) {
     switch (i) {
       case 0:
-        return LucideIcons.home;
+        return LucideIcons.house;
       case 1:
         return LucideIcons.messageCircle;
       case 2:

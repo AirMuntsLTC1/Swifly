@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  lucide_icons: any
+  lucide_icons_flutter: any
 
 dev_dependencies:
   flutter_test:
