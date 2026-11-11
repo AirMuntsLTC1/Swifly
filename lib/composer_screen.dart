@@ -114,7 +114,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
       return;
     }
 
-    // Open Fullscreen Custom Picker
+    // Open Fullscreen Custom Picker directly
     final List<AssetEntity>? result = await AssetPicker.pickAssets(
       context,
       pickerConfig: AssetPickerConfig(

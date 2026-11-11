@@ -127,7 +127,14 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
             ),
           ),
-          const UploadBanner(),
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: UploadBanner(),
+            ),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -597,13 +604,13 @@ class UploadBanner extends StatelessWidget {
         final thumb = UploadManager.instance.thumbnailPath;
         final show = isUploading || isSuccess;
 
-        return AnimatedPositioned(
+        return AnimatedSlide(
           duration: const Duration(milliseconds: 400),
           curve: Curves.easeOutCubic,
-          top: show ? 8 : -100,
-          left: 16,
-          right: 16,
-          child: Material(
+          offset: show ? Offset.zero : const Offset(0, -2),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Material(
             elevation: 8,
             borderRadius: BorderRadius.circular(30),
             color: Colors.black,
@@ -659,6 +666,7 @@ class UploadBanner extends StatelessWidget {
                 ],
               ),
             ),
+          ),
           ),
         );
       },
