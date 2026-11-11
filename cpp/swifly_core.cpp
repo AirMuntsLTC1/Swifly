@@ -184,3 +184,12 @@ SWIFLY_EXPORT int32_t swifly_extract_hashtags(const char* text, char* out, int32
     out[copy] = '\0';
     return copy;
 }
+
+
+// Resolves follow status: 0 = None, 1 = Following, 2 = Followers (Follow Back), 3 = Mutual
+SWIFLY_EXPORT int32_t swifly_get_follow_status(int32_t is_following, int32_t is_follower) {
+    if (is_following && is_follower) return 3;
+    if (is_following) return 1;
+    if (is_follower) return 2;
+    return 0;
+}

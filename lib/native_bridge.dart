@@ -33,6 +33,9 @@ typedef _ExtractHashtagsNative = Int32 Function(
 typedef _ExtractHashtagsDart = int Function(
     Pointer<Utf8> text, Pointer<Utf8> out, int outLen);
 
+typedef _FollowStatusNative = Int32 Function(Int32 isFollowing, Int32 isFollower);
+typedef _FollowStatusDart = int Function(int isFollowing, int isFollower);
+
 /// Bridge to the C++ core (cpp/swifly_core.cpp, built as libswifly_core.so).
 /// Every function falls back to pure Dart if the native library is missing.
 class NativeCore {
@@ -72,6 +75,9 @@ class NativeCore {
   static final _ExtractHashtagsDart? _extractHashtags = _safe<_ExtractHashtagsDart>(
       (l) => l.lookupFunction<_ExtractHashtagsNative, _ExtractHashtagsDart>(
           'swifly_extract_hashtags'));
+  static final _FollowStatusDart? _followStatus = _safe<_FollowStatusDart>(
+      (l) => l.lookupFunction<_FollowStatusNative, _FollowStatusDart>(
+          'swifly_get_follow_status'));
 
   static bool get isNativeReady => _library != null;
 
@@ -169,6 +175,15 @@ class NativeCore {
       malloc.free(t);
       calloc.free(buffer);
     }
+  }
+
+  static int getFollowStatus(bool isFollowing, bool isFollower) {
+    final f = _followStatus;
+    if (f != null) return f(isFollowing ? 1 : 0, isFollower ? 1 : 0);
+    if (isFollowing && isFollower) return 3;
+    if (isFollowing) return 1;
+    if (isFollower) return 2;
+    return 0;
   }
 
   // ---- Pure Dart fallbacks (used if the native library is not present) ----

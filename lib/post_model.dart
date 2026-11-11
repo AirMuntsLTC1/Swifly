@@ -88,6 +88,21 @@ class PostStore extends ChangeNotifier {
   final List<Post> _posts = [];
   int _nextId = 1;
 
+  final Set<String> _myFollowing = {'@liampark', '@zaraali'};
+  final Set<String> _myFollowers = {'@avastone', '@zaraali'};
+
+  bool isFollowing(String handle) => _myFollowing.contains(handle);
+  bool isFollower(String handle) => _myFollowers.contains(handle);
+  int getFollowStatus(String handle) => NativeCore.getFollowStatus(isFollowing(handle), isFollower(handle));
+  void toggleFollow(String handle) {
+    if (_myFollowing.contains(handle)) {
+      _myFollowing.remove(handle);
+    } else {
+      _myFollowing.add(handle);
+    }
+    notifyListeners();
+  }
+
   void _seed() {
     final now = DateTime.now();
     _posts.addAll([

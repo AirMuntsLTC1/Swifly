@@ -134,6 +134,7 @@ class HashtagScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
               if (posts.isEmpty)
                 const SliverToBoxAdapter(
                   child: Padding(

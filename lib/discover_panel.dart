@@ -51,17 +51,8 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
   final Map<String, int> _following = {
     for (final f in kFriends) f.handle: kPeopleStats[f.handle]?.$2 ?? 0,
   };
-  final Set<String> _followed = {};
-
   void _toggleFollow(String handle) {
-    setState(() {
-      if (_followed.remove(handle)) {
-        _followers[handle] = (_followers[handle] ?? 1) - 1;
-      } else {
-        _followed.add(handle);
-        _followers[handle] = (_followers[handle] ?? 0) + 1;
-      }
-    });
+    PostStore.instance.toggleFollow(handle);
   }
 
   @override
@@ -338,7 +329,8 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
   Widget _personTile(Friend f) {
     final followers = _followers[f.handle] ?? 0;
     final following = _following[f.handle] ?? 0;
-    final isFollowing = _followed.contains(f.handle);
+    final status = PostStore.instance.getFollowStatus(f.handle);
+    final isFollowing = status == 1 || status == 3;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       leading: const CircleAvatar(
@@ -370,10 +362,13 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
           ),
         ],
       ),
-      trailing: _FollowButton(
-        following: isFollowing,
-        onTap: () => _toggleFollow(f.handle),
-      ),
+      trailing: status == 3
+          ? const SizedBox.shrink()
+          : _FollowButton(
+              following: status == 1,
+              isFollower: status == 2,
+              onTap: () => _toggleFollow(f.handle),
+            ),
     );
   }
 
@@ -400,9 +395,14 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
 /// Follow button: squeezes on press, then color and label animate to the new state.
 class _FollowButton extends StatefulWidget {
   final bool following;
+  final bool isFollower;
   final VoidCallback onTap;
 
-  const _FollowButton({required this.following, required this.onTap});
+  const _FollowButton({
+    required this.following,
+    required this.isFollower,
+    required this.onTap,
+  });
 
   @override
   State<_FollowButton> createState() => _FollowButtonState();
@@ -414,6 +414,8 @@ class _FollowButtonState extends State<_FollowButton> {
   @override
   Widget build(BuildContext context) {
     final on = widget.following;
+    final isFollower = widget.isFollower;
+    final label = on ? 'Following' : (isFollower ? 'Follow Back' : 'Follow');
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapCancel: () => setState(() => _pressed = false),
@@ -430,9 +432,9 @@ class _FollowButtonState extends State<_FollowButton> {
           curve: Curves.easeOutCubic,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: on ? Colors.white : Colors.black,
+            color: on ? const Color(0xFF1D6FDC) : const Color(0xFF1D6FDC),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.black),
+            border: Border.all(color: const Color(0xFF1D6FDC)),
           ),
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
@@ -441,10 +443,10 @@ class _FollowButtonState extends State<_FollowButton> {
               child: FadeTransition(opacity: anim, child: child),
             ),
             child: Text(
-              on ? 'Following' : 'Follow',
+              label,
               key: ValueKey<bool>(on),
               style: TextStyle(
-                color: on ? Colors.black : Colors.white,
+                color: on ? Colors.white : Colors.white,
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),

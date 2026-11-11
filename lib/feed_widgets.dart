@@ -170,6 +170,10 @@ class _PostCardState extends State<PostCard> {
             ],
           ),
         ),
+        if (p.authorHandle != kMeHandle) ...[
+          const SizedBox(width: 8),
+          FeedFollowButton(handle: p.authorHandle),
+        ],
       ],
     );
   }
@@ -657,6 +661,59 @@ class _CommentsSheetState extends State<_CommentsSheet> {
           ),
         ),
       ),
+    );
+  }
+}
+
+
+class FeedFollowButton extends StatelessWidget {
+  final String handle;
+  const FeedFollowButton({super.key, required this.handle});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: PostStore.instance,
+      builder: (context, _) {
+        final status = PostStore.instance.getFollowStatus(handle);
+        if (status == 3) return const SizedBox.shrink(); // Mutual, hide button
+
+        String label = 'Follow';
+        Color bg = const Color(0xFF1D6FDC);
+        Color fg = Colors.white;
+        Border? border;
+
+        if (status == 1) { // Following
+          label = 'Following';
+          bg = Colors.white;
+          fg = const Color(0xFF1D6FDC);
+          border = Border.all(color: const Color(0xFF1D6FDC));
+        } else if (status == 2) { // Followers
+          label = 'Follow Back';
+          bg = const Color(0xFF1D6FDC);
+          fg = Colors.white;
+        }
+
+        return GestureDetector(
+          onTap: () => PostStore.instance.toggleFollow(handle),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(20),
+              border: border,
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: fg,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
