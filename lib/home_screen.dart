@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'create_sheet.dart';
 import 'discover_panel.dart';
 import 'feed_widgets.dart';
+import 'post_model.dart';
 import 'tag_friends_screen.dart';
 
 class HomeScreen extends StatefulWidget {

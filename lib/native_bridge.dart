@@ -41,21 +41,23 @@ class NativeCore {
     }
   }
 
-  static F? _lookup<N extends Function, F extends Function>(String symbol) {
+  /// Runs a lookup with concrete types and returns null if it fails.
+  static T? _safe<T>(T Function(DynamicLibrary lib) lookup) {
     final lib = _library;
     if (lib == null) return null;
     try {
-      return lib.lookupFunction<N, F>(symbol);
+      return lookup(lib);
     } catch (_) {
       return null;
     }
   }
 
-  static final _FormatDart? _format =
-      _lookup<_FormatNative, _FormatDart>('swifly_format_count');
-  static final _RankDart? _rank = _lookup<_RankNative, _RankDart>('swifly_rank');
-  static final _ContainsDart? _contains =
-      _lookup<_ContainsNative, _ContainsDart>('swifly_contains_ci');
+  static final _FormatDart? _format = _safe<_FormatDart>(
+      (l) => l.lookupFunction<_FormatNative, _FormatDart>('swifly_format_count'));
+  static final _RankDart? _rank = _safe<_RankDart>(
+      (l) => l.lookupFunction<_RankNative, _RankDart>('swifly_rank'));
+  static final _ContainsDart? _contains = _safe<_ContainsDart>(
+      (l) => l.lookupFunction<_ContainsNative, _ContainsDart>('swifly_contains_ci'));
 
   static bool get isNativeReady => _library != null;
 
