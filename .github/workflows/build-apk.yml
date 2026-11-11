@@ -53,9 +53,10 @@ jobs:
             flutter create --platforms=android --project-name swifly --org com.example .
           fi
 
-      - name: Set app name to Swifly
+      - name: Set app name to Swifly & Add Media Permissions
         run: |
           sed -i 's/android:label="[^"]*"/android:label="Swifly"/' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>' android/app/src/main/AndroidManifest.xml
 
       - name: Install CMake for the C++ core
         run: |

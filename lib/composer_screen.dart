@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -75,7 +77,6 @@ class _ComposerScreenState extends State<ComposerScreen> {
     
     final mediaPaths = _selectedMedia.map((f) => f.path).toList();
     
-    // Trigger the top banner
     UploadManager.instance.start(
       mediaPaths.isNotEmpty ? mediaPaths.first : null,
     );
@@ -87,7 +88,6 @@ class _ComposerScreenState extends State<ComposerScreen> {
       mediaPaths: mediaPaths,
     );
     
-    // Simulate background processing finish
     Future.delayed(const Duration(seconds: 2), () {
       UploadManager.instance.success();
     });
@@ -103,90 +103,37 @@ class _ComposerScreenState extends State<ComposerScreen> {
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAEAEA),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    leading: const Icon(LucideIcons.image, color: Colors.black),
-                    title: const Text('Photos', style: TextStyle(fontWeight: FontWeight.w600)),
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      await _pickMedia(ImageSource.gallery);
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(LucideIcons.video, color: Colors.black),
-                    title: const Text('Video', style: TextStyle(fontWeight: FontWeight.w600)),
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      await _pickMedia(ImageSource.gallery);
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(LucideIcons.camera, color: Colors.black),
-                    title: const Text('Camera', style: TextStyle(fontWeight: FontWeight.w600)),
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      await _pickMedia(ImageSource.camera);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
+    // Request Permission First
+    final PermissionState ps = await PhotoManager.requestPermissionExtend();
+    if (!ps.isAuth) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permission denied to access photos/videos')),
         );
-      },
-    );
-  }
+      }
+      return;
+    }
 
-  Future<void> _pickMedia(ImageSource source) async {
-    setState(() => _isPicking = true);
-    final picker = ImagePicker();
-    
-    try {
-      if (source == ImageSource.gallery) {
-        final List<XFile> pickedFiles = await picker.pickMultipleMedia(
-          limit: 10 - _selectedMedia.length,
-        );
-        if (pickedFiles.isNotEmpty) {
+    // Open Fullscreen Custom Picker
+    final List<AssetEntity>? result = await AssetPicker.pickAssets(
+      context,
+      pickerConfig: AssetPickerConfig(
+        maxAssets: 10 - _selectedMedia.length,
+        requestType: RequestType.common, // Supports both photos and videos
+        themeColor: const Color(0xFF1D6FDC), // Your app's blue color
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() => _isPicking = true);
+      for (var asset in result) {
+        final file = await asset.file;
+        if (file != null) {
           setState(() {
-            _selectedMedia.addAll(pickedFiles.map((x) => File(x.path)));
-          });
-        }
-      } else {
-        final XFile? pickedFile = await picker.pickImage(source: source);
-        if (pickedFile != null) {
-          setState(() {
-            _selectedMedia.add(File(pickedFile.path));
+            _selectedMedia.add(file);
           });
         }
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Permission denied or error picking media')),
-      );
-    } finally {
       setState(() => _isPicking = false);
     }
   }
