@@ -29,7 +29,7 @@ class NotificationRouter {
         ));
         break;
       case NotifType.follow:
-        nav.push(UserProfileScreen.route(Friend(n.actorName, n.actorHandle)));
+        nav.push(UserProfileScreen.route(Person(n.actorName, n.actorHandle)));
         break;
       case NotifType.message:
         nav.push(MaterialPageRoute(builder: (_) => ChatScreen(handle: n.actorHandle)));

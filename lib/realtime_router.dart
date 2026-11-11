@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
 import 'realtime.dart';
@@ -58,9 +59,11 @@ class RealtimeRouter {
       notes.add(type: NotifType.tag, actorName: e.actorName,
           actorHandle: e.actorHandle, postId: e.postId);
     } else if (e is FollowedEvent) {
-      posts.receiveFollower(e.actorHandle);
+      FollowStore.instance.applyIncomingFollow(e.actorHandle);
       notes.add(type: NotifType.follow, actorName: e.actorName,
           actorHandle: e.actorHandle);
+    } else if (e is UnfollowedEvent) {
+      FollowStore.instance.applyIncomingUnfollow(e.actorHandle);
     } else if (e is MessageEvent) {
       ChatStore.instance.receive(e.actorHandle, e.text);
       notes.add(type: NotifType.message, actorName: e.actorName,

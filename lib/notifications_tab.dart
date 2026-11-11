@@ -3,7 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'inbox_store.dart';
 import 'notification_router.dart';
-import 'post_model.dart';
+import 'follow_button.dart';
 
 const Color _brandBlue = Color(0xFF1D6FDC);
 const Color _unreadTint = Color(0xFFE7F3FF);
@@ -259,7 +259,7 @@ class _NotificationRow extends StatelessWidget {
                     if (n.type == NotifType.follow)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
-                        child: _FollowAction(handle: n.actorHandle),
+                        child: FollowButton(handle: n.actorHandle, compact: true),
                       ),
                   ],
                 ),
@@ -312,47 +312,6 @@ class _Avatar extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Follow / Follow back / Following. Uses the same follow state as the rest of the app.
-class _FollowAction extends StatelessWidget {
-  final String handle;
-  const _FollowAction({required this.handle});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: PostStore.instance,
-      builder: (context, _) {
-        final status = PostStore.instance.getFollowStatus(handle);
-        final following = status == 1 || status == 3;
-        final label = following ? 'Following' : (status == 2 ? 'Follow back' : 'Follow');
-        return GestureDetector(
-          onTap: () => PostStore.instance.toggleFollow(handle),
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 120),
-            height: 34,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: following ? Colors.white : _brandBlue,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                  color: following ? const Color(0xFFCCCCCC) : _brandBlue),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: following ? Colors.black : Colors.white,
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

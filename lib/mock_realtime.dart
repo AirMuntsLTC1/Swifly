@@ -24,6 +24,7 @@ class MockRealtime {
       _reply,
       _save,
       _follow,
+      _unfollow,
       _message,
       _storyReact,
       _tag,
@@ -82,6 +83,13 @@ class MockRealtime {
 
   static void _follow() {
     _publish(const FollowedEvent(
+      actorName: 'Omar Khalid',
+      actorHandle: '@omarkh',
+    ));
+  }
+
+  static void _unfollow() {
+    _publish(const UnfollowedEvent(
       actorName: 'Omar Khalid',
       actorHandle: '@omarkh',
     ));

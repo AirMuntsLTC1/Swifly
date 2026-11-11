@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'tag_friends_screen.dart';
-import 'user_profile_screen.dart';
-import 'post_model.dart';
 
+import 'follow_button.dart';
+import 'follow_store.dart';
+import 'post_model.dart';
+import 'user_profile_screen.dart';
+
+/// Followers and Following lists. Both come from [FollowStore], so they update
+/// live when someone follows or unfollows.
+/// Currently shows the signed-in user's lists; [userHandle] is kept for when
+/// other people's lists come from the database.
 class ConnectionsScreen extends StatefulWidget {
   final bool initialFollowers;
   final String userHandle;
@@ -21,10 +27,6 @@ class ConnectionsScreen extends StatefulWidget {
 
 class _ConnectionsScreenState extends State<ConnectionsScreen> {
   late bool _showFollowers;
-
-  // Split the friends list into two different lists for the demo
-  final List<Friend> _followersList = kFriends.sublist(0, 5);
-  final List<Friend> _followingList = kFriends.sublist(5, 10);
 
   @override
   void initState() {
@@ -45,7 +47,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          '${widget.userName}\'s Connections',
+          _showFollowers ? 'Followers' : 'Following',
           style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
         ),
       ),
@@ -70,31 +72,41 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
             ),
           ),
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: (_showFollowers ? _followersList : _followingList).length,
-              separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
-              itemBuilder: (context, i) {
-                final f = (_showFollowers ? _followersList : _followingList)[i];
-                return ListTile(
-                  onTap: () => Navigator.push(context, UserProfileScreen.route(f)),
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(
-                    backgroundColor: Colors.black,
-                    child: Icon(LucideIcons.user, color: Colors.white),
-                  ),
-                  title: Text(f.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
-                  trailing: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D6FDC),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: ListenableBuilder(
+              listenable: FollowStore.instance,
+              builder: (context, _) {
+                final handles = (_showFollowers
+                        ? FollowStore.instance.followerHandles
+                        : FollowStore.instance.followingHandles)
+                    .toList();
+                if (handles.isEmpty) {
+                  return Center(
+                    child: Text(
+                      _showFollowers ? 'No followers yet' : 'Not following anyone yet',
+                      style: const TextStyle(color: Color(0xFF8E8E8E)),
                     ),
-                    child: const Text('Follow', style: TextStyle(fontWeight: FontWeight.w700)),
-                  ),
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: handles.length,
+                  separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
+                  itemBuilder: (context, i) {
+                    final p = personFor(handles[i]);
+                    return ListTile(
+                      onTap: () => Navigator.push(context, UserProfileScreen.route(p)),
+                      contentPadding: EdgeInsets.zero,
+                      leading: const CircleAvatar(
+                        backgroundColor: Colors.black,
+                        child: Icon(LucideIcons.user, color: Colors.white),
+                      ),
+                      title: Text(p.name,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(p.handle,
+                          style: const TextStyle(color: Color(0xFF8E8E8E))),
+                      trailing: FollowButton(handle: p.handle, compact: true),
+                    );
+                  },
                 );
               },
             ),

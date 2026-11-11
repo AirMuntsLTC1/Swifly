@@ -8,6 +8,8 @@ import 'create_sheet.dart';
 import 'discover_panel.dart';
 import 'feed_widgets.dart';
 import 'post_model.dart';
+import 'follow_button.dart';
+import 'follow_store.dart';
 import 'connections_screen.dart';
 import 'suggestions_screen.dart';
 import 'search_history.dart';
@@ -373,20 +375,23 @@ class _ProfileTabState extends State<ProfileTab> {
           const Text('Building something cool. Coffee and code.',
               style: TextStyle(color: Colors.black, height: 1.4)),
           const SizedBox(height: 20),
-          Row(
-            children: [
-              const _Stat(label: 'Posts', value: '24'),
-              const SizedBox(width: 32),
-              GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectionsScreen(initialFollowers: true))),
-                child: const _Stat(label: 'Followers', value: '1.2K'),
-              ),
-              const SizedBox(width: 32),
-              GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectionsScreen(initialFollowers: false))),
-                child: const _Stat(label: 'Following', value: '310'),
-              ),
-            ],
+          ListenableBuilder(
+            listenable: FollowStore.instance,
+            builder: (context, _) => Row(
+              children: [
+                const _Stat(label: 'Posts', value: '24'),
+                const SizedBox(width: 32),
+                GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectionsScreen(initialFollowers: true))),
+                  child: _Stat(label: 'Followers', value: '${FollowStore.instance.followerHandles.length}'),
+                ),
+                const SizedBox(width: 32),
+                GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectionsScreen(initialFollowers: false))),
+                  child: _Stat(label: 'Following', value: '${FollowStore.instance.followingHandles.length}'),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 20),
           Row(
@@ -446,10 +451,9 @@ class _ProfileTabState extends State<ProfileTab> {
             height: 180,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: kFriends.take(10).length,
+              itemCount: kPeople.take(10).length,
               itemBuilder: (context, i) {
-                final f = kFriends[i];
-                final isFollowing = PostStore.instance.isFollowing(f.handle);
+                final f = kPeople[i];
                 return Container(
                   width: 130,
                   margin: const EdgeInsets.only(right: 12),
@@ -482,22 +486,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       const Spacer(),
                       Padding(
                         padding: const EdgeInsets.all(8.0),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 32,
-                          child: ElevatedButton(
-                            onPressed: () => PostStore.instance.toggleFollow(f.handle),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isFollowing ? Colors.white : const Color(0xFF1D6FDC),
-                              foregroundColor: isFollowing ? const Color(0xFF1D6FDC) : Colors.white,
-                              side: BorderSide(color: const Color(0xFF1D6FDC)),
-                              elevation: 0,
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            ),
-                            child: Text(isFollowing ? 'Following' : 'Follow', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                          ),
-                        ),
+                        child: FollowButton(handle: f.handle, compact: true, expand: true),
                       ),
                     ],
                   ),

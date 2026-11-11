@@ -11,7 +11,7 @@ const String kMeHandle = '@yourhandle';
 const String kMyPostId = 'm1';
 
 String nameForHandle(String handle) {
-  for (final f in kFriends) {
+  for (final f in kPeople) {
     if (f.handle == handle) return f.name;
   }
   return handle;
@@ -93,35 +93,16 @@ class PostStore extends ChangeNotifier {
   final List<Post> _posts = [];
   int _nextId = 1;
 
-  // Social Graph
-  final Set<String> _myFollowing = <String>{};
-  final Set<String> _myFollowers = <String>{};
-
-  bool isFollowing(String handle) => _myFollowing.contains(handle);
-  bool isFollower(String handle) => _myFollowers.contains(handle);
-  int getFollowStatus(String handle) =>
-      NativeCore.getFollowStatus(isFollowing(handle), isFollower(handle));
-
   void _seed() {
     // TODO: Replace _seed() with DatabaseService.instance.fetchPosts() when connecting DB
     // Sample data lives in mock_data.dart (see kUseMockData in app_config.dart).
   }
 
-  /// Replaces all posts and the social graph. Called with mock data or database results.
-  void load({
-    required List<Post> posts,
-    Set<String> following = const <String>{},
-    Set<String> followers = const <String>{},
-  }) {
+  /// Replaces all posts. Called with mock data now, database results later.
+  void load({required List<Post> posts}) {
     _posts
       ..clear()
       ..addAll(posts);
-    _myFollowing
-      ..clear()
-      ..addAll(following);
-    _myFollowers
-      ..clear()
-      ..addAll(followers);
     notifyListeners();
   }
 
@@ -224,11 +205,6 @@ class PostStore extends ChangeNotifier {
     return true;
   }
 
-  void receiveFollower(String handle) {
-    _myFollowers.add(handle);
-    notifyListeners();
-  }
-
   // --- ASYNC ACTIONS (Optimistic UI) ---
 
   Future<void> addPost({
@@ -296,27 +272,6 @@ class PostStore extends ChangeNotifier {
     } catch (e) {
       p.saved = !p.saved;
       p.saves += p.saved ? 1 : -1;
-      notifyListeners();
-    }
-  }
-
-  Future<void> toggleFollow(String handle) async {
-    final wasFollowing = _myFollowing.contains(handle);
-    if (wasFollowing) {
-      _myFollowing.remove(handle);
-    } else {
-      _myFollowing.add(handle);
-    }
-    notifyListeners();
-
-    try {
-      await DatabaseService.instance.toggleFollow(handle, !wasFollowing);
-    } catch (e) {
-      if (wasFollowing) {
-        _myFollowing.add(handle);
-      } else {
-        _myFollowing.remove(handle);
-      }
       notifyListeners();
     }
   }

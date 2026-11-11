@@ -4,14 +4,15 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'connections_screen.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
+import 'follow_button.dart';
 import 'tag_friends_screen.dart';
 import 'discover_panel.dart';
 
 class UserProfileScreen extends StatefulWidget {
-  final Friend user;
+  final Person user;
   const UserProfileScreen({super.key, required this.user});
 
-  static Route<void> route(Friend user) {
+  static Route<void> route(Person user) {
     return PageRouteBuilder(
       transitionDuration: const Duration(milliseconds: 350),
       reverseTransitionDuration: const Duration(milliseconds: 280),
@@ -114,48 +115,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(
-                  child: ListenableBuilder(
-                    listenable: PostStore.instance,
-                    builder: (context, _) {
-                      final status =
-                          PostStore.instance.getFollowStatus(f.handle);
-                      String label = 'Follow';
-                      Color bg = const Color(0xFF1D6FDC);
-                      Color fg = Colors.white;
-
-                      // Following and mutual follow look the same, and both can be tapped to unfollow.
-                      if (status == 1 || status == 3) {
-                        label = 'Following';
-                        bg = Colors.white;
-                        fg = const Color(0xFF1D6FDC);
-                      } else if (status == 2) {
-                        label = 'Follow Back';
-                      } else if (status == 3) {
-                        label = 'Following';
-                        bg = Colors.white;
-                        fg = const Color(0xFF1D6FDC);
-                      }
-
-                      return ElevatedButton(
-                        onPressed: () => PostStore.instance.toggleFollow(f.handle),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: bg,
-                          foregroundColor: fg,
-                          side: status == 1 || status == 3
-                              ? const BorderSide(color: Color(0xFF1D6FDC))
-                              : null,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: Text(label,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700)),
-                      );
-                    },
-                  ),
-                ),
+                Expanded(child: FollowButton(handle: f.handle, expand: true)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
@@ -194,9 +154,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               height: 180,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: kFriends.take(10).length,
+                itemCount: kPeople.take(10).length,
                 itemBuilder: (context, i) {
-                  final suggest = kFriends[i];
+                  final suggest = kPeople[i];
                   if (suggest.handle == f.handle)
                     return const SizedBox.shrink();
                   return _SuggestionCard(friend: suggest);
@@ -211,7 +171,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 }
 
 class _SuggestionCard extends StatelessWidget {
-  final Friend friend;
+  final Person friend;
   const _SuggestionCard({required this.friend});
 
   @override
@@ -237,49 +197,20 @@ class _SuggestionCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               friend.name,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w700, color: Colors.black),
+              style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             Text(
               friend.handle,
-              style:
-                  const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E)),
+              style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E)),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.all(8.0),
-              child: SizedBox(
-                width: double.infinity,
-                height: 32,
-                child: ElevatedButton(
-                  onPressed: () =>
-                      PostStore.instance.toggleFollow(friend.handle),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: PostStore.instance.isFollowing(friend.handle)
-                        ? Colors.white
-                        : const Color(0xFF1D6FDC),
-                    foregroundColor:
-                        PostStore.instance.isFollowing(friend.handle)
-                            ? const Color(0xFF1D6FDC)
-                            : Colors.white,
-                    side: const BorderSide(color: Color(0xFF1D6FDC)),
-                    elevation: 0,
-                    padding: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20)),
-                  ),
-                  child: Text(
-                      PostStore.instance.isFollowing(friend.handle)
-                          ? 'Following'
-                          : 'Follow',
-                      style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w700)),
-                ),
-              ),
+              child: FollowButton(handle: friend.handle, compact: true, expand: true),
             ),
           ],
         ),

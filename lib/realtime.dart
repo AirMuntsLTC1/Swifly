@@ -91,3 +91,9 @@ class Realtime {
 
   void publish(RealtimeEvent event) => _controller.add(event);
 }
+
+class UnfollowedEvent extends RealtimeEvent {
+  final String actorName;
+  final String actorHandle;
+  const UnfollowedEvent({required this.actorName, required this.actorHandle});
+}

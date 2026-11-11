@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'hashtag_screen.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
+import 'follow_button.dart';
 import 'search_history.dart';
 import 'tag_friends_screen.dart';
 import 'user_profile_screen.dart';
@@ -47,15 +48,11 @@ class DiscoverPanel extends StatefulWidget {
 
 class _DiscoverPanelState extends State<DiscoverPanel> {
   final Map<String, int> _followers = {
-    for (final f in kFriends) f.handle: kPeopleStats[f.handle]?.$1 ?? 0,
+    for (final f in kPeople) f.handle: kPeopleStats[f.handle]?.$1 ?? 0,
   };
   final Map<String, int> _following = {
-    for (final f in kFriends) f.handle: kPeopleStats[f.handle]?.$2 ?? 0,
+    for (final f in kPeople) f.handle: kPeopleStats[f.handle]?.$2 ?? 0,
   };
-  void _toggleFollow(String handle) {
-    PostStore.instance.toggleFollow(handle);
-  }
-
   @override
   Widget build(BuildContext context) {
     final q = widget.query.trim();
@@ -141,7 +138,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
               ),
             ),
             _title('People to follow'),
-            for (final f in kFriends) _personTile(f),
+            for (final f in kPeople) _personTile(f),
           ],
         );
       },
@@ -209,7 +206,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
   }
 
   Widget _results(String q) {
-    final people = kFriends
+    final people = kPeople
         .where((f) =>
             NativeCore.containsCI(f.name, q) ||
             NativeCore.containsCI(f.handle, q))
@@ -327,11 +324,9 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     );
   }
 
-  Widget _personTile(Friend f) {
+  Widget _personTile(Person f) {
     final followers = _followers[f.handle] ?? 0;
     final following = _following[f.handle] ?? 0;
-    final status = PostStore.instance.getFollowStatus(f.handle);
-    final isFollowing = status == 1 || status == 3;
     return ListTile(
       onTap: () => Navigator.push(context, UserProfileScreen.route(f)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -364,13 +359,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
           ),
         ],
       ),
-      trailing: status == 3
-          ? const SizedBox.shrink()
-          : _FollowButton(
-              following: status == 1,
-              isFollower: status == 2,
-              onTap: () => _toggleFollow(f.handle),
-            ),
+      trailing: FollowButton(handle: f.handle, compact: true),
     );
   }
 
@@ -390,72 +379,6 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
           style: const TextStyle(color: Color(0xFF6E6E6E))),
       trailing: Text(p.timeLabel,
           style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-    );
-  }
-}
-
-/// Follow button: squeezes on press, then color and label animate to the new state.
-class _FollowButton extends StatefulWidget {
-  final bool following;
-  final bool isFollower;
-  final VoidCallback onTap;
-
-  const _FollowButton({
-    required this.following,
-    required this.isFollower,
-    required this.onTap,
-  });
-
-  @override
-  State<_FollowButton> createState() => _FollowButtonState();
-}
-
-class _FollowButtonState extends State<_FollowButton> {
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final on = widget.following;
-    final isFollower = widget.isFollower;
-    final label = on ? 'Following' : (isFollower ? 'Follow Back' : 'Follow');
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      child: AnimatedScale(
-        scale: _pressed ? 0.88 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: on ? const Color(0xFF1D6FDC) : const Color(0xFF1D6FDC),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: const Color(0xFF1D6FDC)),
-          ),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            transitionBuilder: (child, anim) => ScaleTransition(
-              scale: anim,
-              child: FadeTransition(opacity: anim, child: child),
-            ),
-            child: Text(
-              label,
-              key: ValueKey<bool>(on),
-              style: TextStyle(
-                color: on ? Colors.white : Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

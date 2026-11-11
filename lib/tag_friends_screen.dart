@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-class Friend {
+class Person {
   final String name;
   final String handle;
-  const Friend(this.name, this.handle);
+  const Person(this.name, this.handle);
 }
 
 // Placeholder friends list. Replace with real data when the database is connected.
-const List<Friend> kFriends = [
-  Friend('Ava Stone', '@avastone'),
-  Friend('Liam Park', '@liampark'),
-  Friend('Mia Chen', '@miachen'),
-  Friend('Noah Reed', '@noahreed'),
-  Friend('Zara Ali', '@zaraali'),
-  Friend('Ethan Brooks', '@ethanb'),
-  Friend('Sofia Lopez', '@sofial'),
-  Friend('Max Turner', '@maxturner'),
-  Friend('Hana Sato', '@hanasato'),
-  Friend('Omar Khalid', '@omarkh'),
+const List<Person> kPeople = [
+  Person('Ava Stone', '@avastone'),
+  Person('Liam Park', '@liampark'),
+  Person('Mia Chen', '@miachen'),
+  Person('Noah Reed', '@noahreed'),
+  Person('Zara Ali', '@zaraali'),
+  Person('Ethan Brooks', '@ethanb'),
+  Person('Sofia Lopez', '@sofial'),
+  Person('Max Turner', '@maxturner'),
+  Person('Hana Sato', '@hanasato'),
+  Person('Omar Khalid', '@omarkh'),
 ];
 
 /// Slides up full screen. Pops with the selected handles, or null if cancelled.
@@ -72,7 +72,7 @@ class _TagFriendsScreenState extends State<TagFriendsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = kFriends.where((f) {
+    final filtered = kPeople.where((f) {
       return f.name.toLowerCase().contains(_query) ||
           f.handle.toLowerCase().contains(_query);
     }).toList();

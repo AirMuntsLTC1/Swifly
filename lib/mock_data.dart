@@ -1,4 +1,5 @@
 import 'app_config.dart';
+import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
 
@@ -96,8 +97,8 @@ void loadMockData() {
   if (!kUseMockData) return;
   final now = DateTime.now();
 
-  PostStore.instance.load(
-    posts: mockPosts(),
+  PostStore.instance.load(posts: mockPosts());
+  FollowStore.instance.load(
     following: {'@liampark', '@zaraali'},
     followers: {'@avastone', '@zaraali'},
   );
