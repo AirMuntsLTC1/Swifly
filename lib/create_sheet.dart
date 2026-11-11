@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'composer_screen.dart';
 
 void showCreateSheet(BuildContext context) {
   showModalBottomSheet(
@@ -36,7 +37,10 @@ void showCreateSheet(BuildContext context) {
               _CreateOption(
                 icon: LucideIcons.newspaper,
                 label: 'Posts',
-                onTap: () => Navigator.pop(sheetContext),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  Navigator.of(context).push(composerRoute());
+                },
               ),
               _CreateOption(
                 icon: LucideIcons.users,
