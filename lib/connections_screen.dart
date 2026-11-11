@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'tag_friends_screen.dart';
 import 'user_profile_screen.dart';
+import 'post_model.dart';
 
 class ConnectionsScreen extends StatefulWidget {
   final bool initialFollowers;

@@ -9,6 +9,7 @@ import 'burst_icons.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
 import 'user_profile_screen.dart';
+import 'tag_friends_screen.dart';
 
 const Color _saveOrange = Color(0xFFFF9800);
 

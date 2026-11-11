@@ -5,6 +5,7 @@ import 'connections_screen.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
 import 'tag_friends_screen.dart';
+import 'discover_panel.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final Friend user;
