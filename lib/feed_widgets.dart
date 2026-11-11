@@ -46,6 +46,7 @@ class _PostCardState extends State<PostCard> {
   int _saveBurst = 0;
   final List<TapGestureRecognizer> _recognizers = [];
   late TextSpan _textSpan;
+  int _currentPage = 0;
 
   @override
   void initState() {
@@ -321,38 +322,67 @@ class _PostCardState extends State<PostCard> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: p.mediaPaths.length == 1
-                    ? Image.file(
-                        File(p.mediaPaths.first),
-                        width: double.infinity,
-                        height: 350,
-                        fit: BoxFit.cover,
-                        cacheWidth: 800,
-                        errorBuilder: (_, __, ___) => Container(
-                          height: 200,
-                          color: const Color(0xFFF2F2F2),
-                          alignment: Alignment.center,
-                          child: const Icon(LucideIcons.image, color: Colors.grey),
+                    ? AspectRatio(
+                        aspectRatio: 1, // Instagram style square
+                        child: Image.file(
+                          File(p.mediaPaths.first),
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          cacheWidth: 800,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: const Color(0xFFF2F2F2),
+                            alignment: Alignment.center,
+                            child: const Icon(LucideIcons.image, color: Colors.grey),
+                          ),
                         ),
                       )
-                    : SizedBox(
-                        height: 350,
-                        width: double.infinity,
-                        child: PageView.builder(
-                          itemCount: p.mediaPaths.length,
-                          itemBuilder: (context, index) {
-                            return Image.file(
-                              File(p.mediaPaths[index]),
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              cacheWidth: 800,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: const Color(0xFFF2F2F2),
-                                alignment: Alignment.center,
-                                child: const Icon(LucideIcons.image, color: Colors.grey),
+                    : Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 1, // Instagram style square
+                            child: PageView.builder(
+                              onPageChanged: (index) {
+                                setState(() => _currentPage = index);
+                              },
+                              itemCount: p.mediaPaths.length,
+                              itemBuilder: (context, index) {
+                                return Image.file(
+                                  File(p.mediaPaths[index]),
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                  cacheWidth: 800,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: const Color(0xFFF2F2F2),
+                                    alignment: Alignment.center,
+                                    child: const Icon(LucideIcons.image, color: Colors.grey),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          // Instagram-style dots indicator
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(
+                                p.mediaPaths.length,
+                                (index) => Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _currentPage == index
+                                        ? Colors.white
+                                        : Colors.white.withValues(alpha: 0.5),
+                                  ),
+                                ),
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          ),
+                        ],
                       ),
               ),
             ),
