@@ -24,22 +24,14 @@ class RealtimeRouter {
     if (e is PostLikedEvent) {
       if (!posts.receiveLike(e.postId)) return;
       if (_onMyPost(e.postId)) {
-        notes.add(
-          type: NotifType.like,
-          actorName: e.actorName,
-          actorHandle: e.actorHandle,
-          postId: e.postId,
-        );
+        notes.add(type: NotifType.like, actorName: e.actorName,
+            actorHandle: e.actorHandle, postId: e.postId);
       }
     } else if (e is PostSavedEvent) {
       if (!posts.receiveSave(e.postId)) return;
       if (_onMyPost(e.postId)) {
-        notes.add(
-          type: NotifType.save,
-          actorName: e.actorName,
-          actorHandle: e.actorHandle,
-          postId: e.postId,
-        );
+        notes.add(type: NotifType.save, actorName: e.actorName,
+            actorHandle: e.actorHandle, postId: e.postId);
       }
     } else if (e is CommentAddedEvent) {
       final added = posts.applyComment(
@@ -62,29 +54,21 @@ class RealtimeRouter {
       );
     } else if (e is TypingEvent) {
       TypingStore.instance.setTyping(e.postId, e.actorHandle, e.actorName, e.isTyping);
+    } else if (e is TagEvent) {
+      notes.add(type: NotifType.tag, actorName: e.actorName,
+          actorHandle: e.actorHandle, postId: e.postId);
     } else if (e is FollowedEvent) {
       posts.receiveFollower(e.actorHandle);
-      notes.add(
-        type: NotifType.follow,
-        actorName: e.actorName,
-        actorHandle: e.actorHandle,
-      );
+      notes.add(type: NotifType.follow, actorName: e.actorName,
+          actorHandle: e.actorHandle);
     } else if (e is MessageEvent) {
       ChatStore.instance.receive(e.actorHandle, e.text);
-      notes.add(
-        type: NotifType.message,
-        actorName: e.actorName,
-        actorHandle: e.actorHandle,
-        preview: e.text,
-      );
+      notes.add(type: NotifType.message, actorName: e.actorName,
+          actorHandle: e.actorHandle, preview: e.text);
     } else if (e is StoryReactionEvent) {
       StoryStore.instance.react(e.actorName, e.actorHandle, e.emoji);
-      notes.add(
-        type: NotifType.storyReact,
-        actorName: e.actorName,
-        actorHandle: e.actorHandle,
-        emoji: e.emoji,
-      );
+      notes.add(type: NotifType.storyReact, actorName: e.actorName,
+          actorHandle: e.actorHandle, emoji: e.emoji);
     }
   }
 }

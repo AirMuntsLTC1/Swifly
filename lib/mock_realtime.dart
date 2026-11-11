@@ -26,6 +26,7 @@ class MockRealtime {
       _follow,
       _message,
       _storyReact,
+      _tag,
     ];
     steps[_step % steps.length]();
     _step++;
@@ -99,6 +100,14 @@ class MockRealtime {
       actorName: 'Max Turner',
       actorHandle: '@maxturner',
       emoji: '❤️',
+    ));
+  }
+
+  static void _tag() {
+    _publish(const TagEvent(
+      postId: kMyPostId,
+      actorName: 'Kai Ramzy',
+      actorHandle: '@kairamzy',
     ));
   }
 }

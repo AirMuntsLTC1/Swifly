@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'post_model.dart';
 
-enum NotifType { like, comment, reply, save, follow, message, storyReact }
+enum NotifType { like, comment, reply, save, follow, message, storyReact, tag }
 
 /// Short relative time label such as "now", "5m", "3h", "2d".
 String timeAgoLabel(DateTime created) {
@@ -48,6 +48,7 @@ class AppNotification {
         NotifType.follow => '$actorName started following you',
         NotifType.message => '$actorName sent you a message',
         NotifType.storyReact => '$actorName reacted ${emoji ?? ""} to your story',
+        NotifType.tag => '$actorName tagged you in a post',
       };
 
   String get timeLabel => timeAgoLabel(created);
@@ -104,6 +105,17 @@ class NotificationStore extends ChangeNotifier {
   void markRead(AppNotification n) {
     if (n.read) return;
     n.read = true;
+    notifyListeners();
+  }
+
+  void markUnread(AppNotification n) {
+    if (!n.read) return;
+    n.read = false;
+    notifyListeners();
+  }
+
+  void remove(AppNotification n) {
+    _items.remove(n);
     notifyListeners();
   }
 

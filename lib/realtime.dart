@@ -52,6 +52,13 @@ class TypingEvent extends RealtimeEvent {
   });
 }
 
+class TagEvent extends RealtimeEvent {
+  final String postId;
+  final String actorName;
+  final String actorHandle;
+  const TagEvent({required this.postId, required this.actorName, required this.actorHandle});
+}
+
 class FollowedEvent extends RealtimeEvent {
   final String actorName;
   final String actorHandle;

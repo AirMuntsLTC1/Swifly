@@ -39,6 +39,11 @@ class NotificationRouter {
           builder: (_) => StoryViewerScreen(highlightHandle: n.actorHandle),
         ));
         break;
+      case NotifType.tag:
+        nav.push(MaterialPageRoute(
+          builder: (_) => PostDetailScreen(postId: n.postId ?? ''),
+        ));
+        break;
     }
   }
 }

@@ -1,8 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'inbox_store.dart';
 import 'notification_router.dart';
+import 'post_model.dart';
 
+const Color _brandBlue = Color(0xFF1D6FDC);
+const Color _unreadTint = Color(0xFFE7F3FF);
+const Color _grey = Color(0xFF65676B);
+
+/// Lucide icon and badge colour for each notification type.
+class _Style {
+  final IconData icon;
+  final Color color;
+  const _Style(this.icon, this.color);
+}
+
+_Style _styleFor(NotifType t) => switch (t) {
+      NotifType.like => _Style(LucideIcons.heart, const Color(0xFFE0245E)),
+      NotifType.comment => _Style(LucideIcons.messageCircle, _brandBlue),
+      NotifType.reply => _Style(LucideIcons.messageCircle, const Color(0xFF2E7D32)),
+      NotifType.save => _Style(LucideIcons.bookmark, const Color(0xFFFF9800)),
+      NotifType.follow => _Style(LucideIcons.userPlus, const Color(0xFF7C4DFF)),
+      NotifType.message => _Style(LucideIcons.send, _brandBlue),
+      NotifType.storyReact => _Style(LucideIcons.smile, const Color(0xFFE91E63)),
+      NotifType.tag => _Style(LucideIcons.users, const Color(0xFF00897B)),
+    };
+
+/// Material icon used by the popup banner.
 IconData iconForNotif(NotifType type) => switch (type) {
       NotifType.like => Icons.favorite,
       NotifType.comment => Icons.chat_bubble,
@@ -11,9 +36,10 @@ IconData iconForNotif(NotifType type) => switch (type) {
       NotifType.follow => Icons.person_add,
       NotifType.message => Icons.send,
       NotifType.storyReact => Icons.emoji_emotions,
+      NotifType.tag => Icons.people,
     };
 
-/// Red unread counter shown on the bell icon. Hidden when nothing is unread.
+/// Red unread count on the bell icon. Hidden when nothing is unread.
 class UnreadBadge extends StatelessWidget {
   const UnreadBadge({super.key});
 
@@ -46,6 +72,9 @@ class UnreadBadge extends StatelessWidget {
   }
 }
 
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
 class NotificationsTab extends StatelessWidget {
   const NotificationsTab({super.key});
 
@@ -55,39 +84,75 @@ class NotificationsTab extends StatelessWidget {
       listenable: NotificationStore.instance,
       builder: (context, _) {
         final store = NotificationStore.instance;
-        final items = store.items;
+        final now = DateTime.now();
+        final yesterday = now.subtract(const Duration(days: 1));
+
+        // Unread items are "New". Read items are grouped by when they happened.
+        final fresh = <AppNotification>[];
+        final today = <AppNotification>[];
+        final yest = <AppNotification>[];
+        final earlier = <AppNotification>[];
+        for (final n in store.items) {
+          if (!n.read) {
+            fresh.add(n);
+          } else if (_sameDay(n.created, now)) {
+            today.add(n);
+          } else if (_sameDay(n.created, yesterday)) {
+            yest.add(n);
+          } else {
+            earlier.add(n);
+          }
+        }
+        final sections = <String, List<AppNotification>>{
+          'New': fresh,
+          'Today': today,
+          'Yesterday': yest,
+          'Earlier': earlier,
+        };
+
+        final children = <Widget>[];
+        sections.forEach((title, items) {
+          if (items.isEmpty) return;
+          children.add(Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Text(title,
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
+          ));
+          for (final n in items) {
+            children.add(_NotificationRow(n: n));
+          }
+        });
+
         return Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+              padding: const EdgeInsets.fromLTRB(16, 14, 8, 4),
               child: Row(
                 children: [
-                  const Text('Notifications',
-                      style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black)),
-                  const Spacer(),
+                  const Expanded(
+                    child: Text('Notifications',
+                        style: TextStyle(
+                            fontSize: 26, fontWeight: FontWeight.w800, color: Colors.black)),
+                  ),
                   if (store.unreadCount > 0)
                     TextButton(
                       onPressed: () => store.markAllRead(),
                       child: const Text('Mark all read',
                           style: TextStyle(
-                              color: Colors.black, fontWeight: FontWeight.w700)),
+                              color: _brandBlue, fontSize: 14, fontWeight: FontWeight.w600)),
                     ),
                 ],
               ),
             ),
-            const Divider(height: 1, color: Color(0xFFEAEAEA)),
             Expanded(
-              child: items.isEmpty
+              child: children.isEmpty
                   ? const Center(
-                      child: Text('No notifications yet',
-                          style: TextStyle(color: Color(0xFF8E8E8E))))
-                  : ListView.separated(
+                      child: Text("You're all caught up",
+                          style: TextStyle(color: _grey, fontSize: 15)))
+                  : ListView(
                       padding: const EdgeInsets.only(bottom: 96),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 1, color: Color(0xFFEAEAEA)),
-                      itemBuilder: (context, i) => _NotificationRow(n: items[i]),
+                      children: children,
                     ),
             ),
           ],
@@ -101,62 +166,193 @@ class _NotificationRow extends StatelessWidget {
   final AppNotification n;
   const _NotificationRow({required this.n});
 
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => NotificationRouter.open(n),
-      child: Container(
-        color: n.read ? Colors.white : const Color(0xFFF5F8FF),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  /// Title without the name, so the name can be shown in bold.
+  String get _body => n.title.startsWith(n.actorName)
+      ? n.title.substring(n.actorName.length)
+      : n.title;
+
+  void _openMenu(BuildContext context) {
+    final store = NotificationStore.instance;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: Colors.black,
-              child: Icon(iconForNotif(n.type), color: Colors.white, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    n.title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Colors.black,
-                      fontWeight: n.read ? FontWeight.w400 : FontWeight.w700,
-                    ),
-                  ),
-                  if (n.preview != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '"${n.preview}"',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF6E6E6E)),
-                    ),
-                  ],
-                  const SizedBox(height: 3),
-                  Text(n.timeLabel,
-                      style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-                ],
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(
+                n.read ? Icons.mark_email_unread_outlined : Icons.done,
+                color: Colors.black,
               ),
+              title: Text(n.read ? 'Mark as unread' : 'Mark as read',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () {
+                if (n.read) {
+                  store.markUnread(n);
+                } else {
+                  store.markRead(n);
+                }
+                Navigator.pop(sheetContext);
+              },
             ),
-            if (!n.read)
-              Container(
-                margin: const EdgeInsets.only(left: 8, top: 6),
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1D6FDC),
-                  shape: BoxShape.circle,
-                ),
-              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.black),
+              title: const Text('Remove notification',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () {
+                store.remove(n);
+                Navigator.pop(sheetContext);
+              },
+            ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: n.read ? Colors.white : _unreadTint,
+      child: InkWell(
+        onTap: () => NotificationRouter.open(n),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Avatar(style: _styleFor(n.type)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text.rich(
+                      TextSpan(
+                        style: const TextStyle(
+                            fontSize: 15, height: 1.3, color: Colors.black),
+                        children: [
+                          TextSpan(
+                              text: n.actorName,
+                              style: const TextStyle(fontWeight: FontWeight.w700)),
+                          TextSpan(text: _body),
+                          TextSpan(
+                              text: '  ${n.timeLabel}',
+                              style: const TextStyle(fontSize: 13, color: _grey)),
+                        ],
+                      ),
+                    ),
+                    if (n.preview != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text('"${n.preview}"',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14, color: _grey)),
+                      ),
+                    if (n.type == NotifType.follow)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _FollowAction(handle: n.actorHandle),
+                      ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'More',
+                icon: const Icon(Icons.more_horiz, color: _grey),
+                onPressed: () => _openMenu(context),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Profile circle with a small coloured Lucide badge showing the notification type.
+class _Avatar extends StatelessWidget {
+  final _Style style;
+  const _Avatar({required this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const CircleAvatar(
+            radius: 28,
+            backgroundColor: Colors.black,
+            child: Icon(LucideIcons.user, color: Colors.white, size: 26),
+          ),
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              width: 24,
+              height: 24,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: style.color,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: Icon(style.icon, size: 12, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Follow / Follow back / Following. Uses the same follow state as the rest of the app.
+class _FollowAction extends StatelessWidget {
+  final String handle;
+  const _FollowAction({required this.handle});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: PostStore.instance,
+      builder: (context, _) {
+        final status = PostStore.instance.getFollowStatus(handle);
+        final following = status == 1 || status == 3;
+        final label = following ? 'Following' : (status == 2 ? 'Follow back' : 'Follow');
+        return GestureDetector(
+          onTap: () => PostStore.instance.toggleFollow(handle),
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 120),
+            height: 34,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: following ? Colors.white : _brandBlue,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                  color: following ? const Color(0xFFCCCCCC) : _brandBlue),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: following ? Colors.black : Colors.white,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

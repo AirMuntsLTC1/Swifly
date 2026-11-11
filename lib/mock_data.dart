@@ -146,6 +146,23 @@ void loadMockData() {
       created: now.subtract(const Duration(hours: 3)),
       read: true,
     ),
+    AppNotification(
+      id: 'n6',
+      type: NotifType.tag,
+      actorName: 'Kai Ramzy',
+      actorHandle: '@kairamzy',
+      postId: kMyPostId,
+      created: now.subtract(const Duration(minutes: 45)),
+    ),
+    AppNotification(
+      id: 'n8',
+      type: NotifType.save,
+      actorName: 'Biao Deay',
+      actorHandle: '@biaodeay',
+      postId: kMyPostId,
+      created: now.subtract(const Duration(days: 1, hours: 3)),
+      read: true,
+    ),
   ]);
 
   ChatStore.instance.load({
