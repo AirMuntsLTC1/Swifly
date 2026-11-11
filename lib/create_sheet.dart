@@ -2,57 +2,49 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'composer_screen.dart';
 
+/// Small menu that slides up from the + button.
 void showCreateSheet(BuildContext context) {
-  showModalBottomSheet(
+  showGeneralDialog(
     context: context,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (sheetContext) {
+    barrierDismissible: true,
+    barrierLabel: 'Close',
+    barrierColor: Colors.black.withValues(alpha: 0.25),
+    transitionDuration: const Duration(milliseconds: 280),
+    pageBuilder: (dialogContext, _, __) {
       return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD0D0D0),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Create',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _CreateOption(
-                icon: LucideIcons.newspaper,
-                label: 'Posts',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  Navigator.of(context).push(composerRoute());
-                },
-              ),
-              _CreateOption(
-                icon: LucideIcons.users,
-                label: 'Groups',
-                onTap: () => Navigator.pop(sheetContext),
-              ),
-              _CreateOption(
-                icon: LucideIcons.circlePlus,
-                label: 'Add story',
-                onTap: () => Navigator.pop(sheetContext),
-              ),
-            ],
+        child: Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 16, bottom: 84),
+            child: _CreateMenu(
+              onPosts: () {
+                Navigator.pop(dialogContext);
+                Navigator.of(context).push(composerRoute());
+              },
+              onGroups: () => Navigator.pop(dialogContext),
+              onStory: () => Navigator.pop(dialogContext),
+            ),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (context, animation, _, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.3),
+            end: Offset.zero,
+          ).animate(curved),
+          child: ScaleTransition(
+            alignment: Alignment.bottomRight,
+            scale: Tween<double>(begin: 0.85, end: 1.0).animate(curved),
+            child: child,
           ),
         ),
       );
@@ -60,12 +52,46 @@ void showCreateSheet(BuildContext context) {
   );
 }
 
-class _CreateOption extends StatelessWidget {
+class _CreateMenu extends StatelessWidget {
+  final VoidCallback onPosts;
+  final VoidCallback onGroups;
+  final VoidCallback onStory;
+
+  const _CreateMenu({
+    required this.onPosts,
+    required this.onGroups,
+    required this.onStory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 8,
+      shadowColor: Colors.black26,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 210,
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CreateItem(icon: LucideIcons.newspaper, label: 'Posts', onTap: onPosts),
+            _CreateItem(icon: LucideIcons.users, label: 'Groups', onTap: onGroups),
+            _CreateItem(icon: LucideIcons.circlePlus, label: 'Add story', onTap: onStory),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CreateItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
 
-  const _CreateOption({
+  const _CreateItem({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -74,24 +100,18 @@ class _CreateOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(16),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            Icon(icon, color: Colors.black, size: 22),
-            const SizedBox(width: 14),
+            Icon(icon, color: Colors.black, size: 20),
+            const SizedBox(width: 12),
             Text(
               label,
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: Colors.black,
               ),

@@ -10,8 +10,14 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const Duration _animDuration = Duration(milliseconds: 320);
+  static const double _collapsedSearch = 44;
+  static const double _navWidth = 162;
+
   int _index = 0;
+  bool _searchOpen = false;
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   static const List<String> _labels = [
     'Home',
@@ -23,7 +29,25 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
+  }
+
+  void _toggleSearch() {
+    if (_searchOpen) {
+      _closeSearch();
+    } else {
+      setState(() => _searchOpen = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
+  }
+
+  void _closeSearch() {
+    if (!_searchOpen) return;
+    _searchFocus.unfocus();
+    setState(() => _searchOpen = false);
   }
 
   IconData _iconFor(int i) {
@@ -49,14 +73,18 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildTopBar(),
             const Divider(height: 1, color: Color(0xFFEAEAEA)),
             Expanded(
-              child: IndexedStack(
-                index: _index,
-                children: const [
-                  FeedTab(),
-                  MessagesTab(),
-                  NotificationsTab(),
-                  ProfileTab(),
-                ],
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _closeSearch,
+                child: IndexedStack(
+                  index: _index,
+                  children: const [
+                    FeedTab(),
+                    MessagesTab(),
+                    NotificationsTab(),
+                    ProfileTab(),
+                  ],
+                ),
               ),
             ),
           ],
@@ -66,9 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-        ),
+        shape: const CircleBorder(),
         onPressed: () => showCreateSheet(context),
         child: const Icon(LucideIcons.plus, size: 26),
       ),
@@ -79,51 +105,116 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF2F2F2),
-                borderRadius: BorderRadius.circular(30),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final fullWidth = constraints.maxWidth;
+          return Row(
+            children: [
+              // Search: circle icon when closed, expands to full bar when open
+              AnimatedContainer(
+                duration: _animDuration,
+                curve: Curves.easeInOutCubic,
+                width: _searchOpen ? fullWidth : _collapsedSearch,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2F2F2),
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: _collapsedSearch,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _toggleSearch,
+                          child: const Center(
+                            child: Icon(LucideIcons.search,
+                                size: 20, color: Colors.black),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: _collapsedSearch,
+                        right: 12,
+                        top: 0,
+                        bottom: 0,
+                        child: AnimatedOpacity(
+                          opacity: _searchOpen ? 1 : 0,
+                          duration: _animDuration,
+                          child: IgnorePointer(
+                            ignoring: !_searchOpen,
+                            child: TextField(
+                              controller: _searchController,
+                              focusNode: _searchFocus,
+                              cursorColor: Colors.black,
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: (_) => _closeSearch(),
+                              style: const TextStyle(
+                                  color: Colors.black, fontSize: 15),
+                              decoration: const InputDecoration(
+                                hintText: 'Search',
+                                hintStyle: TextStyle(color: Color(0xFF8E8E8E)),
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.search, size: 20, color: Colors.black),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      cursorColor: Colors.black,
-                      style: const TextStyle(color: Colors.black, fontSize: 15),
-                      decoration: const InputDecoration(
-                        hintText: 'Search',
-                        hintStyle: TextStyle(color: Color(0xFF8E8E8E)),
-                        border: InputBorder.none,
-                        isDense: true,
+
+              // Fills the space between search and the nav icons when closed
+              const Expanded(child: SizedBox()),
+
+              // Nav icons: slide out to the right when search opens
+              AnimatedContainer(
+                duration: _animDuration,
+                curve: Curves.easeInOutCubic,
+                width: _searchOpen ? 0 : _navWidth,
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.centerRight,
+                    minWidth: _navWidth,
+                    maxWidth: _navWidth,
+                    child: SizedBox(
+                      width: _navWidth,
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 2),
+                          for (int i = 0; i < 4; i++)
+                            IconButton(
+                              tooltip: _labels[i],
+                              onPressed: () => setState(() {
+                                _index = i;
+                                _searchOpen = false;
+                              }),
+                              icon: Icon(_iconFor(i),
+                                  color: Colors.black, size: 22),
+                              style: IconButton.styleFrom(
+                                backgroundColor: _index == i
+                                    ? const Color(0xFFE6E6E6)
+                                    : Colors.transparent,
+                                minimumSize: const Size(40, 40),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 2),
-          for (int i = 0; i < 4; i++)
-            IconButton(
-              tooltip: _labels[i],
-              onPressed: () => setState(() => _index = i),
-              icon: Icon(_iconFor(i), color: Colors.black, size: 22),
-              style: IconButton.styleFrom(
-                backgroundColor:
-                    _index == i ? const Color(0xFFE6E6E6) : Colors.transparent,
-                minimumSize: const Size(40, 40),
-                padding: EdgeInsets.zero,
-              ),
-            ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -281,8 +372,7 @@ class ProfileTab extends StatelessWidget {
           const Text('Your Name',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black)),
           const SizedBox(height: 4),
-          const Text('@yourhandle',
-              style: TextStyle(color: Color(0xFF8E8E8E))),
+          const Text('@yourhandle', style: TextStyle(color: Color(0xFF8E8E8E))),
           const SizedBox(height: 10),
           const Text('Building something cool. Coffee and code.',
               textAlign: TextAlign.center,
