@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   lucide_icons_flutter: any
   ffi: any
+  image_picker: ^1.0.7
+  emoji_picker_flutter: ^2.1.0
 
 dev_dependencies:
   flutter_test:

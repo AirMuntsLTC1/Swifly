@@ -1,10 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'post_model.dart';
 import 'tag_friends_screen.dart';
 
-/// Opens from the center, growing to full screen with rounded corners flattening out.
 Route<void> composerRoute() {
   return PageRouteBuilder(
     transitionDuration: const Duration(milliseconds: 380),
@@ -46,8 +48,11 @@ class ComposerScreen extends StatefulWidget {
 
 class _ComposerScreenState extends State<ComposerScreen> {
   final TextEditingController _textController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
   String _audience = 'Everyone';
   List<String> _tagged = [];
+  File? _selectedImage;
+  bool _showEmojiPicker = false;
 
   @override
   void initState() {
@@ -58,18 +63,38 @@ class _ComposerScreenState extends State<ComposerScreen> {
   @override
   void dispose() {
     _textController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   void _publish() {
     final text = _textController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && _selectedImage == null) return;
     PostStore.instance.addPost(
       text: text,
       audience: _audience,
       taggedHandles: _tagged,
+      imagePath: _selectedImage?.path,
     );
     Navigator.pop(context);
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() => _selectedImage = File(pickedFile.path));
+    }
+  }
+
+  void _toggleEmoji() {
+    if (_showEmojiPicker) {
+      setState(() => _showEmojiPicker = false);
+      _focusNode.requestFocus();
+    } else {
+      _focusNode.unfocus();
+      setState(() => _showEmojiPicker = true);
+    }
   }
 
   void _pickAudience() {
@@ -124,7 +149,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
   @override
   Widget build(BuildContext context) {
     final tagLabel = _tagged.isEmpty ? 'Tag people' : '${_tagged.length} tagged';
-    final canPost = _textController.text.trim().isNotEmpty;
+    final canPost = _textController.text.trim().isNotEmpty || _selectedImage != null;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -206,12 +231,40 @@ class _ComposerScreenState extends State<ComposerScreen> {
                 ],
               ),
             ),
+            if (_selectedImage != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Stack(
+                  alignment: Alignment.topRight,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(_selectedImage!,
+                          height: 200, width: double.infinity, fit: BoxFit.cover),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: IconButton(
+                        onPressed: () => setState(() => _selectedImage = null),
+                        icon: const Icon(LucideIcons.x, color: Colors.white),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black54,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 child: TextField(
                   controller: _textController,
-                  autofocus: true,
+                  focusNode: _focusNode,
+                  onTap: () {
+                    if (_showEmojiPicker) setState(() => _showEmojiPicker = false);
+                  },
+                  autofocus: _selectedImage == null,
                   expands: true,
                   maxLines: null,
                   minLines: null,
@@ -233,17 +286,34 @@ class _ComposerScreenState extends State<ComposerScreen> {
                 children: [
                   IconButton(
                     tooltip: 'Media',
-                    onPressed: () {},
+                    onPressed: _pickImage,
                     icon: const Icon(LucideIcons.image, color: Colors.black),
                   ),
                   IconButton(
                     tooltip: 'Emoji',
-                    onPressed: () {},
-                    icon: const Icon(LucideIcons.smile, color: Colors.black),
+                    onPressed: _toggleEmoji,
+                    icon: Icon(_showEmojiPicker ? LucideIcons.keyboard : LucideIcons.smile, color: Colors.black),
                   ),
                 ],
               ),
             ),
+            if (_showEmojiPicker)
+              SizedBox(
+                height: 250,
+                child: EmojiPicker(
+                  onEmojiSelected: (category, emoji) {
+                    _textController.text += emoji.emoji;
+                  },
+                  config: const Config(
+                    height: 256,
+                    checkPlatformCompatibility: true,
+                    emojiViewConfig: EmojiViewConfig(
+                      columns: 8,
+                      emojiSizeMax: 32,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

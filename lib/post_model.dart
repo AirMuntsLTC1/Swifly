@@ -39,6 +39,7 @@ class Post {
   final String text;
   final String audience;
   final List<String> taggedHandles;
+  final String? imagePath;
   final DateTime created;
   final List<CommentItem> comments;
   int likes;
@@ -54,6 +55,7 @@ class Post {
     required this.audience,
     required this.created,
     this.taggedHandles = const [],
+    this.imagePath,
     this.likes = 0,
     this.liked = false,
     this.saves = 0,
@@ -202,6 +204,7 @@ class PostStore extends ChangeNotifier {
     required String text,
     required String audience,
     required List<String> taggedHandles,
+    String? imagePath,
   }) {
     final duplicate = _posts.any((p) =>
         p.authorHandle == kMeHandle &&
@@ -217,6 +220,7 @@ class PostStore extends ChangeNotifier {
         text: text,
         audience: audience,
         taggedHandles: List<String>.of(taggedHandles),
+        imagePath: imagePath,
         created: DateTime.now(),
       ),
     );

@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'hashtag_screen.dart';
 
 import 'burst_icons.dart';
@@ -41,6 +43,21 @@ class _PostCardState extends State<PostCard> {
   int _heartBurst = 0;
   int _saveBurst = 0;
   final List<TapGestureRecognizer> _recognizers = [];
+  late TextSpan _textSpan;
+
+  @override
+  void initState() {
+    super.initState();
+    _buildTextSpan();
+  }
+
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.text != widget.post.text) {
+      _buildTextSpan();
+    }
+  }
 
   @override
   void dispose() {
@@ -48,6 +65,46 @@ class _PostCardState extends State<PostCard> {
       r.dispose();
     }
     super.dispose();
+  }
+
+  void _buildTextSpan() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+
+    final text = widget.post.text;
+    final spans = <InlineSpan>[];
+    final regex = RegExp(r'(#[a-zA-Z0-9_]+)');
+    int lastMatchEnd = 0;
+
+    for (final match in regex.allMatches(text)) {
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(text: text.substring(lastMatchEnd, match.start)));
+      }
+      final hashtag = match.group(0)!;
+      final recognizer = TapGestureRecognizer();
+      _recognizers.add(recognizer);
+      recognizer.onTap = () {
+        if (mounted) HashtagScreen.navigate(context, hashtag);
+      };
+      spans.add(TextSpan(
+        text: hashtag,
+        style: const TextStyle(
+            color: Color(0xFF1D6FDC), fontWeight: FontWeight.w600),
+        recognizer: recognizer,
+      ));
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastMatchEnd)));
+    }
+
+    _textSpan = TextSpan(
+      style: const TextStyle(fontSize: 15, height: 1.4, color: Colors.black),
+      children: spans,
+    );
   }
 
   void _onLike() {
@@ -225,45 +282,6 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _buildPostText(String text) {
-    for (final r in _recognizers) {
-      r.dispose();
-    }
-    _recognizers.clear();
-
-    final spans = <InlineSpan>[];
-    final regex = RegExp(r'(#[a-zA-Z0-9_]+)');
-    int lastMatchEnd = 0;
-
-    for (final match in regex.allMatches(text)) {
-      if (match.start > lastMatchEnd) {
-        spans.add(TextSpan(text: text.substring(lastMatchEnd, match.start)));
-      }
-      final hashtag = match.group(0)!;
-      final recognizer = TapGestureRecognizer();
-      _recognizers.add(recognizer);
-      recognizer.onTap = () => HashtagScreen.navigate(context, hashtag);
-      spans.add(TextSpan(
-        text: hashtag,
-        style: const TextStyle(
-            color: Color(0xFF1D6FDC), fontWeight: FontWeight.w600),
-        recognizer: recognizer,
-      ));
-      lastMatchEnd = match.end;
-    }
-
-    if (lastMatchEnd < text.length) {
-      spans.add(TextSpan(text: text.substring(lastMatchEnd)));
-    }
-
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(fontSize: 15, height: 1.4, color: Colors.black),
-        children: spans,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final p = widget.post;
@@ -279,7 +297,25 @@ class _PostCardState extends State<PostCard> {
           if (p.text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-              child: _buildPostText(p.text),
+              child: RichText(text: _textSpan),
+            ),
+          if (p.imagePath != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  File(p.imagePath!),
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 200,
+                    color: const Color(0xFFF2F2F2),
+                    alignment: Alignment.center,
+                    child: const Icon(LucideIcons.image, color: Colors.grey),
+                  ),
+                ),
+              ),
             ),
           const SizedBox(height: 10),
           Padding(
@@ -319,12 +355,15 @@ class _CommentsSheet extends StatefulWidget {
 
 class _CommentsSheetState extends State<_CommentsSheet> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
   final Set<String> _expanded = {};
   CommentItem? _replyingTo;
+  bool _showEmojiPicker = false;
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -346,6 +385,16 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     setState(() {
       if (!_expanded.remove(id)) _expanded.add(id);
     });
+  }
+
+  void _toggleEmoji() {
+    if (_showEmojiPicker) {
+      setState(() => _showEmojiPicker = false);
+      _focusNode.requestFocus();
+    } else {
+      _focusNode.unfocus();
+      setState(() => _showEmojiPicker = true);
+    }
   }
 
   Widget _avatar(double radius) {
@@ -379,7 +428,13 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         fontSize: isReply ? 13 : 14, color: Colors.black)),
                 if (!isReply)
                   GestureDetector(
-                    onTap: () => setState(() => _replyingTo = c),
+                    onTap: () {
+                      setState(() {
+                        _replyingTo = c;
+                        _showEmojiPicker = false;
+                      });
+                      _focusNode.requestFocus();
+                    },
                     child: const Padding(
                       padding: EdgeInsets.only(top: 6),
                       child: Text('Reply',
@@ -486,7 +541,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+        padding: EdgeInsets.only(bottom: _showEmojiPicker ? 0 : media.viewInsets.bottom),
         child: SizedBox(
           height: media.size.height * 0.7,
           child: ListenableBuilder(
@@ -540,6 +595,10 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         Expanded(
                           child: TextField(
                             controller: _controller,
+                            focusNode: _focusNode,
+                            onTap: () {
+                              if (_showEmojiPicker) setState(() => _showEmojiPicker = false);
+                            },
                             cursorColor: Colors.black,
                             textInputAction: TextInputAction.send,
                             onSubmitted: (_) => _send(),
@@ -562,13 +621,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         ),
                         IconButton(
                           tooltip: 'Emoji',
-                          onPressed: () {},
-                          icon: const Icon(LucideIcons.smile, color: Colors.black),
-                        ),
-                        IconButton(
-                          tooltip: 'GIF',
-                          onPressed: () {},
-                          icon: const Icon(LucideIcons.clapperboard,
+                          onPressed: _toggleEmoji,
+                          icon: Icon(
+                              _showEmojiPicker ? LucideIcons.keyboard : LucideIcons.smile,
                               color: Colors.black),
                         ),
                         IconButton(
@@ -579,6 +634,23 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       ],
                     ),
                   ),
+                  if (_showEmojiPicker)
+                    SizedBox(
+                      height: 250,
+                      child: EmojiPicker(
+                        onEmojiSelected: (category, emoji) {
+                          _controller.text += emoji.emoji;
+                        },
+                        config: const Config(
+                          height: 256,
+                          checkPlatformCompatibility: true,
+                          emojiViewConfig: EmojiViewConfig(
+                            columns: 8,
+                            emojiSizeMax: 32,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               );
             },
