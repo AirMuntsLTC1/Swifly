@@ -7,6 +7,8 @@ import 'create_sheet.dart';
 import 'discover_panel.dart';
 import 'feed_widgets.dart';
 import 'post_model.dart';
+import 'connections_screen.dart';
+import 'suggestions_screen.dart';
 import 'search_history.dart';
 import 'tag_friends_screen.dart';
 
@@ -379,14 +381,23 @@ class NotificationsTab extends StatelessWidget {
   }
 }
 
-class ProfileTab extends StatelessWidget {
+
+class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
+
+  @override
+  State<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<ProfileTab> {
+  final Set<String> _followed = {};
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const CircleAvatar(
             radius: 44,
@@ -400,30 +411,144 @@ class ProfileTab extends StatelessWidget {
           const Text(kMeHandle, style: TextStyle(color: Color(0xFF8E8E8E))),
           const SizedBox(height: 10),
           const Text('Building something cool. Coffee and code.',
-              textAlign: TextAlign.center,
               style: TextStyle(color: Colors.black, height: 1.4)),
           const SizedBox(height: 20),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          Row(
             children: [
-              _Stat(label: 'Posts', value: '24'),
-              _Stat(label: 'Followers', value: '1.2K'),
-              _Stat(label: 'Following', value: '310'),
+              const _Stat(label: 'Posts', value: '24'),
+              const SizedBox(width: 32),
+              GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectionsScreen(initialFollowers: true))),
+                child: const _Stat(label: 'Followers', value: '1.2K'),
+              ),
+              const SizedBox(width: 32),
+              GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectionsScreen(initialFollowers: false))),
+                child: const _Stat(label: 'Following', value: '310'),
+              ),
             ],
           ),
           const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {},
-              icon: const Icon(LucideIcons.pencil, size: 18, color: Colors.black),
-              label: const Text('Edit profile',
-                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.black),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                  label: const Text('Add story', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D6FDC),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D6FDC),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Edit profile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 30),
+          Row(
+            children: [
+              const Text('Suggestions People',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SuggestionsScreen())),
+                child: const Text(
+                  'See all',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1D6FDC),
+                    decoration: TextDecoration.underline,
+                    decorationColor: Color(0xFF1D6FDC),
+                    decorationThickness: 2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 180,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: kFriends.take(10).length,
+              itemBuilder: (context, i) {
+                final f = kFriends[i];
+                final isFollowing = _followed.contains(f.handle);
+                return Container(
+                  width: 130,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFEAEAEA)),
+                  ),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      const CircleAvatar(
+                        radius: 30,
+                        backgroundColor: Colors.black,
+                        child: Icon(LucideIcons.user, color: Colors.white, size: 30),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        f.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        f.handle,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const Spacer(),
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 32,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                if (isFollowing) {
+                                  _followed.remove(f.handle);
+                                } else {
+                                  _followed.add(f.handle);
+                                }
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isFollowing ? Colors.white : Colors.black,
+                              foregroundColor: isFollowing ? Colors.black : Colors.white,
+                              side: const BorderSide(color: Colors.black),
+                              elevation: 0,
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                            child: Text(isFollowing ? 'Following' : 'Follow', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ],
