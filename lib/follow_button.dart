@@ -69,7 +69,6 @@ class FollowButton extends StatelessWidget {
             height: height,
             width: expand ? double.infinity : null,
             constraints: BoxConstraints(minWidth: compact ? 0 : 110),
-            alignment: Alignment.center,
             padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 18),
             decoration: BoxDecoration(
               color: following ? Colors.white : _brandBlue,
@@ -78,14 +77,23 @@ class FollowButton extends StatelessWidget {
                 color: following ? const Color(0xFFCCCCCC) : _brandBlue,
               ),
             ),
-            child: Text(
-              label,
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: FontWeight.w700,
-                color: following ? Colors.black : Colors.white,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.w700,
+                      color: following ? Colors.black : Colors.white,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );

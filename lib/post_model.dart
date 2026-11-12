@@ -124,6 +124,10 @@ class PostStore extends ChangeNotifier {
     return [...mine, for (final i in order) others[i]];
   }
 
+  /// Everything you posted, newest first. Shown on your profile.
+  List<Post> get myPosts => _posts.where((p) => p.authorHandle == kMeHandle).toList()
+    ..sort((a, b) => b.created.compareTo(a.created));
+
   /// Call when the PHP pipeline finishes a photo or video that a post already shows.
   void mediaUpdated() => notifyListeners();
 

@@ -26,3 +26,7 @@
 ## Android permissions (added by the GitHub workflow)
 - INTERNET, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION (.github/workflows/build-apk.yml)
 - New package: geolocator (pubspec.yaml)
+
+## Fix: people lists and Posts on profile
+- Follow button no longer stretches across the row (names were showing one letter per line in Search > People to follow, Followers and Following).
+- Profile now has a bold "Posts" section under Suggestions People: all your posts, newest first, each with its day, date and time.

@@ -477,11 +477,16 @@ class _ProfileTabState extends State<ProfileTab> {
     return ListenableBuilder(
       listenable: StoryStore.instance,
       builder: (context, _) => SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(r.pad, r.h(20), r.pad, r.h(96)),
+        padding: EdgeInsets.fromLTRB(0, r.h(20), 0, r.h(96)),
         child: ContentWidth(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: r.pad),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
               _avatar(r),
               SizedBox(height: r.h(14)),
               const Text(kMeName,
@@ -605,12 +610,79 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
                 ),
               ),
+                  ],
+                ),
+              ),
+              SizedBox(height: r.h(26)),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: r.pad),
+                child: const Text('Posts',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black)),
+              ),
+              const SizedBox(height: 6),
+              ListenableBuilder(
+                listenable: PostStore.instance,
+                builder: (context, _) {
+                  final mine = PostStore.instance.myPosts;
+                  if (mine.isEmpty) {
+                    return Padding(
+                      padding: EdgeInsets.symmetric(horizontal: r.pad, vertical: 16),
+                      child: const Text('No posts yet. Tap + to share your first post.',
+                          style: TextStyle(color: Color(0xFF8E8E8E))),
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final p in mine) ...[
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(r.pad, 12, r.pad, 0),
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.calendar, size: 15, color: Color(0xFF65676B)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Posted ${_postStamp(p.created)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF65676B)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PostCard(key: ValueKey('mine-${p.id}'), post: p),
+                        const Divider(height: 1, color: Color(0xFFEAEAEA)),
+                      ],
+                    ],
+                  );
+                },
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+const List<String> _weekdays = [
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+];
+const List<String> _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/// "Thursday, Nov 12, 2026 at 7:21 PM"
+String _postStamp(DateTime t) {
+  final h12 = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  final mm = t.minute.toString().padLeft(2, '0');
+  final ampm = t.hour >= 12 ? 'PM' : 'AM';
+  return '${_weekdays[t.weekday - 1]}, ${_months[t.month - 1]} ${t.day}, ${t.year} at $h12:$mm $ampm';
 }
 
 class _Stat extends StatelessWidget {
