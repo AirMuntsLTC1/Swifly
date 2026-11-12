@@ -382,17 +382,17 @@ class NativeCore {
 
   static int _suggestScore(String c, String q, List<String> words) {
     if (c == q) return 1000;
-    final extra = c.length - math.min(c.length, q.length);
-    if (c.length > q.length && c.startsWith(q)) return 900 - math.min(extra, 60);
+    final int extra = c.length - math.min<int>(c.length, q.length);
+    if (c.length > q.length && c.startsWith(q)) return 900 - math.min<int>(extra, 60);
     var pos = c.indexOf(q);
     final first = pos;
     while (pos >= 0) {
-      if (pos > 0 && _isBreak(c.codeUnitAt(pos - 1))) return 700 - math.min(pos, 60);
+      if (pos > 0 && _isBreak(c.codeUnitAt(pos - 1))) return 700 - math.min<int>(pos, 60);
       pos = c.indexOf(q, pos + 1);
     }
-    if (first >= 0) return 500 - math.min(first, 60);
+    if (first >= 0) return 500 - math.min<int>(first, 60);
     if (words.length >= 2 && words.every((w) => _hasWordPrefix(c, w))) return 450;
-    if (_oneTypoPrefix(c, q)) return 320 - math.min(extra, 40);
+    if (_oneTypoPrefix(c, q)) return 320 - math.min<int>(extra, 40);
     if (q.length >= 3 && _isSubsequence(c, q)) return 150;
     return 0;
   }

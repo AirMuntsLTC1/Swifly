@@ -63,4 +63,15 @@ class DatabaseService {
     await Future.delayed(const Duration(milliseconds: 80));
     // Example: await supabase.rpc('record_profile_suggestion', params: {'p_category': category, 'p_value': value});
   }
+
+  /// Loads the signed-in user's saved profile.
+  /// Return one row per filled field: {'key': 'work', 'value': 'Dev at Google', 'audience': 'everyone'}.
+  /// audience is onlyMe, followers or everyone. Used by ProfileStore.loadFromDatabase.
+  Future<List<Map<String, String>>> fetchProfileFields() async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    // Example (Supabase):
+    //   final rows = await supabase.from('profile_fields').select('key,value,audience').eq('user_id', uid);
+    //   return [for (final r in rows) {'key': r['key'], 'value': r['value'], 'audience': r['audience']}];
+    return <Map<String, String>>[];
+  }
 }

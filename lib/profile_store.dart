@@ -210,6 +210,28 @@ class ProfileStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fills the store from the database. Call once after sign-in.
+  /// Unknown keys are ignored and unknown audiences fall back to Everyone,
+  /// so adding a field later never breaks older saved data.
+  Future<void> loadFromDatabase() async {
+    try {
+      final rows = await DatabaseService.instance.fetchProfileFields();
+      if (rows.isEmpty) return;
+      final known = {for (final s in kProfileSections) for (final d in s.fields) d.key};
+      final saved = <String, ProfileField>{};
+      for (final r in rows) {
+        final key = r['key'] ?? '';
+        if (!known.contains(key)) continue;
+        final audience = Audience.values.firstWhere(
+          (a) => a.name == r['audience'],
+          orElse: () => Audience.everyone,
+        );
+        saved[key] = ProfileField(value: (r['value'] ?? '').trim(), audience: audience);
+      }
+      load(saved, avatar: avatarPath);
+    } catch (_) {}
+  }
+
   void setValue(String key, String value) {
     fieldFor(key).value = value.trim();
     notifyListeners();

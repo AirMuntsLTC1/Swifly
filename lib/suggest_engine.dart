@@ -209,7 +209,7 @@ class SuggestService {
     final hits = NativeCore.suggestSearch(
       index.joined,
       q,
-      math.min(index.entries.length, limit + skip.length + 12),
+      math.min<int>(index.entries.length, limit + skip.length + 12),
     );
 
     // Loose "letters in order" matches are only worth showing when little else matched.

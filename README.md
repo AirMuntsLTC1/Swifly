@@ -103,3 +103,49 @@ returns void language sql as $$
   on conflict (category, title) do update set uses = profile_suggestions.uses + 1;
 $$;
 ```
+
+## Connecting the profile to a real database
+
+Everything the person fills in on Edit profile goes through two methods in `lib/database_service.dart`, so this is the only file to change:
+
+- `saveProfileField(key, value, audience)`: called on every save (audience is `onlyMe`, `followers` or `everyone`).
+- `fetchProfileFields()`: returns the saved rows. Call `ProfileStore.instance.loadFromDatabase()` once after sign-in.
+- `searchSuggestions` and `recordSuggestionPick`: optional shared suggestions (see above).
+
+A new profile field needs one line in `kProfileSections` (`lib/profile_store.dart`). No database change is needed, because fields are rows, not columns:
+
+```sql
+create table profile_fields (
+  user_id uuid not null references auth.users on delete cascade,
+  key text not null,
+  value text not null,
+  audience text not null default 'everyone' check (audience in ('onlyMe','followers','everyone')),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, key)
+);
+alter table profile_fields enable row level security;
+
+-- the owner can do everything
+create policy "owner all" on profile_fields for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- others see 'everyone' fields, and 'followers' fields if they follow the owner
+-- (adjust the follows table and column names to yours)
+create policy "viewers read" on profile_fields for select using (
+  audience = 'everyone'
+  or (audience = 'followers' and exists (
+        select 1 from follows f where f.follower_id = auth.uid() and f.following_id = profile_fields.user_id))
+);
+```
+
+Supabase calls to put in the two methods:
+
+```dart
+// saveProfileField
+await supabase.from('profile_fields').upsert({
+  'user_id': supabase.auth.currentUser!.id, 'key': key, 'value': value, 'audience': audience,
+});
+// fetchProfileFields
+final rows = await supabase.from('profile_fields').select('key,value,audience')
+    .eq('user_id', supabase.auth.currentUser!.id);
+```
+An empty value should delete the row (or save an empty string), so a cleared field disappears from the profile.
