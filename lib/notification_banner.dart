@@ -102,12 +102,8 @@ class _BannerCardState extends State<_BannerCard> with SingleTickerProviderState
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Colors.black,
-                    child: Icon(iconForNotif(n.type), color: Colors.white, size: 17),
-                  ),
-                  const SizedBox(width: 12),
+                  NotifAvatar(type: n.type, size: 46),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,

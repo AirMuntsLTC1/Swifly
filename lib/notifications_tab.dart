@@ -27,18 +27,6 @@ _Style _styleFor(NotifType t) => switch (t) {
       NotifType.tag => _Style(LucideIcons.users, const Color(0xFF00897B)),
     };
 
-/// Material icon used by the popup banner.
-IconData iconForNotif(NotifType type) => switch (type) {
-      NotifType.like => Icons.favorite,
-      NotifType.comment => Icons.chat_bubble,
-      NotifType.reply => Icons.reply,
-      NotifType.save => Icons.bookmark,
-      NotifType.follow => Icons.person_add,
-      NotifType.message => Icons.send,
-      NotifType.storyReact => Icons.emoji_emotions,
-      NotifType.tag => Icons.people,
-    };
-
 /// Red unread count on the bell icon. Hidden when nothing is unread.
 class UnreadBadge extends StatelessWidget {
   const UnreadBadge({super.key});
@@ -227,7 +215,7 @@ class _NotificationRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _Avatar(style: _styleFor(n.type)),
+              NotifAvatar(type: n.type),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -278,36 +266,40 @@ class _NotificationRow extends StatelessWidget {
 }
 
 /// Profile circle with a small coloured Lucide badge showing the notification type.
-class _Avatar extends StatelessWidget {
-  final _Style style;
-  const _Avatar({required this.style});
+/// Used by the Notifications tab and by the popup banner, so both look the same.
+class NotifAvatar extends StatelessWidget {
+  final NotifType type;
+  final double size;
+  const NotifAvatar({super.key, required this.type, this.size = 56});
 
   @override
   Widget build(BuildContext context) {
+    final style = _styleFor(type);
+    final badge = size * 0.43;
     return SizedBox(
-      width: 56,
-      height: 56,
+      width: size,
+      height: size,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          const CircleAvatar(
-            radius: 28,
+          CircleAvatar(
+            radius: size / 2,
             backgroundColor: Colors.black,
-            child: Icon(LucideIcons.user, color: Colors.white, size: 26),
+            child: Icon(LucideIcons.user, color: Colors.white, size: size * 0.46),
           ),
           Positioned(
             right: -2,
             bottom: -2,
             child: Container(
-              width: 24,
-              height: 24,
+              width: badge,
+              height: badge,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: style.color,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
               ),
-              child: Icon(style.icon, size: 12, color: Colors.white),
+              child: Icon(style.icon, size: badge * 0.5, color: Colors.white),
             ),
           ),
         ],
