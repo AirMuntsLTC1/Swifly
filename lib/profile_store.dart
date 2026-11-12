@@ -107,12 +107,12 @@ const List<String> _monthNames = [
 String isoDate(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-/// The value as people read it: "March 28 2005" for dates, the text otherwise.
+/// The value as people read it: "March 28, 2005" for dates, the text otherwise.
 String displayValue(ProfileFieldDef d, ProfileField f) {
   if (d.kind == FieldKind.date) {
     final date = DateTime.tryParse(f.value);
     if (date == null) return f.value;
-    return '${_monthNames[date.month - 1]} ${date.day} ${date.year}';
+    return '${_monthNames[date.month - 1]} ${date.day}, ${date.year}';
   }
   return f.value;
 }

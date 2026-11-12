@@ -1,131 +1,109 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'edit_profile_screen.dart';
+import 'native_bridge.dart';
 import 'profile_store.dart';
 
-const Color _grey = Color(0xFF8E8E8E);
+const Color _grey = Color(0xFF65676B);
 
-/// Personal details and Contact info on your own profile.
-/// Each value shows its audience icon: lock for only me, users for followers, globe for everyone.
-class ProfileDetailsSection extends StatefulWidget {
+/// Facebook-style details on your own profile: a heading with a pencil, then
+/// only the fields you have filled in. A section with nothing filled in is hidden.
+class ProfileDetailsSection extends StatelessWidget {
   const ProfileDetailsSection({super.key});
 
+  static const Set<String> _personalSkip = {'Contact info', 'Intro'};
+
   @override
-  State<ProfileDetailsSection> createState() => _ProfileDetailsSectionState();
-}
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ProfileStore.instance,
+      builder: (context, _) {
+        final personal = <ProfileFieldDef>[];
+        final contact = <ProfileFieldDef>[];
+        for (final section in kProfileSections) {
+          if (section.title == 'Contact info') {
+            contact.addAll(section.fields);
+          } else if (!_personalSkip.contains(section.title)) {
+            personal.addAll(section.fields);
+          }
+        }
 
-class _ProfileDetailsSectionState extends State<ProfileDetailsSection> {
-  int _tab = 0; // 0 = Personal details, 1 = Contact info
-
-  Widget _tabButton(String label, int index) {
-    final active = _tab == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _tab = index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? Colors.black : const Color(0xFFF2F2F2),
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: active ? Colors.white : Colors.black,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
+        final children = <Widget>[
+          ..._section(context, 'Personal details', personal),
+          ..._section(context, 'Contact info', contact),
+        ];
+        if (children.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        );
+      },
     );
   }
 
-  Widget _row(IconData icon, String label, String value, Audience audience) {
+  /// Heading and filled rows. Returns nothing if no field in the section is filled.
+  List<Widget> _section(BuildContext context, String title, List<ProfileFieldDef> defs) {
+    final store = ProfileStore.instance;
+    final rows = <Widget>[];
+    for (final d in defs) {
+      final f = store.fieldFor(d.key);
+      if (f.value.isEmpty) continue;
+      rows.add(_row(d, f, store));
+    }
+    if (rows.isEmpty) return const [];
+
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: 22, bottom: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(title,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black)),
+            ),
+            IconButton(
+              tooltip: 'Edit $title',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(LucideIcons.pencil, size: 20, color: Colors.black),
+              onPressed: () => Navigator.push(context, editProfileRoute()),
+            ),
+          ],
+        ),
+      ),
+      ...rows,
+    ];
+  }
+
+  Widget _row(ProfileFieldDef d, ProfileField f, ProfileStore store) {
+    final isBirthday = d.key == 'birthday';
+    final age = isBirthday ? store.ageYears : null;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, size: 22, color: Colors.black),
+          Icon(d.icon, size: 22, color: Colors.black),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontSize: 13, color: _grey)),
-                const SizedBox(height: 2),
-                Text(value,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black)),
+                Text(displayValue(d, f),
+                    style: const TextStyle(fontSize: 16, color: Colors.black)),
+                if (age != null)
+                  Text('$age years old',
+                      style: const TextStyle(fontSize: 13, color: _grey)),
               ],
             ),
           ),
           Tooltip(
-            message: audience.label,
-            child: Icon(audience.icon, size: 16, color: _grey),
+            message: f.audience.label,
+            child: Icon(f.audience.icon, size: 16, color: _grey),
           ),
         ],
       ),
-    );
-  }
-
-  List<Widget> _rows() {
-    final store = ProfileStore.instance;
-    final rows = <Widget>[];
-
-    if (_tab == 0) {
-      final age = store.ageYears;
-      if (age != null) {
-        rows.add(_row(LucideIcons.cake, 'Age', '$age', store.fieldFor('birthday').audience));
-      }
-      for (final section in kProfileSections) {
-        if (section.title == 'Contact info') continue;
-        for (final d in section.fields) {
-          final f = store.fieldFor(d.key);
-          if (f.value.isEmpty) continue;
-          rows.add(_row(d.icon, d.label, displayValue(d, f), f.audience));
-        }
-      }
-    } else {
-      final section = kProfileSections.firstWhere((s) => s.title == 'Contact info');
-      for (final d in section.fields) {
-        final f = store.fieldFor(d.key);
-        if (f.value.isEmpty) continue;
-        rows.add(_row(d.icon, d.label, f.value, f.audience));
-      }
-    }
-
-    if (rows.isEmpty) {
-      rows.add(const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Text('Nothing here yet. Tap Edit profile to add details.',
-            style: TextStyle(color: _grey)),
-      ));
-    }
-    return rows;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            _tabButton('Personal details', 0),
-            const SizedBox(width: 8),
-            _tabButton('Contact info', 1),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ListenableBuilder(
-          listenable: ProfileStore.instance,
-          builder: (context, _) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _rows(),
-          ),
-        ),
-      ],
     );
   }
 }
