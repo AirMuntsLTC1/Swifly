@@ -62,10 +62,32 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" > /dev/null || true
 
+      - name: Cache PHP runtime for Android
+        id: phpcache
+        uses: actions/cache@v4
+        with:
+          path: build/php-android/out
+          key: php-android-${{ hashFiles('tools/build_php_android.sh') }}
+
+      - name: Build PHP runtime for Android (optional, app still builds if it fails)
+        if: steps.phpcache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: bash tools/build_php_android.sh
+
+      - name: Add PHP runtime to the APK
+        run: |
+          if [ -f build/php-android/out/libphp_cli.so ]; then
+            mkdir -p android/app/src/main/jniLibs/arm64-v8a
+            cp build/php-android/out/libphp_cli.so android/app/src/main/jniLibs/arm64-v8a/
+            echo "PHP runtime added to the APK"
+          else
+            echo "::warning::No PHP runtime was built. Photos and videos use the C++ fallback."
+          fi
+
       - name: Wire C++ core into the Android build
         run: |
           mkdir -p android/app/src/main/cpp
-          cp cpp/CMakeLists.txt cpp/swifly_core.cpp android/app/src/main/cpp/
+          cp -r cpp/. android/app/src/main/cpp/
           python3 - << 'PY'
           import os
           path = None
@@ -74,21 +96,30 @@ jobs:
                   path = name
                   break
           src = open(path).read()
+          block = ""
           if "externalNativeBuild" not in src:
               if path.endswith(".kts"):
-                  block = ('    externalNativeBuild {\n'
-                           '        cmake {\n'
-                           '            path = file("src/main/cpp/CMakeLists.txt")\n'
-                           '            version = "3.22.1"\n'
-                           '        }\n'
-                           '    }\n')
+                  block += ('    externalNativeBuild {\n'
+                            '        cmake {\n'
+                            '            path = file("src/main/cpp/CMakeLists.txt")\n'
+                            '            version = "3.22.1"\n'
+                            '        }\n'
+                            '    }\n')
               else:
-                  block = ('    externalNativeBuild {\n'
-                           '        cmake {\n'
-                           '            path "src/main/cpp/CMakeLists.txt"\n'
-                           '            version "3.22.1"\n'
-                           '        }\n'
-                           '    }\n')
+                  block += ('    externalNativeBuild {\n'
+                            '        cmake {\n'
+                            '            path "src/main/cpp/CMakeLists.txt"\n'
+                            '            version "3.22.1"\n'
+                            '        }\n'
+                            '    }\n')
+          if "useLegacyPackaging" not in src:
+              # Unpack native libraries so the PHP runtime (libphp_cli.so) can be started.
+              block += ('    packaging {\n'
+                        '        jniLibs {\n'
+                        '            useLegacyPackaging = true\n'
+                        '        }\n'
+                        '    }\n')
+          if block:
               src = src.replace("android {\n", "android {\n" + block, 1)
               open(path, "w").write(src)
           print("C++ core wired into", path)

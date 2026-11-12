@@ -587,6 +587,11 @@ class UploadBanner extends StatelessWidget {
                         height: 40,
                         fit: BoxFit.cover,
                         cacheWidth: 100,
+                        errorBuilder: (_, __, ___) => const SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Icon(LucideIcons.image, color: Colors.white),
+                        ),
                       ),
                     )
                   else

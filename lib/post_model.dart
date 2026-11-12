@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'media/media_item.dart';
 import 'native_bridge.dart';
 import 'tag_friends_screen.dart';
 import 'database_service.dart';
@@ -43,7 +44,7 @@ class Post {
   final String text;
   final String audience;
   final List<String> taggedHandles;
-  final List<String> mediaPaths;
+  final List<MediaItem> media;
   final DateTime created;
   final List<CommentItem> comments;
   int likes;
@@ -59,13 +60,16 @@ class Post {
     required this.audience,
     required this.created,
     this.taggedHandles = const [],
-    this.mediaPaths = const [],
+    this.media = const [],
     this.likes = 0,
     this.liked = false,
     this.saves = 0,
     this.saved = false,
     List<CommentItem>? comments,
   }) : comments = comments ?? <CommentItem>[];
+
+  /// Paths of the files, kept for code that only needs the list of files.
+  List<String> get mediaPaths => media.map((m) => m.path).toList();
 
   List<String> get hashtags => NativeCore.extractHashtags(text);
   bool hasHashtag(String tag) => NativeCore.countHashtag(text, tag) > 0;
@@ -119,6 +123,9 @@ class PostStore extends ChangeNotifier {
     );
     return [...mine, for (final i in order) others[i]];
   }
+
+  /// Call when the PHP pipeline finishes a photo or video that a post already shows.
+  void mediaUpdated() => notifyListeners();
 
   int hashtagUsage(String tag) {
     final users = <String>{};
@@ -211,11 +218,12 @@ class PostStore extends ChangeNotifier {
     required String text,
     required String audience,
     required List<String> taggedHandles,
-    List<String> mediaPaths = const [],
+    List<MediaItem> media = const [],
   }) async {
     final duplicate = _posts.any((p) =>
         p.authorHandle == kMeHandle &&
         p.text == text &&
+        p.media.length == media.length &&
         DateTime.now().difference(p.created).inSeconds < 2);
     if (duplicate) return;
 
@@ -226,7 +234,7 @@ class PostStore extends ChangeNotifier {
       text: text,
       audience: audience,
       taggedHandles: List<String>.of(taggedHandles),
-      mediaPaths: mediaPaths,
+      media: media,
       created: DateTime.now(),
     );
 
@@ -235,7 +243,8 @@ class PostStore extends ChangeNotifier {
 
     // DB Sync
     try {
-      await DatabaseService.instance.savePost(text, audience, taggedHandles, mediaPaths);
+      await DatabaseService.instance.savePost(
+          text, audience, taggedHandles, media.map((m) => m.path).toList());
     } catch (e) {
       _posts.removeWhere((p) => p.id == newPost.id);
       notifyListeners(); // Rollback on error

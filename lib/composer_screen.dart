@@ -8,6 +8,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'post_model.dart';
 import 'tag_friends_screen.dart';
 import 'upload_manager.dart';
+import 'media/media_item.dart';
+import 'media/media_pipeline.dart';
+import 'media/media_thumb.dart';
 
 Route<void> composerRoute() {
   return PageRouteBuilder(
@@ -53,7 +56,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
   final FocusNode _focusNode = FocusNode();
   String _audience = 'Everyone';
   List<String> _tagged = [];
-  List<File> _selectedMedia = [];
+  final List<_Picked> _selectedMedia = [];
   bool _showEmojiPicker = false;
   bool _isPicking = false;
 
@@ -74,22 +77,26 @@ class _ComposerScreenState extends State<ComposerScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty && _selectedMedia.isEmpty) return;
     
-    final mediaPaths = _selectedMedia.map((f) => f.path).toList();
-    
-    UploadManager.instance.start(
-      mediaPaths.isNotEmpty ? mediaPaths.first : null,
-    );
-    
+    final picked = List<_Picked>.of(_selectedMedia);
+    final media = picked.map((p) => p.item).toList();
+
+    UploadManager.instance.start(media.isNotEmpty ? media.first.previewPath : null);
+
+    // The post appears at once. Items PHP has not finished yet show the gallery
+    // file for now and switch to the cached copy and thumbnail when ready.
     PostStore.instance.addPost(
       text: text,
       audience: _audience,
       taggedHandles: _tagged,
-      mediaPaths: mediaPaths,
+      media: media,
     );
-    
-    Future.delayed(const Duration(seconds: 2), () {
-      UploadManager.instance.success();
-    });
+
+    final waits = <Future<void>>[
+      Future<void>.delayed(const Duration(milliseconds: 900)),
+      for (final p in picked)
+        p.done.then((_) => PostStore.instance.mediaUpdated()),
+    ];
+    Future.wait(waits).whenComplete(UploadManager.instance.success);
 
     Navigator.pop(context);
   }
@@ -125,15 +132,38 @@ class _ComposerScreenState extends State<ComposerScreen> {
 
     if (result != null && result.isNotEmpty) {
       setState(() => _isPicking = true);
-      for (var asset in result) {
+      for (final asset in result) {
         final file = await asset.file;
-        if (file != null) {
-          setState(() {
-            _selectedMedia.add(file);
-          });
-        }
+        if (file == null) continue;
+        final isVideo = asset.type == AssetType.video;
+        final hint = isVideo ? await _videoHint(asset) : null;
+        final picked = _Picked(file: file, isVideo: isVideo, hintPath: hint);
+        // Start the PHP pipeline right away, while the person is still typing.
+        picked.done = MediaPipeline.instance
+            .process(file.path, kind: picked.item.kind, hintThumb: hint)
+            .then((r) {
+          picked.item.copyFrom(r);
+          picked.item.processing = false;
+          if (mounted) setState(() {});
+        });
+        if (!mounted) return;
+        setState(() => _selectedMedia.add(picked));
       }
-      setState(() => _isPicking = false);
+      if (mounted) setState(() => _isPicking = false);
+    }
+  }
+
+  /// The phone's own preview picture of a video. It is handed to the PHP pipeline,
+  /// which shrinks it into the cached thumbnail, so the thumbnail shows instantly.
+  Future<String?> _videoHint(AssetEntity asset) async {
+    try {
+      final bytes = await asset.thumbnailDataWithSize(const ThumbnailSize(480, 480));
+      if (bytes == null) return null;
+      final f = File('${Directory.systemTemp.path}/swifly_hint_${asset.id.hashCode}.jpg');
+      await f.writeAsBytes(bytes, flush: true);
+      return f.path;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -302,12 +332,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.file(
-                              _selectedMedia[i],
-                              fit: BoxFit.cover,
-                              cacheWidth: 200,
-                              errorBuilder: (_, __, ___) => const Icon(LucideIcons.image),
-                            ),
+                            child: MediaThumb(item: _selectedMedia[i].item),
                           ),
                         ),
                         Positioned(
@@ -415,6 +440,25 @@ class _ComposerScreenState extends State<ComposerScreen> {
       ),
     );
   }
+}
+
+/// One photo or video chosen in the picker, with its media item and the PHP job.
+class _Picked {
+  final File file;
+  final bool isVideo;
+  final String? hintPath;
+  final MediaItem item;
+
+  /// Completes when the PHP pipeline has finished this item.
+  Future<void> done = Future<void>.value();
+
+  _Picked({required this.file, required this.isVideo, this.hintPath})
+      : item = MediaItem(
+          kind: isVideo ? MediaKind.video : MediaKind.photo,
+          path: file.path,
+          thumbPath: hintPath,
+          processing: true,
+        );
 }
 
 class _Chip extends StatelessWidget {

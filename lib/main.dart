@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'app_config.dart';
+import 'media/media_pipeline.dart';
 import 'mock_data.dart';
 import 'mock_realtime.dart';
 import 'notification_banner.dart';
@@ -9,10 +11,14 @@ import 'realtime_router.dart';
 import 'splash_screen.dart';
 
 void main() {
+  // Check how much of a video is on screen about 8 times a second.
+  VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 120);
   if (kUseMockData) loadMockData();
   RealtimeRouter.init();
   NotificationBanner.init();
   runApp(const SocialApp());
+  // Unpack the PHP media scripts and trim the local media cache in the background.
+  MediaPipeline.instance.ensureReady().then((_) => MediaPipeline.instance.trimCache());
   if (kUseMockData) MockRealtime.start();
 }
 

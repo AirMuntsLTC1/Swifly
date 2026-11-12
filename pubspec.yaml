@@ -14,6 +14,9 @@ dependencies:
   emoji_picker_flutter: ^2.1.0
   wechat_assets_picker: ^9.1.0
   photo_manager: ^3.3.0
+  video_player: ^2.9.2
+  visibility_detector: ^0.4.0+2
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
