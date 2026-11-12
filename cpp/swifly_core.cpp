@@ -193,3 +193,24 @@ SWIFLY_EXPORT int32_t swifly_get_follow_status(int32_t is_following, int32_t is_
     if (is_follower) return 2;
     return 0;
 }
+
+
+// Age in whole years on the given date. Returns -1 for an invalid or future birth date.
+SWIFLY_EXPORT int32_t swifly_age_years(int32_t by, int32_t bm, int32_t bd,
+                                       int32_t ty, int32_t tm, int32_t td) {
+    if (by <= 0 || bm < 1 || bm > 12 || bd < 1 || bd > 31) return -1;
+    if (ty < by) return -1;
+    if (ty == by && (tm < bm || (tm == bm && td < bd))) return -1;
+    int32_t age = ty - by;
+    if (tm < bm || (tm == bm && td < bd)) age -= 1;
+    return age;
+}
+
+// Privacy rule for a profile field. audience: 0 = only me, 1 = followers, 2 = everyone.
+// Returns 1 if the viewer may see the field.
+SWIFLY_EXPORT int32_t swifly_can_see(int32_t audience, int32_t is_owner, int32_t viewer_follows_owner) {
+    if (is_owner) return 1;
+    if (audience == 0) return 0;
+    if (audience == 1) return viewer_follows_owner ? 1 : 0;
+    return 1;
+}

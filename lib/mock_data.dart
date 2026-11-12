@@ -1,5 +1,6 @@
 import 'app_config.dart';
 import 'follow_store.dart';
+import 'profile_store.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
 
@@ -181,6 +182,13 @@ void loadMockData() {
       ChatMessage(text: 'Coffee on Saturday?', fromMe: false,
           time: now.subtract(const Duration(days: 1))),
     ],
+  });
+
+  ProfileStore.instance.load({
+    'bio': ProfileField(value: 'Building something cool. Coffee and code.', audience: Audience.everyone),
+    'birthday': ProfileField(value: '2005-03-28', audience: Audience.followers),
+    'gender': ProfileField(value: 'Male', audience: Audience.onlyMe),
+    'socialMedia': ProfileField(value: 'olid_xspace', audience: Audience.everyone),
   });
 
   StoryStore.instance.load(

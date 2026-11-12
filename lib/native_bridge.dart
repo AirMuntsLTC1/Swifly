@@ -36,6 +36,12 @@ typedef _ExtractHashtagsDart = int Function(
 typedef _FollowStatusNative = Int32 Function(Int32 isFollowing, Int32 isFollower);
 typedef _FollowStatusDart = int Function(int isFollowing, int isFollower);
 
+typedef _AgeNative = Int32 Function(Int32 by, Int32 bm, Int32 bd, Int32 ty, Int32 tm, Int32 td);
+typedef _AgeDart = int Function(int by, int bm, int bd, int ty, int tm, int td);
+
+typedef _CanSeeNative = Int32 Function(Int32 audience, Int32 isOwner, Int32 viewerFollowsOwner);
+typedef _CanSeeDart = int Function(int audience, int isOwner, int viewerFollowsOwner);
+
 /// Bridge to the C++ core (cpp/swifly_core.cpp, built as libswifly_core.so).
 /// Every function falls back to pure Dart if the native library is missing.
 class NativeCore {
@@ -79,7 +85,34 @@ class NativeCore {
       (l) => l.lookupFunction<_FollowStatusNative, _FollowStatusDart>(
           'swifly_get_follow_status'));
 
+  static final _AgeDart? _ageYears = _safe<_AgeDart>(
+      (l) => l.lookupFunction<_AgeNative, _AgeDart>('swifly_age_years'));
+  static final _CanSeeDart? _canSeeFn = _safe<_CanSeeDart>(
+      (l) => l.lookupFunction<_CanSeeNative, _CanSeeDart>('swifly_can_see'));
+
   static bool get isNativeReady => _library != null;
+
+  /// Whole years between a birth date and a date. Returns -1 if the dates are invalid.
+  static int ageYears(int by, int bm, int bd, int ty, int tm, int td) {
+    final f = _ageYears;
+    if (f != null) return f(by, bm, bd, ty, tm, td);
+    if (by <= 0 || bm < 1 || bm > 12 || bd < 1 || bd > 31) return -1;
+    if (ty < by) return -1;
+    if (ty == by && (tm < bm || (tm == bm && td < bd))) return -1;
+    var age = ty - by;
+    if (tm < bm || (tm == bm && td < bd)) age -= 1;
+    return age;
+  }
+
+  /// Privacy rule. audience: 0 = only me, 1 = followers, 2 = everyone.
+  static bool canSee(int audience, {required bool isOwner, required bool viewerFollowsOwner}) {
+    final f = _canSeeFn;
+    if (f != null) return f(audience, isOwner ? 1 : 0, viewerFollowsOwner ? 1 : 0) == 1;
+    if (isOwner) return true;
+    if (audience == 0) return false;
+    if (audience == 1) return viewerFollowsOwner;
+    return true;
+  }
 
   /// 1234 -> "1.2K"
   static String formatCount(int n) {

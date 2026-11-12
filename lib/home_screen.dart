@@ -10,6 +10,9 @@ import 'feed_widgets.dart';
 import 'post_model.dart';
 import 'follow_button.dart';
 import 'follow_store.dart';
+import 'edit_profile_screen.dart';
+import 'profile_details_section.dart';
+import 'profile_store.dart';
 import 'connections_screen.dart';
 import 'suggestions_screen.dart';
 import 'search_history.dart';
@@ -353,6 +356,22 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
+  @override
+  void initState() {
+    super.initState();
+    ProfileStore.instance.addListener(_onProfileChanged);
+  }
+
+  @override
+  void dispose() {
+    ProfileStore.instance.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    if (mounted) setState(() {});
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -361,10 +380,15 @@ class _ProfileTabState extends State<ProfileTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 44,
             backgroundColor: Colors.black,
-            child: Icon(LucideIcons.user, color: Colors.white, size: 40),
+            backgroundImage: ProfileStore.instance.avatarPath == null
+                ? null
+                : FileImage(File(ProfileStore.instance.avatarPath!)),
+            child: ProfileStore.instance.avatarPath == null
+                ? const Icon(LucideIcons.user, color: Colors.white, size: 40)
+                : null,
           ),
           const SizedBox(height: 14),
           const Text(kMeName,
@@ -372,8 +396,12 @@ class _ProfileTabState extends State<ProfileTab> {
           const SizedBox(height: 4),
           const Text(kMeHandle, style: TextStyle(color: Color(0xFF8E8E8E))),
           const SizedBox(height: 10),
-          const Text('Building something cool. Coffee and code.',
-              style: TextStyle(color: Colors.black, height: 1.4)),
+          Text(
+            ProfileStore.instance.fieldFor('bio').value.isEmpty
+                ? 'Add a bio'
+                : ProfileStore.instance.fieldFor('bio').value,
+            style: const TextStyle(color: Colors.black, height: 1.4),
+          ),
           const SizedBox(height: 20),
           ListenableBuilder(
             listenable: FollowStore.instance,
@@ -411,7 +439,7 @@ class _ProfileTabState extends State<ProfileTab> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () => Navigator.push(context, editProfileRoute()),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1D6FDC),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
@@ -422,6 +450,8 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
             ],
           ),
+          const SizedBox(height: 24),
+          const ProfileDetailsSection(),
           const SizedBox(height: 30),
           Row(
             children: [

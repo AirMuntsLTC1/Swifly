@@ -52,3 +52,12 @@ There are no friend requests. Everything is follow-based.
 2. In `lib/database_service.dart`, implement `toggleFollow` (it is already called by `follow` and `unfollow`).
 3. When someone follows or unfollows you, publish `FollowedEvent` or `UnfollowedEvent` to `Realtime`. The rest of the app updates by itself.
 4. Replace the body of `personFor` with a lookup of real user data.
+
+## Profile and Edit profile
+
+- `lib/profile_store.dart`: every profile field, its audience (only me, followers, everyone), and the field list. Add a field by adding one line to `kProfileSections`.
+- `lib/edit_profile_screen.dart`: Edit profile (photo, sections, field editor). Photo picking uses the same picker as the composer.
+- `lib/profile_details_section.dart`: Personal details and Contact info on your profile.
+- C++ (`cpp/swifly_core.cpp`): `swifly_age_years` calculates age from the birthday, and `swifly_can_see` applies the privacy rule. Both have Dart fallbacks in `lib/native_bridge.dart`.
+- Saving: `lib/database_service.dart` has `saveProfileField` and `uploadAvatar` to connect to your database.
+

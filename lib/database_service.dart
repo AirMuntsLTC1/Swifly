@@ -31,4 +31,16 @@ class DatabaseService {
   Future<void> toggleFollow(String handle, bool isFollowing) async {
     await Future.delayed(const Duration(milliseconds: 200));
   }
+
+  /// Saves one profile field and who can see it.
+  Future<void> saveProfileField(String key, String value, String audience) async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    // Example: await supabase.from('profiles').update({key: value, '${key}_audience': audience}).eq('handle', kMeHandle);
+  }
+
+  /// Uploads a new profile picture from a local file path.
+  Future<void> uploadAvatar(String localPath) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    // Example: upload the file to storage, then save its URL on the profile.
+  }
 }
