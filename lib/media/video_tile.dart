@@ -10,12 +10,18 @@ import 'media_item.dart';
 import 'preview_image.dart';
 import 'video_autoplay.dart';
 
+/// Last known playback position of every video file. The feed and the post
+/// (Comment) page each have their own player for the same file; this is how
+/// the second one carries on from where the first one stopped.
+final Map<String, Duration> _kResume = <String, Duration>{};
+
 /// A video in a post.
 ///  - The cached thumbnail shows instantly; no player exists yet.
-///  - When the video is mostly on screen (and this is the current page of the post),
-///    the player starts, muted and looping.
-///  - When it leaves the screen it pauses; two seconds later the player is released,
-///    so nothing keeps decoding while it is not visible.
+///  - When the video is mostly on screen, the player starts (muted, looping).
+///  - When another page opens on top (Comment button), this video pauses, remembers
+///    its position, and the video on the new page continues from that position.
+///    Going back does the same in reverse.
+///  - When it leaves the screen it pauses; 2 seconds later the player is released.
 class VideoTile extends StatefulWidget {
   final MediaItem item;
 
@@ -36,20 +42,48 @@ class VideoTile extends StatefulWidget {
   State<VideoTile> createState() => _VideoTileState();
 }
 
-class _VideoTileState extends State<VideoTile> {
+class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _starting = false;
   double _fraction = 0;
   Timer? _releaseTimer;
 
+  /// False while another page is open on top of this one.
+  bool _routeActive = true;
+
+  /// False while the whole app is in the background.
+  bool _appActive = true;
+
+  bool _lastPlaying = false;
+  bool _lastShown = false;
+
+  /// The same post can be on screen twice (feed + post page). Each tile gets its
+  /// own id, so one can never switch the other one off.
+  late final String _uid = '${widget.tileId}@${identityHashCode(this)}';
+
   VideoAutoplay get _auto => VideoAutoplay.instance;
-  bool get _shouldPlay => widget.pageActive && _auto.isActive(widget.tileId);
+  bool get _shouldPlay =>
+      widget.pageActive && _routeActive && _appActive && _auto.isActive(_uid);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _auto.addListener(_sync);
     _auto.muted.addListener(_applyMute);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // ModalRoute.of makes this run again when a page is pushed on top or removed.
+    final active = ModalRoute.of(context)?.isCurrent ?? true;
+    if (active != _routeActive) {
+      _routeActive = active;
+      if (!active) _savePosition();
+      _report();
+      _sync();
+    }
   }
 
   @override
@@ -62,23 +96,68 @@ class _VideoTileState extends State<VideoTile> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final active = state == AppLifecycleState.resumed;
+    if (active == _appActive) return;
+    _appActive = active;
+    if (!active) _savePosition();
+    _sync();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _savePosition();
     _auto.removeListener(_sync);
     _auto.muted.removeListener(_applyMute);
-    _auto.remove(widget.tileId);
+    _auto.remove(_uid);
     _releaseTimer?.cancel();
+    _controller?.removeListener(_onPlayerChanged);
     _controller?.dispose();
     _controller = null;
     super.dispose();
   }
 
+  void _savePosition() {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    _kResume[widget.item.path] = c.value.position;
+  }
+
   void _report() {
-    _auto.report(widget.tileId, widget.pageActive ? _fraction : 0);
+    final visible = widget.pageActive && _routeActive;
+    _auto.report(_uid, visible ? _fraction : 0);
   }
 
   void _applyMute() {
     _controller?.setVolume(_auto.muted.value ? 0 : 1);
     if (mounted) setState(() {});
+  }
+
+  /// Redraws when the player really starts or stops, so the picture can never stay
+  /// frozen on the thumbnail while the sound keeps going.
+  void _onPlayerChanged() {
+    final c = _controller;
+    if (c == null || !mounted) return;
+    if (c.value.hasError) {
+      c.removeListener(_onPlayerChanged);
+      c.dispose();
+      _controller = null;
+      _lastPlaying = false;
+      _lastShown = false;
+      setState(() {});
+      return;
+    }
+    final playing = c.value.isInitialized && c.value.isPlaying;
+    // Keep the shared position fresh while playing, so the other page always
+    // continues from the right spot.
+    if (playing) _kResume[widget.item.path] = c.value.position;
+    final shown = c.value.isInitialized && (playing || c.value.position > Duration.zero);
+    if (playing != _lastPlaying || shown != _lastShown) {
+      _lastPlaying = playing;
+      _lastShown = shown;
+      setState(() {});
+    }
   }
 
   void _sync() {
@@ -87,6 +166,7 @@ class _VideoTileState extends State<VideoTile> {
       _releaseTimer?.cancel();
       _play();
     } else {
+      _savePosition();
       _controller?.pause();
       _scheduleRelease();
     }
@@ -95,10 +175,12 @@ class _VideoTileState extends State<VideoTile> {
   Future<void> _play() async {
     if (_starting) return;
     var c = _controller;
+    final path = widget.item.path;
+
     if (c == null) {
       _starting = true;
       c = VideoPlayerController.file(
-        File(widget.item.path),
+        File(path),
         videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
       );
       _controller = c;
@@ -106,6 +188,10 @@ class _VideoTileState extends State<VideoTile> {
         await c.initialize();
         await c.setLooping(true);
         await c.setVolume(_auto.muted.value ? 0 : 1);
+        final saved = _kResume[path];
+        if (saved != null && saved > Duration.zero && saved < c.value.duration) {
+          await c.seekTo(saved);
+        }
       } catch (_) {
         c.dispose();
         if (_controller == c) _controller = null;
@@ -113,14 +199,31 @@ class _VideoTileState extends State<VideoTile> {
         return; // the thumbnail stays; nothing else to do
       }
       _starting = false;
-      if (!mounted) return;
+      if (!mounted) {
+        c.dispose();
+        return;
+      }
+      c.addListener(_onPlayerChanged);
       setState(() {});
+    } else {
+      // This player may be behind the other one (feed vs post page). Catch up.
+      final saved = _kResume[path];
+      if (saved != null &&
+          c.value.isInitialized &&
+          saved < c.value.duration &&
+          (c.value.position - saved).abs() > const Duration(milliseconds: 400)) {
+        await c.seekTo(saved);
+      }
     }
-    // The video may have scrolled away while it was starting.
-    if (_shouldPlay && mounted) {
+
+    if (!mounted || _controller != c) return;
+    // The video may have scrolled away (or a page opened on top) while it was starting.
+    if (_shouldPlay) {
       await c.play();
-      if (mounted) setState(() {});
+    } else {
+      await c.pause();
     }
+    if (mounted) setState(() {});
   }
 
   void _scheduleRelease() {
@@ -128,8 +231,12 @@ class _VideoTileState extends State<VideoTile> {
     if (_controller == null) return;
     _releaseTimer = Timer(const Duration(seconds: 2), () {
       if (!mounted || _shouldPlay || _starting) return;
+      _savePosition();
+      _controller?.removeListener(_onPlayerChanged);
       _controller?.dispose();
       _controller = null;
+      _lastPlaying = false;
+      _lastShown = false;
       setState(() {});
     });
   }
@@ -138,10 +245,14 @@ class _VideoTileState extends State<VideoTile> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final c = _controller;
-    final playing = c != null && c.value.isInitialized && c.value.isPlaying;
+    final ready = c != null && c.value.isInitialized;
+    final playing = ready && c.value.isPlaying;
+    // Keep the live picture once it has started (even when paused) so it never
+    // jumps back to the old thumbnail.
+    final shown = ready && (playing || c.value.position > Duration.zero);
 
     return VisibilityDetector(
-      key: ValueKey('vis_${widget.tileId}'),
+      key: ValueKey('vis_$_uid'),
       onVisibilityChanged: (info) {
         _fraction = info.visibleFraction;
         _report();
@@ -158,10 +269,10 @@ class _VideoTileState extends State<VideoTile> {
               cacheWidth: 800,
               placeholderIcon: LucideIcons.video,
             ),
-            // 2. The player fades in once it is really playing.
-            if (c != null && c.value.isInitialized)
+            // 2. The player fades in once it has a picture.
+            if (ready)
               AnimatedOpacity(
-                opacity: playing ? 1 : 0,
+                opacity: shown ? 1 : 0,
                 duration: const Duration(milliseconds: 180),
                 child: ClipRect(
                   child: FittedBox(
