@@ -32,6 +32,21 @@ class LocationFix {
   const LocationFix(this.outcome, [this.place]);
 }
 
+
+/// A place broken down the way people say it at home: zone/block, barangay, city.
+class DetailedPlace {
+  final String zone;
+  final String barangay;
+  final String city;
+  const DetailedPlace({this.zone = '', this.barangay = '', this.city = ''});
+}
+
+class DetailedFix {
+  final LocationOutcome outcome;
+  final DetailedPlace? place;
+  const DetailedFix(this.outcome, [this.place]);
+}
+
 /// Real device location (the system permission popup) and real place search
 /// (OpenStreetMap Nominatim, free, no key needed).
 class LocationService {
@@ -111,6 +126,98 @@ class LocationService {
         content: Text(text),
         action: action == null ? null : SnackBarAction(label: action, onPressed: onAction ?? () {}),
       ));
+  }
+
+
+  // ---------- detailed (barangay / zone) ----------
+
+  /// Same permission popup and GPS as [currentPlace], but returns the small
+  /// area names too: zone/block, barangay and city.
+  Future<DetailedFix> currentDetailed() async {
+    try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return const DetailedFix(LocationOutcome.serviceOff);
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied) return const DetailedFix(LocationOutcome.denied);
+      if (perm == LocationPermission.deniedForever) {
+        return const DetailedFix(LocationOutcome.deniedForever);
+      }
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 15));
+      } catch (_) {
+        pos = await Geolocator.getLastKnownPosition();
+      }
+      if (pos == null) return const DetailedFix(LocationOutcome.failed);
+      final place = await reverseDetailed(pos.latitude, pos.longitude);
+      if (place == null) return const DetailedFix(LocationOutcome.failed);
+      return DetailedFix(LocationOutcome.ok, place);
+    } catch (_) {
+      return const DetailedFix(LocationOutcome.failed);
+    }
+  }
+
+  /// Shows a clear message for each outcome. Returns the place if it worked.
+  Future<DetailedPlace?> useCurrentDetailed(BuildContext context) async {
+    final fix = await currentDetailed();
+    if (!context.mounted) return fix.place;
+    switch (fix.outcome) {
+      case LocationOutcome.ok:
+        return fix.place;
+      case LocationOutcome.serviceOff:
+        _snack(context, 'Turn on location (GPS) to use where you are',
+            action: 'Settings', onAction: openLocationSettings);
+      case LocationOutcome.denied:
+        _snack(context, 'Location permission was not allowed');
+      case LocationOutcome.deniedForever:
+        _snack(context, 'Location is blocked. Allow it in app settings',
+            action: 'Settings', onAction: openAppSettings);
+      case LocationOutcome.failed:
+        _snack(context, 'Could not find your location. Check your internet and try again');
+    }
+    return null;
+  }
+
+  /// Coordinates -> zone/block, barangay, city (street level, OpenStreetMap).
+  Future<DetailedPlace?> reverseDetailed(double lat, double lon) async {
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'format': 'jsonv2',
+        'lat': '$lat',
+        'lon': '$lon',
+        'zoom': '18',
+        'addressdetails': '1',
+      });
+      final json = await _getJson(uri);
+      if (json is! Map) return null;
+      final addr = json['address'];
+      if (addr is! Map) return null;
+      String pick(List<String> keys) {
+        for (final k in keys) {
+          final v = addr[k];
+          if (v is String && v.trim().isNotEmpty) return v.trim();
+        }
+        return '';
+      }
+
+      final city = pick(['city', 'town', 'municipality', 'county', 'state_district']);
+      var barangay = pick(['suburb', 'quarter', 'village', 'city_district', 'borough']);
+      var zone = pick(['neighbourhood', 'hamlet', 'isolated_dwelling']);
+      if (barangay.isEmpty && zone.isNotEmpty) {
+        barangay = zone;
+        zone = '';
+      }
+      if (zone == barangay) zone = '';
+      if (city.isEmpty && barangay.isEmpty && zone.isEmpty) return null;
+      return DetailedPlace(zone: zone, barangay: barangay, city: city);
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---------- Nominatim ----------
@@ -291,3 +398,5 @@ class _UseLocationButtonState extends State<UseLocationButton> {
     );
   }
 }
+
+

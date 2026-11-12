@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'post_model.dart';
+import 'story_models.dart';
 
-enum NotifType { like, comment, reply, save, follow, message, storyReact, tag }
+enum NotifType { like, comment, reply, save, follow, message, storyReact, tag, storyReply }
 
 /// Short relative time label such as "now", "5m", "3h", "2d".
 String timeAgoLabel(DateTime created) {
@@ -49,6 +50,7 @@ class AppNotification {
         NotifType.message => '$actorName sent you a message',
         NotifType.storyReact => '$actorName reacted ${emoji ?? ""} to your story',
         NotifType.tag => '$actorName tagged you in a post',
+        NotifType.storyReply => '$actorName replied to your story',
       };
 
   String get timeLabel => timeAgoLabel(created);
@@ -127,12 +129,49 @@ class NotificationStore extends ChangeNotifier {
   }
 }
 
+/// A story attached to a chat message (the thumbnail shown above a story reply).
+class StoryRef {
+  final StoryData data;
+  final String ownerName;
+  final String ownerHandle;
+  final DateTime time;
+
+  /// True when the story belongs to me (someone replied to MY story).
+  final bool mine;
+
+  /// True when this message is a reaction (heart) instead of a typed reply.
+  final bool reaction;
+
+  const StoryRef({
+    required this.data,
+    required this.ownerName,
+    required this.ownerHandle,
+    required this.time,
+    required this.mine,
+    this.reaction = false,
+  });
+}
+
 class ChatMessage {
   final String text;
   final bool fromMe;
   final DateTime time;
+  final StoryRef? story;
 
-  const ChatMessage({required this.text, required this.fromMe, required this.time});
+  const ChatMessage({
+    required this.text,
+    required this.fromMe,
+    required this.time,
+    this.story,
+  });
+
+  /// Short line for the messages list.
+  String get preview {
+    final st = story;
+    if (st == null) return text;
+    if (st.reaction) return fromMe ? 'You reacted to their story' : 'Reacted to your story';
+    return fromMe ? 'You replied to their story: $text' : 'Replied to your story: $text';
+  }
 }
 
 /// Direct message threads keyed by the other person's handle.
@@ -161,12 +200,12 @@ class ChatStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void send(String handle, String text) {
-    _add(handle, ChatMessage(text: text, fromMe: true, time: DateTime.now()));
+  void send(String handle, String text, {StoryRef? story}) {
+    _add(handle, ChatMessage(text: text, fromMe: true, time: DateTime.now(), story: story));
   }
 
-  void receive(String handle, String text) {
-    _add(handle, ChatMessage(text: text, fromMe: false, time: DateTime.now()));
+  void receive(String handle, String text, {StoryRef? story}) {
+    _add(handle, ChatMessage(text: text, fromMe: false, time: DateTime.now(), story: story));
   }
 
   void _add(String handle, ChatMessage m) {
@@ -189,41 +228,85 @@ class StoryReaction {
   });
 }
 
-/// The user's single active story and the reactions it has received.
+/// A typed reply to my story.
+class StoryReply {
+  final String name;
+  final String handle;
+  final String text;
+  final DateTime time;
+
+  const StoryReply({
+    required this.name,
+    required this.handle,
+    required this.text,
+    required this.time,
+  });
+}
+
+/// Someone else's story (what you see when you open their profile picture).
+class OtherStory {
+  final StoryData data;
+  final DateTime time;
+  const OtherStory({required this.data, required this.time});
+}
+
+/// The user's single active story, the reactions and replies it received,
+/// and the stories of other people.
 class StoryStore extends ChangeNotifier {
   StoryStore._();
   static final StoryStore instance = StoryStore._();
 
-  String caption = '';
-  String? imagePath;
-  int bgColor = 0xFF1D6FDC;
+  StoryData data = StoryData();
   DateTime? postedAt;
   final List<StoryReaction> _reactions = [];
+  final List<StoryReply> _replies = [];
+  final Map<String, OtherStory> _others = {};
+  final StreamController<StoryReaction> _reactionStream =
+      StreamController<StoryReaction>.broadcast();
 
-  bool get hasStory => caption.trim().isNotEmpty || imagePath != null;
+  /// Fires for every new reaction, so an open story can show animated hearts.
+  Stream<StoryReaction> get onReaction => _reactionStream.stream;
 
-  /// Posts a new story (replaces the old one and its reactions).
-  void post({required String caption, String? imagePath, int? bgColor}) {
-    this.caption = caption.trim();
-    this.imagePath = imagePath;
-    if (bgColor != null) this.bgColor = bgColor;
+  String get caption => data.caption;
+  String? get imagePath => data.photoPath;
+  int get bgColor => data.bgColor;
+
+  /// A story lasts 24 hours, like a real story.
+  bool get hasStory {
+    if (!data.hasContent) return false;
+    final p = postedAt;
+    return p == null || DateTime.now().difference(p) < const Duration(hours: 24);
+  }
+
+  StoryData snapshot() => data.copy();
+
+  /// Posts a new story (replaces the old one and its reactions and replies).
+  void post(StoryData newData) {
+    data = newData;
     postedAt = DateTime.now();
     _reactions.clear();
+    _replies.clear();
     notifyListeners();
   }
 
   void delete() {
-    caption = '';
-    imagePath = null;
+    data = StoryData();
     postedAt = null;
     _reactions.clear();
+    _replies.clear();
     notifyListeners();
   }
 
   List<StoryReaction> get reactions => List.unmodifiable(_reactions);
+  List<StoryReply> get replies => List.unmodifiable(_replies);
 
   void load({required String caption, required List<StoryReaction> reactions}) {
-    this.caption = caption;
+    data = StoryData(
+      bgColor: 0xFF1D6FDC,
+      layers: caption.isEmpty
+          ? null
+          : [StoryLayer(id: 'seed1', kind: StoryLayerKind.text, text: caption, dy: 0.5)],
+    );
     _reactions
       ..clear()
       ..addAll(reactions);
@@ -231,12 +314,28 @@ class StoryStore extends ChangeNotifier {
   }
 
   void react(String name, String handle, String emoji) {
-    _reactions.insert(
+    final r = StoryReaction(name: name, handle: handle, emoji: emoji, time: DateTime.now());
+    _reactions.insert(0, r);
+    notifyListeners();
+    _reactionStream.add(r);
+  }
+
+  void addReply(String name, String handle, String text) {
+    _replies.insert(
       0,
-      StoryReaction(name: name, handle: handle, emoji: emoji, time: DateTime.now()),
+      StoryReply(name: name, handle: handle, text: text, time: DateTime.now()),
     );
     notifyListeners();
   }
+
+  // ---- other people's stories ----
+
+  OtherStory? otherStory(String handle) => _others[handle];
+
+  void loadOthers(Map<String, OtherStory> stories) {
+    _others
+      ..clear()
+      ..addAll(stories);
+    notifyListeners();
+  }
 }
-
-

@@ -72,8 +72,28 @@ class RealtimeRouter {
       StoryStore.instance.react(e.actorName, e.actorHandle, e.emoji);
       notes.add(type: NotifType.storyReact, actorName: e.actorName,
           actorHandle: e.actorHandle, emoji: e.emoji);
+    } else if (e is StoryReplyEvent) {
+      final story = StoryStore.instance;
+      if (!story.hasStory) return;
+      story.addReply(e.actorName, e.actorHandle, e.text);
+      // The reply lands in my Messages with a thumbnail of my story above it.
+      ChatStore.instance.receive(
+        e.actorHandle,
+        e.text,
+        story: StoryRef(
+          data: story.snapshot(),
+          ownerName: kMeName,
+          ownerHandle: kMeHandle,
+          time: story.postedAt ?? DateTime.now(),
+          mine: true,
+        ),
+      );
+      notes.add(type: NotifType.storyReply, actorName: e.actorName,
+          actorHandle: e.actorHandle, preview: e.text);
     }
   }
 }
+
+
 
 

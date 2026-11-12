@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'inbox_store.dart';
 import 'post_model.dart';
+import 'story_player_screen.dart';
+import 'story_viewer_screen.dart';
+import 'story_widgets.dart';
 
 class ChatScreen extends StatefulWidget {
   final String handle;
@@ -27,8 +30,50 @@ class _ChatScreenState extends State<ChatScreen> {
     _controller.clear();
   }
 
+  void _openStory(StoryRef ref) {
+    if (ref.mine) {
+      if (StoryStore.instance.hasStory) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const StoryViewerScreen()));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This story is no longer available')),
+        );
+      }
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StoryPlayerScreen(
+          data: ref.data,
+          name: ref.ownerName,
+          handle: ref.ownerHandle,
+          time: ref.time,
+        ),
+      ),
+    );
+  }
+
+  Widget _storyCard(ChatMessage m) {
+    final ref = m.story!;
+    final label = ref.reaction
+        ? (m.fromMe ? 'You reacted to their story' : 'Reacted to your story')
+        : (m.fromMe ? 'You replied to their story' : 'Replied to your story');
+    return Column(
+      crossAxisAlignment: m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4, top: 6),
+          child: Text(label,
+              style: const TextStyle(color: Color(0xFF8E8E8E), fontSize: 12)),
+        ),
+        StoryThumb(data: ref.data, width: 96, onTap: () => _openStory(ref)),
+      ],
+    );
+  }
+
   Widget _bubble(ChatMessage m) {
-    return Align(
+    final bubble = Align(
       alignment: m.fromMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
@@ -43,6 +88,15 @@ class _ChatScreenState extends State<ChatScreen> {
           style: TextStyle(color: m.fromMe ? Colors.white : Colors.black, fontSize: 15),
         ),
       ),
+    );
+    if (m.story == null) return bubble;
+    return Column(
+      crossAxisAlignment: m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        _storyCard(m),
+        const SizedBox(height: 2),
+        bubble,
+      ],
     );
   }
 
@@ -119,5 +173,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 }
+
+
 
 

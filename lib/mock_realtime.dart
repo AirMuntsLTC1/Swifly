@@ -27,6 +27,7 @@ class MockRealtime {
       _unfollow,
       _message,
       _storyReact,
+      _storyReply,
       _tag,
     ];
     steps[_step % steps.length]();
@@ -111,6 +112,18 @@ class MockRealtime {
     ));
   }
 
+  static const List<(String, String, String)> _storyReplies = [
+    ('Mia Chen', '@miachen', 'Love this! Where was this taken? 😍'),
+    ('Ava Stone', '@avastone', 'Nice one! Let us hang out soon'),
+    ('Noah Reed', '@noahreed', 'This is so cool 🔥'),
+  ];
+  static int _replySeq = 0;
+
+  static void _storyReply() {
+    final r = _storyReplies[_replySeq++ % _storyReplies.length];
+    _publish(StoryReplyEvent(actorName: r.$1, actorHandle: r.$2, text: r.$3));
+  }
+
   static void _tag() {
     _publish(const TagEvent(
       postId: kMyPostId,
@@ -119,5 +132,7 @@ class MockRealtime {
     ));
   }
 }
+
+
 
 

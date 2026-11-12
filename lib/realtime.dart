@@ -92,10 +92,20 @@ class Realtime {
   void publish(RealtimeEvent event) => _controller.add(event);
 }
 
+/// Someone typed a reply to my story.
+class StoryReplyEvent extends RealtimeEvent {
+  final String actorName;
+  final String actorHandle;
+  final String text;
+  const StoryReplyEvent({required this.actorName, required this.actorHandle, required this.text});
+}
+
 class UnfollowedEvent extends RealtimeEvent {
   final String actorName;
   final String actorHandle;
   const UnfollowedEvent({required this.actorName, required this.actorHandle});
 }
+
+
 
 

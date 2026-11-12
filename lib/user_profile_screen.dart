@@ -8,6 +8,8 @@ import 'follow_button.dart';
 import 'tag_friends_screen.dart';
 import 'discover_panel.dart';
 import 'responsive.dart';
+import 'inbox_store.dart';
+import 'story_player_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final Person user;
@@ -37,6 +39,38 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
+  /// Profile picture. With a story it gets a blue ring and opens the story.
+  Widget _storyAvatar(BuildContext context, Person f, R r) {
+    final avatar = CircleAvatar(
+      radius: r.s(44),
+      backgroundColor: Colors.black,
+      child: Icon(LucideIcons.user, color: Colors.white, size: r.s(40)),
+    );
+    final story = StoryStore.instance.otherStory(f.handle);
+    if (story == null) return avatar;
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StoryPlayerScreen(
+            data: story.data,
+            name: f.name,
+            handle: f.handle,
+            time: story.time,
+          ),
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFF1D6FDC), width: 3),
+        ),
+        child: avatar,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final f = widget.user;
@@ -65,11 +99,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: r.s(44),
-              backgroundColor: Colors.black,
-              child: Icon(LucideIcons.user, color: Colors.white, size: r.s(40)),
-            ),
+            _storyAvatar(context, f, r),
             const SizedBox(height: 14),
             Text(f.name,
                 style: const TextStyle(
@@ -242,5 +272,7 @@ class _Stat extends StatelessWidget {
     );
   }
 }
+
+
 
 

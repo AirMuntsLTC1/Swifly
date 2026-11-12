@@ -25,6 +25,7 @@ _Style _styleFor(NotifType t) => switch (t) {
       NotifType.message => _Style(LucideIcons.send, _brandBlue),
       NotifType.storyReact => _Style(LucideIcons.smile, const Color(0xFFE91E63)),
       NotifType.tag => _Style(LucideIcons.users, const Color(0xFF00897B)),
+      NotifType.storyReply => _Style(LucideIcons.messageCircle, const Color(0xFF8E24AA)),
     };
 
 /// Red unread count on the bell icon. Hidden when nothing is unread.
@@ -307,5 +308,7 @@ class NotifAvatar extends StatelessWidget {
     );
   }
 }
+
+
 
 

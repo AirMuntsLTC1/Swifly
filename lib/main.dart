@@ -42,10 +42,15 @@ class SocialApp extends StatelessWidget {
       builder: (context, child) => MediaQuery.withClampedTextScaling(
         minScaleFactor: 0.9,
         maxScaleFactor: 1.05,
-        child: child!,
+        // Roboto for every label, even text drawn outside a Material widget.
+        child: DefaultTextStyle.merge(
+          style: const TextStyle(fontFamily: kAppFont),
+          child: child!,
+        ),
       ),
       theme: ThemeData(
         useMaterial3: true,
+        fontFamily: kAppFont,
         textTheme: _appTextTheme(),
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.black,
@@ -60,6 +65,9 @@ class SocialApp extends StatelessWidget {
 
 /// Facebook-style type: bold titles and names, grey secondary text.
 /// Widgets that set their own TextStyle keep it; this covers everything else.
+/// One font for every label in the app.
+const String kAppFont = 'Roboto';
+
 TextTheme _appTextTheme() {
   return ThemeData.light().textTheme
       .apply(bodyColor: Colors.black, displayColor: Colors.black)
@@ -68,7 +76,10 @@ TextTheme _appTextTheme() {
         titleMedium: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black),
         bodyMedium: const TextStyle(fontSize: 15, color: Colors.black),
         bodySmall: const TextStyle(fontSize: 13, color: Color(0xFF65676B)),
-      );
+      )
+      .apply(fontFamily: kAppFont);
 }
+
+
 
 

@@ -3,6 +3,7 @@ import 'follow_store.dart';
 import 'profile_store.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
+import 'story_models.dart';
 
 /// ALL mock/test data lives in this file.
 /// To go live: set kUseMockData = false in app_config.dart, and delete this file
@@ -198,6 +199,31 @@ void loadMockData() {
           time: now.subtract(const Duration(hours: 3))),
     ],
   );
-}
 
+  StoryStore.instance.loadOthers({
+    '@liampark': OtherStory(
+      time: now.subtract(const Duration(hours: 2)),
+      data: StoryData(bgColor: 0xFF8E24AA, layers: [
+        StoryLayer(id: 'a1', kind: StoryLayerKind.text, text: 'Shipping day!', dy: 0.38),
+        StoryLayer(id: 'a2', kind: StoryLayerKind.sticker, text: 'rocket', dy: 0.55, scale: 1.8),
+        StoryLayer(id: 'a3', kind: StoryLayerKind.place,
+            text: 'Zone 2, Brgy. Poblacion, Davao City', dy: 0.82),
+      ]),
+    ),
+    '@avastone': OtherStory(
+      time: now.subtract(const Duration(hours: 1)),
+      data: StoryData(bgColor: 0xFFE8710A, layers: [
+        StoryLayer(id: 'b1', kind: StoryLayerKind.text, text: 'Sunrise hike done', dy: 0.4),
+        StoryLayer(id: 'b2', kind: StoryLayerKind.sticker, text: 'sun', dy: 0.58, scale: 2),
+      ]),
+    ),
+    '@zaraali': OtherStory(
+      time: now.subtract(const Duration(hours: 5)),
+      data: StoryData(bgColor: 0xFF00897B, layers: [
+        StoryLayer(id: 'c1', kind: StoryLayerKind.text, text: 'Reading day', dy: 0.4),
+        StoryLayer(id: 'c2', kind: StoryLayerKind.sticker, text: 'sparkles', dy: 0.58, scale: 1.8),
+      ]),
+    ),
+  });
+}
 

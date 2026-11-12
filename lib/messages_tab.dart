@@ -34,7 +34,7 @@ class MessagesTab extends StatelessWidget {
               ),
               title: Text(nameForHandle(h),
                   style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black)),
-              subtitle: Text(last.text,
+              subtitle: Text(last.preview,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Color(0xFF6E6E6E))),
@@ -51,5 +51,7 @@ class MessagesTab extends StatelessWidget {
     );
   }
 }
+
+
 
 

@@ -33,6 +33,7 @@ class NotificationRouter {
         nav.push(UserProfileScreen.route(Person(n.actorName, n.actorHandle)));
         break;
       case NotifType.message:
+      case NotifType.storyReply:
         nav.push(MaterialPageRoute(builder: (_) => ChatScreen(handle: n.actorHandle)));
         break;
       case NotifType.storyReact:
@@ -48,5 +49,7 @@ class NotificationRouter {
     }
   }
 }
+
+
 
 
