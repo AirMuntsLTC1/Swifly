@@ -47,6 +47,20 @@ typedef _SuggestNative = Int32 Function(Pointer<Utf8> joined, Pointer<Utf8> quer
 typedef _SuggestDart = int Function(Pointer<Utf8> joined, Pointer<Utf8> query,
     int maxResults, Pointer<Int32> outIdx, Pointer<Int32> outScores);
 
+
+typedef _DmBucketNative = Int32 Function(Int32 isFollowing, Int32 iReplied, Int32 accepted, Int32 hours, Int32 unread);
+typedef _DmBucketDart = int Function(int isFollowing, int iReplied, int accepted, int hours, int unread);
+typedef _DmFilterNative = Int32 Function(Int32 flags, Int32 mask);
+typedef _DmFilterDart = int Function(int flags, int mask);
+typedef _DmSortNative = Void Function(Pointer<Int64> lastMs, Int32 n, Pointer<Int32> out);
+typedef _DmSortDart = void Function(Pointer<Int64> lastMs, int n, Pointer<Int32> out);
+typedef _DmTimeNative = Int32 Function(Int64 seconds, Pointer<Utf8> out, Int32 outLen);
+typedef _DmTimeDart = int Function(int seconds, Pointer<Utf8> out, int outLen);
+typedef _DmClipNative = Int32 Function(Pointer<Utf8> text, Int32 maxChars, Pointer<Utf8> out, Int32 outLen);
+typedef _DmClipDart = int Function(Pointer<Utf8> text, int maxChars, Pointer<Utf8> out, int outLen);
+typedef _DmRankNative = Void Function(Pointer<Int32> followsMe, Pointer<Int32> mutual, Int32 n, Pointer<Int32> out);
+typedef _DmRankDart = void Function(Pointer<Int32> followsMe, Pointer<Int32> mutual, int n, Pointer<Int32> out);
+
 /// One search hit: the position in the candidate list and how well it matched.
 class SuggestHit {
   final int index;
@@ -104,6 +118,20 @@ class NativeCore {
 
   static final _SuggestDart? _suggest = _safe<_SuggestDart>(
       (l) => l.lookupFunction<_SuggestNative, _SuggestDart>('swifly_suggest_search'));
+
+
+  static final _DmBucketDart? _dmBucketFn = _safe<_DmBucketDart>(
+      (l) => l.lookupFunction<_DmBucketNative, _DmBucketDart>('swifly_dm_bucket'));
+  static final _DmFilterDart? _dmFilterFn = _safe<_DmFilterDart>(
+      (l) => l.lookupFunction<_DmFilterNative, _DmFilterDart>('swifly_dm_filter_pass'));
+  static final _DmSortDart? _dmSortFn = _safe<_DmSortDart>(
+      (l) => l.lookupFunction<_DmSortNative, _DmSortDart>('swifly_dm_sort_threads'));
+  static final _DmTimeDart? _dmTimeFn = _safe<_DmTimeDart>(
+      (l) => l.lookupFunction<_DmTimeNative, _DmTimeDart>('swifly_dm_time_label'));
+  static final _DmClipDart? _dmClipFn = _safe<_DmClipDart>(
+      (l) => l.lookupFunction<_DmClipNative, _DmClipDart>('swifly_dm_clip'));
+  static final _DmRankDart? _dmRankFn = _safe<_DmRankDart>(
+      (l) => l.lookupFunction<_DmRankNative, _DmRankDart>('swifly_dm_rank_people'));
 
   static bool get isNativeReady => _library != null;
 
@@ -255,6 +283,137 @@ class NativeCore {
       calloc.free(idx);
       calloc.free(scores);
     }
+  }
+
+
+  // ---- Direct messages ----
+
+  /// 0 = Primary, 1 = Requests, 2 = General.
+  static int dmBucket({
+    required bool isFollowing,
+    required bool iReplied,
+    required bool accepted,
+    required int hoursSinceLast,
+    required int unread,
+  }) {
+    final f = _dmBucketFn;
+    if (f != null) {
+      return f(isFollowing ? 1 : 0, iReplied ? 1 : 0, accepted ? 1 : 0, hoursSinceLast, unread);
+    }
+    if (!isFollowing && !iReplied && !accepted) return 1;
+    if (unread == 0 && hoursSinceLast >= 24 * 7) return 2;
+    return 0;
+  }
+
+  /// Filter flags: 1 unread, 2 unanswered, 4 story replies, 8 following, 16 follows me.
+  static bool dmFilterPass(int flags, int mask) {
+    final f = _dmFilterFn;
+    if (f != null) return f(flags, mask) == 1;
+    return (flags & mask) == mask;
+  }
+
+  /// Conversation positions ordered newest first.
+  static List<int> dmSortThreads(List<int> lastMs) {
+    final n = lastMs.length;
+    if (n == 0) return const [];
+    final f = _dmSortFn;
+    if (f == null) {
+      final order = List<int>.generate(n, (i) => i);
+      order.sort((a, b) {
+        final c = lastMs[b].compareTo(lastMs[a]);
+        return c != 0 ? c : a.compareTo(b);
+      });
+      return order;
+    }
+    final p = calloc<Int64>(n);
+    final o = calloc<Int32>(n);
+    try {
+      for (var i = 0; i < n; i++) {
+        p[i] = lastMs[i];
+      }
+      f(p, n, o);
+      return List<int>.generate(n, (i) => o[i]);
+    } finally {
+      calloc.free(p);
+      calloc.free(o);
+    }
+  }
+
+  /// "now", "5m", "3h", "2d", "3w".
+  static String dmTimeLabel(DateTime t) {
+    final seconds = DateTime.now().difference(t).inSeconds;
+    final f = _dmTimeFn;
+    if (f == null) return _dartDmTime(seconds);
+    final buffer = calloc<Uint8>(24).cast<Utf8>();
+    try {
+      final len = f(seconds, buffer, 24);
+      return buffer.toDartString(length: len);
+    } finally {
+      calloc.free(buffer);
+    }
+  }
+
+  /// Cuts [text] to [maxChars] characters and adds "..." (used for previews and quotes).
+  static String dmClip(String text, int maxChars) {
+    final f = _dmClipFn;
+    if (f == null) return _dartDmClip(text, maxChars);
+    final t = text.toNativeUtf8();
+    final size = maxChars * 4 + 8;
+    final buffer = calloc<Uint8>(size).cast<Utf8>();
+    try {
+      final len = f(t, maxChars, buffer, size);
+      return buffer.toDartString(length: len);
+    } finally {
+      malloc.free(t);
+      calloc.free(buffer);
+    }
+  }
+
+  /// People who follow me first, then by mutual count. Returns positions.
+  static List<int> dmRankPeople(List<bool> followsMe, List<int> mutual) {
+    final n = followsMe.length;
+    if (n == 0) return const [];
+    final f = _dmRankFn;
+    int score(int i) => (followsMe[i] ? 1000 : 0) + (mutual[i] > 99 ? 99 : mutual[i]);
+    if (f == null) {
+      final order = List<int>.generate(n, (i) => i);
+      order.sort((a, b) {
+        final c = score(b).compareTo(score(a));
+        return c != 0 ? c : a.compareTo(b);
+      });
+      return order;
+    }
+    final a = calloc<Int32>(n);
+    final m = calloc<Int32>(n);
+    final o = calloc<Int32>(n);
+    try {
+      for (var i = 0; i < n; i++) {
+        a[i] = followsMe[i] ? 1 : 0;
+        m[i] = mutual[i];
+      }
+      f(a, m, n, o);
+      return List<int>.generate(n, (i) => o[i]);
+    } finally {
+      calloc.free(a);
+      calloc.free(m);
+      calloc.free(o);
+    }
+  }
+
+  static String _dartDmTime(int s) {
+    if (s < 60) return 'now';
+    if (s < 3600) return '${s ~/ 60}m';
+    if (s < 86400) return '${s ~/ 3600}h';
+    if (s < 86400 * 7) return '${s ~/ 86400}d';
+    return '${s ~/ (86400 * 7)}w';
+  }
+
+  static String _dartDmClip(String text, int maxChars) {
+    if (maxChars <= 0) return '';
+    final flat = text.replaceAll(RegExp(r'[\r\n]+'), ' ');
+    final runes = flat.runes.toList();
+    if (runes.length <= maxChars) return flat;
+    return '${String.fromCharCodes(runes.take(maxChars))}...';
   }
 
   // ---- Pure Dart fallbacks (used if the native library is not present) ----
@@ -412,5 +571,3 @@ class NativeCore {
     return hits.length > maxResults ? hits.sublist(0, maxResults) : hits;
   }
 }
-
-

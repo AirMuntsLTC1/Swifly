@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'app_config.dart';
+import 'inbox_store.dart';
 import 'post_model.dart';
 import 'realtime.dart';
 
@@ -29,6 +30,8 @@ class MockRealtime {
       _storyReact,
       _storyReply,
       _tag,
+      _replyToMe,
+      _note,
     ];
     steps[_step % steps.length]();
     _step++;
@@ -104,6 +107,39 @@ class MockRealtime {
     ));
   }
 
+  /// Someone answers one of my messages with a real reply (quoted above it).
+  static void _replyToMe() {
+    final store = ChatStore.instance;
+    for (final h in store.handles) {
+      ChatMessage? mine;
+      for (final msg in store.thread(h)) {
+        if (msg.fromMe && msg.story == null) mine = msg;
+      }
+      if (mine == null) continue;
+      _publish(MessageEvent(
+        actorName: nameForHandle(h),
+        actorHandle: h,
+        text: 'Haha yes! See you 😄',
+        replyToId: mine.id,
+        replyToText: mine.text,
+      ));
+      return;
+    }
+    _message();
+  }
+
+  static int _noteSeq = 0;
+  static const List<(String, String, String)> _notes = [
+    ('Noah Reed', '@noahreed', 'Debugging at 2am 🐛'),
+    ('Mia Chen', '@miachen', 'Coffee first ☕'),
+    ('Zara Ali', '@zaraali', 'Reading day 📚'),
+  ];
+
+  static void _note() {
+    final n = _notes[_noteSeq++ % _notes.length];
+    _publish(NoteEvent(actorName: n.$1, actorHandle: n.$2, text: n.$3));
+  }
+
   static void _storyReact() {
     _publish(const StoryReactionEvent(
       actorName: 'Max Turner',
@@ -132,7 +168,3 @@ class MockRealtime {
     ));
   }
 }
-
-
-
-

@@ -24,6 +24,8 @@ import 'search_history.dart';
 import 'upload_manager.dart';
 import 'tag_friends_screen.dart';
 import 'messages_tab.dart';
+import 'dm_theme.dart';
+import 'package:flutter/services.dart';
 import 'notifications_tab.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -45,7 +47,18 @@ class _HomeScreenState extends State<HomeScreen> {
   final FocusNode _searchFocus = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    DmTheme.instance.addListener(_onDmTheme);
+  }
+
+  void _onDmTheme() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    DmTheme.instance.removeListener(_onDmTheme);
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -106,30 +119,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final onMessages = _index == 1;
+    final dm = DmTheme.instance.c;
     return PopScope(
-      canPop: !_searchOpen,
+      canPop: !_searchOpen && !onMessages,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _searchOpen) _closeSearch();
+        if (didPop) return;
+        if (_searchOpen) {
+          _closeSearch();
+        } else if (onMessages) {
+          _selectTab(0);
+        }
       },
-      child: Scaffold(
-      backgroundColor: Colors.white,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: onMessages && dm.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
+        child: Scaffold(
+      backgroundColor: onMessages ? dm.bg : Colors.white,
       body: Stack(
         children: [
           SafeArea(
             child: Column(
           children: [
-            _buildTopBar(),
-            const Divider(height: 1, color: Color(0xFFEAEAEA)),
+            // Messages has its own Instagram-style header with a back arrow.
+            if (!onMessages) ...[
+              _buildTopBar(),
+              const Divider(height: 1, color: Color(0xFFEAEAEA)),
+            ],
             Expanded(
               child: Stack(
                 children: [
                   IndexedStack(
                     index: _index,
-                    children: const [
-                      FeedTab(),
-                      MessagesTab(),
-                      NotificationsTab(),
-                      ProfileTab(),
+                    children: [
+                      const FeedTab(),
+                      MessagesTab(onBack: () => _selectTab(0)),
+                      const NotificationsTab(),
+                      const ProfileTab(),
                     ],
                   ),
                   _buildDiscoverOverlay(),
@@ -149,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: onMessages ? null : FloatingActionButton(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 4,
@@ -158,6 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Icon(LucideIcons.plus, size: 26),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        ),
       ),
     );
   }
@@ -344,11 +372,45 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 // Red unread count on the bell.
+                if (i == 1) const Positioned(top: 2, right: 2, child: _MessageBadge()),
                 if (i == 2) const Positioned(top: 2, right: 2, child: UnreadBadge()),
               ],
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Red count on the Messages icon: conversations with something unread.
+class _MessageBadge extends StatelessWidget {
+  const _MessageBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ChatStore.instance,
+      builder: (context, _) {
+        final count = ChatStore.instance.unreadThreads;
+        if (count == 0) return const SizedBox.shrink();
+        return IgnorePointer(
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            child: Text(
+              count > 9 ? '9+' : '$count',
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -792,5 +854,3 @@ class UploadBanner extends StatelessWidget {
     );
   }
 }
-
-

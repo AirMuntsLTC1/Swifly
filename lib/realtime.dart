@@ -69,7 +69,25 @@ class MessageEvent extends RealtimeEvent {
   final String actorName;
   final String actorHandle;
   final String text;
-  const MessageEvent({required this.actorName, required this.actorHandle, required this.text});
+
+  /// Set when this message is a reply to one of MY messages in that chat.
+  final String? replyToId;
+  final String? replyToText;
+  const MessageEvent({
+    required this.actorName,
+    required this.actorHandle,
+    required this.text,
+    this.replyToId,
+    this.replyToText,
+  });
+}
+
+/// Someone shared or changed their note.
+class NoteEvent extends RealtimeEvent {
+  final String actorName;
+  final String actorHandle;
+  final String text;
+  const NoteEvent({required this.actorName, required this.actorHandle, required this.text});
 }
 
 class StoryReactionEvent extends RealtimeEvent {
@@ -105,7 +123,3 @@ class UnfollowedEvent extends RealtimeEvent {
   final String actorHandle;
   const UnfollowedEvent({required this.actorName, required this.actorHandle});
 }
-
-
-
-

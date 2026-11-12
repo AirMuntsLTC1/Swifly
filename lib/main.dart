@@ -79,7 +79,3 @@ TextTheme _appTextTheme() {
       )
       .apply(fontFamily: kAppFont);
 }
-
-
-
-

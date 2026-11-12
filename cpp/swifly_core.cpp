@@ -354,3 +354,122 @@ SWIFLY_EXPORT int32_t swifly_suggest_search(const char* joined, const char* quer
 }
 
 
+// ---------------------------------------------------------------------------
+// Direct messages (inbox, requests, filters, ordering).
+// Every function has an identical pure-Dart fallback in lib/native_bridge.dart.
+// ---------------------------------------------------------------------------
+
+// Which inbox tab a conversation belongs to.
+//   0 = Primary, 1 = Requests, 2 = General
+// A chat is a REQUEST while I do not follow that person, I never replied and I
+// never pressed Accept. A chat that has been quiet for 7+ days with nothing
+// unread moves to General. Everything else is Primary.
+SWIFLY_EXPORT int32_t swifly_dm_bucket(int32_t is_following, int32_t i_replied,
+                                       int32_t accepted, int32_t hours_since_last,
+                                       int32_t unread) {
+    if (!is_following && !i_replied && !accepted) return 1;
+    if (unread == 0 && hours_since_last >= 24 * 7) return 2;
+    return 0;
+}
+
+// Filter flags: 1 unread, 2 unanswered, 4 story replies, 8 following, 16 follows me.
+// A conversation passes when it has EVERY flag that is turned on in mask.
+SWIFLY_EXPORT int32_t swifly_dm_filter_pass(int32_t flags, int32_t mask) {
+    return (flags & mask) == mask ? 1 : 0;
+}
+
+// Orders conversations newest message first. Ties keep their original order.
+SWIFLY_EXPORT void swifly_dm_sort_threads(const int64_t* last_ms, int32_t n,
+                                          int32_t* out_order) {
+    if (!last_ms || !out_order || n <= 0) return;
+    std::vector<int32_t> idx(static_cast<size_t>(n));
+    std::iota(idx.begin(), idx.end(), 0);
+    std::stable_sort(idx.begin(), idx.end(), [last_ms](int32_t a, int32_t b) {
+        return last_ms[a] > last_ms[b];
+    });
+    std::copy(idx.begin(), idx.end(), out_order);
+}
+
+// Short relative label: now, 5m, 3h, 2d, 3w.
+SWIFLY_EXPORT int32_t swifly_dm_time_label(int64_t seconds, char* out, int32_t out_len) {
+    if (out == nullptr || out_len <= 0) return 0;
+    if (seconds < 0) seconds = 0;
+    char buf[24];
+    int len;
+    if (seconds < 60) {
+        len = std::snprintf(buf, sizeof(buf), "now");
+    } else if (seconds < 3600) {
+        len = std::snprintf(buf, sizeof(buf), "%lldm", static_cast<long long>(seconds / 60));
+    } else if (seconds < 86400) {
+        len = std::snprintf(buf, sizeof(buf), "%lldh", static_cast<long long>(seconds / 3600));
+    } else if (seconds < 86400LL * 7) {
+        len = std::snprintf(buf, sizeof(buf), "%lldd", static_cast<long long>(seconds / 86400));
+    } else {
+        len = std::snprintf(buf, sizeof(buf), "%lldw", static_cast<long long>(seconds / (86400LL * 7)));
+    }
+    const int32_t copy = std::min<int32_t>(len, out_len - 1);
+    std::memcpy(out, buf, static_cast<size_t>(copy));
+    out[copy] = '\0';
+    return copy;
+}
+
+// Cuts text to max_chars characters (not bytes, so emoji and accents stay whole),
+// turns line breaks into spaces and adds "..." when something was cut.
+// Used for the inbox preview and for the quoted message above a reply.
+SWIFLY_EXPORT int32_t swifly_dm_clip(const char* text, int32_t max_chars,
+                                     char* out, int32_t out_len) {
+    if (out == nullptr || out_len <= 0) return 0;
+    out[0] = '\0';
+    if (text == nullptr || max_chars <= 0) return 0;
+
+    std::string result;
+    int32_t chars = 0;
+    bool cut = false;
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
+    while (*p) {
+        size_t step = 1;
+        if ((*p & 0xF8) == 0xF0) step = 4;
+        else if ((*p & 0xF0) == 0xE0) step = 3;
+        else if ((*p & 0xE0) == 0xC0) step = 2;
+        if (chars >= max_chars) { cut = true; break; }
+        if (*p == '\n' || *p == '\r') {
+            if (result.empty() || result.back() != ' ') result += ' ';
+            ++p;
+        } else {
+            size_t k = 0;
+            while (k < step && p[k] != 0) ++k;   // never read past the end
+            result.append(reinterpret_cast<const char*>(p), k);
+            p += k;
+        }
+        ++chars;
+    }
+    if (cut) result += "...";
+
+    const size_t room = static_cast<size_t>(out_len - 1);
+    size_t copy = std::min(result.size(), room);
+    // Do not leave half of a multi-byte character at the end.
+    while (copy > 0 && copy < result.size() &&
+           (static_cast<unsigned char>(result[copy]) & 0xC0) == 0x80) {
+        --copy;
+    }
+    std::memcpy(out, result.data(), copy);
+    out[copy] = '\0';
+    return static_cast<int32_t>(copy);
+}
+
+// Ranks "accounts to follow". People who already follow me come first
+// (so the button says "Follow back"), then the rest in their original order.
+SWIFLY_EXPORT void swifly_dm_rank_people(const int32_t* follows_me, const int32_t* mutual_count,
+                                         int32_t n, int32_t* out_order) {
+    if (!follows_me || !mutual_count || !out_order || n <= 0) return;
+    std::vector<int32_t> score(static_cast<size_t>(n));
+    for (int32_t i = 0; i < n; ++i) {
+        score[i] = (follows_me[i] ? 1000 : 0) + std::min<int32_t>(mutual_count[i], 99);
+    }
+    std::vector<int32_t> idx(static_cast<size_t>(n));
+    std::iota(idx.begin(), idx.end(), 0);
+    std::stable_sort(idx.begin(), idx.end(), [&score](int32_t a, int32_t b) {
+        return score[a] > score[b];
+    });
+    std::copy(idx.begin(), idx.end(), out_order);
+}

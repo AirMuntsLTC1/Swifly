@@ -111,5 +111,3 @@ class MediaPipeline {
     } catch (_) {}
   }
 }
-
-

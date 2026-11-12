@@ -279,5 +279,3 @@ class _Chip extends StatelessWidget {
     );
   }
 }
-
-

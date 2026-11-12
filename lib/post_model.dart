@@ -325,5 +325,3 @@ class PostStore extends ChangeNotifier {
     }
   }
 }
-
-

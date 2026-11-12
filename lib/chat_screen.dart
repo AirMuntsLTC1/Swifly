@@ -1,10 +1,20 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import 'dm_people_screens.dart';
+import 'dm_theme.dart';
+import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
 import 'story_player_screen.dart';
 import 'story_viewer_screen.dart';
 import 'story_widgets.dart';
+import 'user_profile_screen.dart';
+
+const List<String> _kReactionEmojis = ['❤️', '😂', '😮', '😢', '😡', '👍'];
 
 class ChatScreen extends StatefulWidget {
   final String handle;
@@ -16,18 +26,76 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _focus = FocusNode();
+  final ScrollController _scroll = ScrollController();
+  final Map<String, GlobalKey> _keys = {};
+
+  /// The message I am replying to (shown above the composer).
+  ChatMessage? _replying;
+  String? _flashId;
+  Timer? _flashTimer;
+
+  String get _handle => widget.handle;
+
+  @override
+  void initState() {
+    super.initState();
+    ChatStore.instance.openHandle = _handle;
+    // Opening the chat marks it as read.
+    WidgetsBinding.instance.addPostFrameCallback((_) => ChatStore.instance.markRead(_handle));
+  }
 
   @override
   void dispose() {
+    if (ChatStore.instance.openHandle == _handle) ChatStore.instance.openHandle = null;
+    _flashTimer?.cancel();
     _controller.dispose();
+    _focus.dispose();
+    _scroll.dispose();
     super.dispose();
+  }
+
+  // ------------------------------------------------------------- actions
+
+  ReplyRef _refFor(ChatMessage m) => ReplyRef(
+        messageId: m.id,
+        text: m.text,
+        fromMe: m.fromMe,
+        authorName: dmName(m.fromMe ? kMeHandle : _handle),
+        authorHandle: m.fromMe ? kMeHandle : _handle,
+      );
+
+  void _startReply(ChatMessage m) {
+    HapticFeedback.lightImpact();
+    setState(() => _replying = m);
+    _focus.requestFocus();
   }
 
   void _send() {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
-    ChatStore.instance.send(widget.handle, text);
+    final reply = _replying;
+    ChatStore.instance.send(_handle, text, replyTo: reply == null ? null : _refFor(reply));
     _controller.clear();
+    setState(() => _replying = null);
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  void _sendHeart() {
+    ChatStore.instance.send(_handle, '❤️');
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  void _jumpTo(String messageId) {
+    final ctx = _keys[messageId]?.currentContext;
+    if (ctx == null) return; // the original is not in this chat (a note, or unsent)
+    Scrollable.ensureVisible(ctx,
+        alignment: 0.4, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    setState(() => _flashId = messageId);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(milliseconds: 1000), () {
+      if (mounted) setState(() => _flashId = null);
+    });
   }
 
   void _openStory(StoryRef ref) {
@@ -54,7 +122,206 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _storyCard(ChatMessage m) {
+  void _openProfile() {
+    Navigator.push(context, UserProfileScreen.route(personFor(_handle)));
+  }
+
+  void _openTheirStory() {
+    final s = StoryStore.instance.otherStory(_handle);
+    if (s == null) {
+      _openProfile();
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StoryPlayerScreen(
+            data: s.data, name: dmName(_handle), handle: _handle, time: s.time),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------- long press menu
+
+  void _showActions(ChatMessage m) {
+    HapticFeedback.mediumImpact();
+    final c = DmTheme.instance.c;
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
+      barrierColor: const Color(0xB3000000),
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (dialogContext, _, __) {
+        void close() => Navigator.pop(dialogContext);
+        Widget action(IconData icon, String label, VoidCallback onTap, {Color? color}) {
+          return InkWell(
+            onTap: () {
+              close();
+              onTap();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(label,
+                        style: TextStyle(color: color ?? c.text, fontSize: 16)),
+                  ),
+                  Icon(icon, color: color ?? c.text, size: 22),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return SafeArea(
+          child: Material(
+            color: Colors.transparent,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment:
+                      m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [
+                    // Emoji reactions
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: c.sheet,
+                        borderRadius: BorderRadius.circular(32),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final e in _kReactionEmojis)
+                            GestureDetector(
+                              onTap: () {
+                                close();
+                                ChatStore.instance.react(_handle, m.id, e);
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 7),
+                                child: Text(e, style: const TextStyle(fontSize: 28)),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // The message itself
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.8),
+                      child: _bubbleBody(m, c),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 230,
+                      decoration: BoxDecoration(
+                        color: c.sheet,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          action(Icons.reply_rounded, 'Reply', () => _startReply(m)),
+                          action(Icons.copy_rounded, 'Copy', () {
+                            Clipboard.setData(ClipboardData(text: m.text));
+                          }),
+                          if (m.fromMe)
+                            action(Icons.undo_rounded, 'Unsend', () {
+                              if (_replying?.id == m.id) setState(() => _replying = null);
+                              ChatStore.instance.unsend(_handle, m.id);
+                            }, color: Colors.red),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ------------------------------------------------------------- bubbles
+
+  Widget _bubbleBody(ChatMessage m, DmColors c) {
+    final onlyEmoji = m.text.runes.length <= 2 && m.text.trim().isNotEmpty && m.text.runes.every((r) => r > 255);
+    if (onlyEmoji && m.replyTo == null) {
+      return Text(m.text, style: const TextStyle(fontSize: 44));
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        gradient: m.fromMe ? kBubbleMe : null,
+        color: m.fromMe ? null : c.bubbleThem,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        m.text,
+        style: TextStyle(color: m.fromMe ? Colors.white : c.text, fontSize: 15.5),
+      ),
+    );
+  }
+
+  String _replyLabel(ChatMessage m) {
+    final r = m.replyTo!;
+    final first = dmName(_handle).split(' ').first;
+    if (r.kind == ReplyKind.note) {
+      if (m.fromMe) return r.fromMe ? 'You replied to your note' : 'You replied to their note';
+      return r.fromMe ? 'Replied to your note' : 'Replied to their own note';
+    }
+    if (m.fromMe) return r.fromMe ? 'You replied to yourself' : 'You replied to $first';
+    return r.fromMe ? '$first replied to you' : '$first replied to themself';
+  }
+
+  Widget _quote(ChatMessage m, DmColors c) {
+    final r = m.replyTo!;
+    final align = m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    return Column(
+      crossAxisAlignment: align,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.reply_rounded, size: 14, color: c.sub),
+              const SizedBox(width: 4),
+              Text(_replyLabel(m), style: TextStyle(color: c.sub, fontSize: 12)),
+            ],
+          ),
+        ),
+        GestureDetector(
+          onTap: () => _jumpTo(r.messageId),
+          child: Container(
+            constraints:
+                BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.6),
+            padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
+            decoration: BoxDecoration(
+              color: c.quoteBubble,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Text(
+              r.quote,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: c.sub, fontSize: 14),
+            ),
+          ),
+        ),
+        const SizedBox(height: 3),
+      ],
+    );
+  }
+
+  Widget _storyCard(ChatMessage m, DmColors c) {
     final ref = m.story!;
     final label = ref.reaction
         ? (m.fromMe ? 'You reacted to their story' : 'Reacted to your story')
@@ -64,116 +331,418 @@ class _ChatScreenState extends State<ChatScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 4, top: 6),
-          child: Text(label,
-              style: const TextStyle(color: Color(0xFF8E8E8E), fontSize: 12)),
+          child: Text(label, style: TextStyle(color: c.sub, fontSize: 12)),
         ),
         StoryThumb(data: ref.data, width: 96, onTap: () => _openStory(ref)),
+        const SizedBox(height: 4),
       ],
     );
   }
 
-  Widget _bubble(ChatMessage m) {
-    final bubble = Align(
-      alignment: m.fromMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
-        decoration: BoxDecoration(
-          color: m.fromMe ? Colors.black : const Color(0xFFF2F2F2),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Text(
-          m.text,
-          style: TextStyle(color: m.fromMe ? Colors.white : Colors.black, fontSize: 15),
-        ),
+  Widget _message(ChatMessage m, DmColors c) {
+    final align = m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final reaction = m.myReaction ?? m.theirReaction;
+    final bubble = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
+      child: Column(
+        crossAxisAlignment: align,
+        children: [
+          GestureDetector(
+            onLongPress: () => _showActions(m),
+            onDoubleTap: () => ChatStore.instance.react(_handle, m.id, '❤️'),
+            child: _bubbleBody(m, c),
+          ),
+          if (reaction != null)
+            Transform.translate(
+              offset: Offset(m.fromMe ? -6 : 6, -8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: c.sheet,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: c.bg, width: 2),
+                ),
+                child: Text(reaction, style: const TextStyle(fontSize: 13)),
+              ),
+            ),
+        ],
       ),
     );
-    if (m.story == null) return bubble;
-    return Column(
-      crossAxisAlignment: m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+
+    final content = Column(
+      crossAxisAlignment: align,
       children: [
-        _storyCard(m),
-        const SizedBox(height: 2),
+        if (m.story != null) _storyCard(m, c),
+        if (m.replyTo != null) _quote(m, c),
         bubble,
       ],
     );
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(nameForHandle(widget.handle),
-                style: const TextStyle(
-                    color: Colors.black, fontWeight: FontWeight.w800, fontSize: 16)),
-            Text(widget.handle,
-                style: const TextStyle(color: Color(0xFF8E8E8E), fontSize: 12)),
-          ],
+    final flash = _flashId == m.id;
+    return KeyedSubtree(
+      key: _keys.putIfAbsent(m.id, () => GlobalKey()),
+      child: _SwipeToReply(
+        onReply: () => _startReply(m),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.symmetric(vertical: 3),
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          decoration: BoxDecoration(
+            color: flash ? c.chipFill : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Align(
+            alignment: m.fromMe ? Alignment.centerRight : Alignment.centerLeft,
+            child: content,
+          ),
         ),
       ),
-      body: Column(
+    );
+  }
+
+  String _stamp(DateTime t) {
+    final now = DateTime.now();
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final mm = t.minute.toString().padLeft(2, '0');
+    final ap = t.hour >= 12 ? 'PM' : 'AM';
+    final clock = '$h:$mm $ap';
+    if (t.year == now.year && t.month == now.month && t.day == now.day) return clock;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[t.month - 1]} ${t.day}, $clock';
+  }
+
+  Widget _timeHeader(DateTime t, DmColors c) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Center(child: Text(_stamp(t), style: TextStyle(color: c.sub, fontSize: 12))),
+      );
+
+  // ------------------------------------------------------------- composer
+
+  Widget _replyBar(DmColors c) {
+    final m = _replying!;
+    final who = m.fromMe ? kMeHandle : _handle;
+    final title = m.fromMe ? 'Replying to yourself' : 'Replying to ${dmName(_handle)}';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: c.bg,
+        border: Border(top: BorderSide(color: c.divider)),
+      ),
+      child: Row(
         children: [
+          DmAvatar(handle: who, size: 30),
+          const SizedBox(width: 10),
           Expanded(
-            child: ListenableBuilder(
-              listenable: ChatStore.instance,
-              builder: (context, _) {
-                final msgs = ChatStore.instance.thread(widget.handle);
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                  children: [for (final m in msgs) _bubble(m)],
-                );
-              },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        color: c.text, fontWeight: FontWeight.w700, fontSize: 13)),
+                const SizedBox(height: 2),
+                Text(m.story != null ? m.preview : m.text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: c.sub, fontSize: 13)),
+              ],
             ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 8, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      minLines: 1,
-                      maxLines: 4,
-                      cursorColor: Colors.black,
-                      decoration: const InputDecoration(
-                        hintText: 'Message...',
-                        isDense: true,
-                        filled: true,
-                        fillColor: Color(0xFFF2F2F2),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(20)),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          IconButton(
+            icon: Icon(LucideIcons.x, color: c.sub, size: 20),
+            onPressed: () => setState(() => _replying = null),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _composer(DmColors c) {
+    return SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_replying != null) _replyBar(c),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 10, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focus,
+                    minLines: 1,
+                    maxLines: 5,
+                    cursorColor: c.text,
+                    style: TextStyle(color: c.text, fontSize: 16),
+                    decoration: InputDecoration(
+                      hintText: 'Message...',
+                      hintStyle: TextStyle(color: c.sub),
+                      isDense: true,
+                      filled: true,
+                      fillColor: c.field,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
                       ),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: Colors.black),
-                    onPressed: _send,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _controller,
+                  builder: (context, value, _) {
+                    final has = value.text.trim().isNotEmpty;
+                    return GestureDetector(
+                      onTap: has ? _send : _sendHeart,
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: has ? kBubbleMe : null,
+                        ),
+                        child: has
+                            ? const Icon(Icons.send_rounded, color: Colors.white, size: 21)
+                            : Icon(Icons.favorite_border_rounded, color: c.text, size: 26),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _requestBar(DmColors c) {
+    final name = dmName(_handle);
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: c.divider))),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Accept message request from $name?',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.text, fontWeight: FontWeight.w700, fontSize: 15)),
+            const SizedBox(height: 4),
+            Text(
+                "If you accept, they can message you again and the chat moves to Primary. They won't be able to see when you're active until you accept.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.sub, fontSize: 12.5)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () {
+                      ChatStore.instance.deleteThread(_handle);
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Delete',
+                        style: TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.w800, fontSize: 16)),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => ChatStore.instance.accept(_handle),
+                    child: Text('Accept',
+                        style: TextStyle(
+                            color: c.blue, fontWeight: FontWeight.w800, fontSize: 16)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------- build
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: dmListenable(),
+      builder: (context, _) {
+        final c = DmTheme.instance.c;
+        final store = ChatStore.instance;
+        final msgs = store.thread(_handle).reversed.toList();
+        final isRequest =
+            store.hasThread(_handle) && store.bucketOf(_handle) == InboxTab.requests;
+        final story = hasUnseenStory(_handle);
+        return Scaffold(
+          backgroundColor: c.bg,
+          appBar: AppBar(
+            backgroundColor: c.bg,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            titleSpacing: 0,
+            leading: IconButton(
+              icon: Icon(LucideIcons.arrowLeft, color: c.text),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: Row(
+              children: [
+                GestureDetector(
+                  onTap: _openTheirStory,
+                  child: DmAvatar(handle: _handle, size: story ? 44 : 38, ring: story),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _openProfile,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(dmName(_handle),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: c.text, fontWeight: FontWeight.w800, fontSize: 16)),
+                        Text(_handle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: c.sub, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              if (isRequest && !FollowStore.instance.isFollowing(_handle))
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Center(child: DmFollowButton(handle: _handle)),
+                ),
+            ],
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: msgs.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            DmAvatar(handle: _handle, size: 84),
+                            const SizedBox(height: 10),
+                            Text(dmName(_handle),
+                                style: TextStyle(
+                                    color: c.text,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 18)),
+                            Text(_handle, style: TextStyle(color: c.sub)),
+                            const SizedBox(height: 6),
+                            Text('Say hi 👋', style: TextStyle(color: c.sub)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scroll,
+                        reverse: true,
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                        itemCount: msgs.length,
+                        itemBuilder: (context, i) {
+                          final m = msgs[i];
+                          final older = i + 1 < msgs.length ? msgs[i + 1] : null;
+                          final showTime =
+                              older == null || m.time.difference(older.time).inMinutes >= 60;
+                          return Column(
+                            children: [
+                              if (showTime) _timeHeader(m.time, c),
+                              _message(m, c),
+                            ],
+                          );
+                        },
+                      ),
+              ),
+              isRequest ? _requestBar(c) : _composer(c),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
+/// Drag a message to the right to reply (like Instagram).
+class _SwipeToReply extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onReply;
+  const _SwipeToReply({required this.child, required this.onReply});
 
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
 
+class _SwipeToReplyState extends State<_SwipeToReply> {
+  static const double _trigger = 56;
+  double _dx = 0;
+  bool _dragging = false;
+  bool _fired = false;
 
+  @override
+  Widget build(BuildContext context) {
+    final c = DmTheme.instance.c;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragStart: (_) => setState(() {
+        _dragging = true;
+        _fired = false;
+      }),
+      onHorizontalDragUpdate: (d) {
+        final next = (_dx + d.delta.dx).clamp(0.0, 72.0).toDouble();
+        if (!_fired && next >= _trigger) {
+          _fired = true;
+          HapticFeedback.selectionClick();
+        }
+        setState(() => _dx = next);
+      },
+      onHorizontalDragEnd: (_) {
+        final fire = _fired;
+        setState(() {
+          _dragging = false;
+          _dx = 0;
+        });
+        if (fire) widget.onReply();
+      },
+      onHorizontalDragCancel: () => setState(() {
+        _dragging = false;
+        _dx = 0;
+      }),
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          Opacity(
+            opacity: (_dx / _trigger).clamp(0.0, 1.0).toDouble(),
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(color: c.chipFill, shape: BoxShape.circle),
+              child: Icon(Icons.reply_rounded, size: 18, color: c.text),
+            ),
+          ),
+          AnimatedContainer(
+            duration: _dragging ? Duration.zero : const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            transform: Matrix4.translationValues(_dx, 0, 0),
+            child: widget.child,
+          ),
+        ],
+      ),
+    );
+  }
+}

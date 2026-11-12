@@ -101,8 +101,8 @@ void loadMockData() {
 
   PostStore.instance.load(posts: mockPosts());
   FollowStore.instance.load(
-    following: {'@liampark', '@zaraali'},
-    followers: {'@avastone', '@zaraali'},
+    following: {'@liampark', '@zaraali', '@avastone', '@miachen', '@noahreed', '@hanasato'},
+    followers: {'@avastone', '@zaraali', '@noahreed'},
   );
 
   NotificationStore.instance.load([
@@ -176,13 +176,34 @@ void loadMockData() {
           time: now.subtract(const Duration(hours: 2))),
     ],
     '@liampark': [
-      ChatMessage(text: 'Check out my new build', fromMe: false,
+      ChatMessage(id: 'liam-1', text: 'Check out my new build', fromMe: false,
           time: now.subtract(const Duration(hours: 8))),
     ],
     '@miachen': [
       ChatMessage(text: 'Coffee on Saturday?', fromMe: false,
           time: now.subtract(const Duration(days: 1))),
     ],
+    // Not followed and never answered, so this one is a message request.
+    '@ethanb': [
+      ChatMessage(text: 'Hey! Saw your post, want to collab on something?', fromMe: false,
+          time: now.subtract(const Duration(minutes: 40))),
+    ],
+    // Quiet for more than a week, so it lives in General.
+    '@hanasato': [
+      ChatMessage(text: 'Great meeting you!', fromMe: false,
+          time: now.subtract(const Duration(days: 9, hours: 1))),
+      ChatMessage(text: 'Likewise! Let us catch up soon', fromMe: true,
+          time: now.subtract(const Duration(days: 9))),
+    ],
+  });
+
+  NoteStore.instance.load({
+    '@avastone': DmNote(
+        handle: '@avastone', text: 'Hiking again ⛰️', time: now.subtract(const Duration(hours: 2))),
+    '@liampark': DmNote(
+        handle: '@liampark', text: 'Shipping day 🚀', time: now.subtract(const Duration(hours: 3))),
+    '@noahreed': DmNote(
+        handle: '@noahreed', text: 'Plant tracker v2', time: now.subtract(const Duration(hours: 5))),
   });
 
   ProfileStore.instance.load({
@@ -226,4 +247,3 @@ void loadMockData() {
     ),
   });
 }
-

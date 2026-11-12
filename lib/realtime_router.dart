@@ -65,9 +65,24 @@ class RealtimeRouter {
     } else if (e is UnfollowedEvent) {
       FollowStore.instance.applyIncomingUnfollow(e.actorHandle);
     } else if (e is MessageEvent) {
-      ChatStore.instance.receive(e.actorHandle, e.text);
+      final replyId = e.replyToId;
+      ChatStore.instance.receive(
+        e.actorHandle,
+        e.text,
+        replyTo: replyId == null
+            ? null
+            : ReplyRef(
+                messageId: replyId,
+                text: e.replyToText ?? '',
+                fromMe: true,
+                authorName: kMeName,
+                authorHandle: kMeHandle,
+              ),
+      );
       notes.add(type: NotifType.message, actorName: e.actorName,
           actorHandle: e.actorHandle, preview: e.text);
+    } else if (e is NoteEvent) {
+      NoteStore.instance.applyIncoming(e.actorHandle, e.text);
     } else if (e is StoryReactionEvent) {
       StoryStore.instance.react(e.actorName, e.actorHandle, e.emoji);
       notes.add(type: NotifType.storyReact, actorName: e.actorName,
@@ -93,7 +108,3 @@ class RealtimeRouter {
     }
   }
 }
-
-
-
-

@@ -77,5 +77,3 @@ class MediaItem {
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 }
-
-

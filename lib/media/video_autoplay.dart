@@ -62,5 +62,3 @@ class VideoAutoplay extends ChangeNotifier {
     }
   }
 }
-
-

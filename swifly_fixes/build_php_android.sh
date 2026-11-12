@@ -161,5 +161,3 @@ fi
 
 "$TC/bin/llvm-readelf" -h "$OUT/libphp_cli.so" | grep -E "Class|Machine" || true
 ls -l "$OUT/libphp_cli.so"
-
-

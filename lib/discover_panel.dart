@@ -382,5 +382,3 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     );
   }
 }
-
-

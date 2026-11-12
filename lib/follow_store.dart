@@ -103,5 +103,3 @@ Person personFor(String handle) {
   }
   return Person(handle.replaceFirst('@', ''), handle);
 }
-
-

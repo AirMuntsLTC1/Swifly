@@ -74,6 +74,17 @@ class DatabaseService {
     //   return [for (final r in rows) {'key': r['key'], 'value': r['value'], 'audience': r['audience']}];
     return <Map<String, String>>[];
   }
+
+  /// Sends a direct message. [replyToId] is the message being replied to, if any.
+  Future<void> sendMessage(String handle, String text, {String? replyToId}) async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    // Example (Supabase):
+    //   await supabase.from('messages').insert({'to': handle, 'text': text, 'reply_to': replyToId});
+  }
+
+  /// Saves my note (shown above the inbox for 24 hours). Empty text deletes it.
+  Future<void> saveNote(String text) async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    // Example: await supabase.from('notes').upsert({'user_id': uid, 'text': text});
+  }
 }
-
-

@@ -486,5 +486,3 @@ class _SuggestPickerState extends State<SuggestPicker> {
     );
   }
 }
-
-

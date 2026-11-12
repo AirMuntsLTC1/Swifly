@@ -47,5 +47,3 @@ class SuggestionsScreen extends StatelessWidget {
     );
   }
 }
-
-

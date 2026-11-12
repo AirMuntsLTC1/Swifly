@@ -691,5 +691,3 @@ class FeedFollowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FollowButton(handle: handle, compact: true);
 }
-
-
