@@ -1,0 +1,161 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter (SDK cached)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache Dart pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-v1
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Create Android project if missing
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --project-name swifly --org com.example .
+          fi
+
+      - name: Set app name to Swifly & Add Media Permissions
+        run: |
+          sed -i 's/android:label="[^"]*"/android:label="Swifly"/' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>' android/app/src/main/AndroidManifest.xml
+
+      - name: Install CMake for the C++ core
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" > /dev/null || true
+
+      # The PHP runtime is only cached when it was really built. (An empty cache
+      # entry would make every later run skip the build.)
+      - name: Restore PHP runtime for Android
+        id: phpcache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/php-android/out
+          key: php-android-${{ hashFiles('tools/build_php_android.sh') }}
+
+      - name: Build PHP runtime for Android (optional, app still builds if it fails)
+        if: steps.phpcache.outputs.cache-hit != 'true'
+        run: |
+          if bash tools/build_php_android.sh; then
+            echo "PHP runtime built"
+          else
+            echo "::warning title=PHP runtime::The PHP runtime could not be built. The app still builds and uses the C++ fallback for photos and videos. Open this step's log to see why."
+          fi
+
+      - name: Save PHP runtime to cache
+        if: steps.phpcache.outputs.cache-hit != 'true' && hashFiles('build/php-android/out/libphp_cli.so') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/php-android/out
+          key: php-android-${{ hashFiles('tools/build_php_android.sh') }}
+
+      - name: Add PHP runtime to the APK
+        run: |
+          if [ -f build/php-android/out/libphp_cli.so ]; then
+            mkdir -p android/app/src/main/jniLibs/arm64-v8a
+            cp build/php-android/out/libphp_cli.so android/app/src/main/jniLibs/arm64-v8a/
+            echo "PHP runtime added to the APK"
+          else
+            echo "::notice::No PHP runtime was built. Photos and videos use the C++ fallback."
+          fi
+
+      - name: Wire C++ core into the Android build
+        run: |
+          mkdir -p android/app/src/main/cpp
+          cp -r cpp/. android/app/src/main/cpp/
+          python3 - << 'PY'
+          import os
+          path = None
+          for name in ["android/app/build.gradle.kts", "android/app/build.gradle"]:
+              if os.path.exists(name):
+                  path = name
+                  break
+          src = open(path).read()
+          block = ""
+          if "externalNativeBuild" not in src:
+              if path.endswith(".kts"):
+                  block += ('    externalNativeBuild {\n'
+                            '        cmake {\n'
+                            '            path = file("src/main/cpp/CMakeLists.txt")\n'
+                            '            version = "3.22.1"\n'
+                            '        }\n'
+                            '    }\n')
+              else:
+                  block += ('    externalNativeBuild {\n'
+                            '        cmake {\n'
+                            '            path "src/main/cpp/CMakeLists.txt"\n'
+                            '            version "3.22.1"\n'
+                            '        }\n'
+                            '    }\n')
+          if "useLegacyPackaging" not in src:
+              # Unpack native libraries so the PHP runtime (libphp_cli.so) can be started.
+              block += ('    packaging {\n'
+                        '        jniLibs {\n'
+                        '            useLegacyPackaging = true\n'
+                        '        }\n'
+                        '    }\n')
+          if block:
+              src = src.replace("android {\n", "android {\n" + block, 1)
+              open(path, "w").write(src)
+          print("C++ core wired into", path)
+          PY
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Skip Android lint (crashes on video_player_android)
+        run: |
+          for f in android/build.gradle.kts android/build.gradle; do
+            if [ -f "$f" ]; then
+              printf '\nsubprojects {\n    tasks.matching { it.name.contains("lint") }.configureEach {\n        enabled = false\n    }\n}\n' >> "$f"
+              echo "Lint disabled in $f"
+            fi
+          done
+
+      - name: Build release APK (arm64, obfuscated)
+        run: flutter build apk --release --target-platform android-arm64 --obfuscate --split-debug-info=build/symbols
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: swifly-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
