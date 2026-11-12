@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'database_service.dart';
 import 'native_bridge.dart';
+import 'suggest_engine.dart';
 
 /// Who can see a profile field. The order matches the C++ privacy rule (0, 1, 2).
 enum Audience { onlyMe, followers, everyone }
@@ -29,6 +30,9 @@ class ProfileField {
 
 enum FieldKind { text, multiline, date, choice }
 
+/// Extra checks for text fields that must look a certain way.
+enum FieldValidator { none, email, phone, url, handle }
+
 class ProfileFieldDef {
   final String key;
   final String label;
@@ -36,12 +40,28 @@ class ProfileFieldDef {
   final FieldKind kind;
   final List<String> choices;
 
+  /// If set, the editor searches this list as the person types.
+  final SuggestKind? suggest;
+
+  /// Optional second search box (job title for work, field of study for school).
+  /// The two are saved together as "Secondary at Primary".
+  final SuggestKind? secondary;
+
+  /// True if the field holds several picks (hobbies, music ...), shown as chips.
+  final bool multi;
+
+  final FieldValidator validator;
+
   ProfileFieldDef(
     this.key,
     this.label,
     this.icon, {
     this.kind = FieldKind.text,
     this.choices = const <String>[],
+    this.suggest,
+    this.secondary,
+    this.multi = false,
+    this.validator = FieldValidator.none,
   });
 }
 
@@ -58,8 +78,8 @@ final List<ProfileSection> kProfileSections = [
     ProfileFieldDef('bio', 'Bio', LucideIcons.messageCircle, kind: FieldKind.multiline),
   ]),
   ProfileSection('Personal details', [
-    ProfileFieldDef('city', 'Current city or town', LucideIcons.mapPin),
-    ProfileFieldDef('hometown', 'Hometown', LucideIcons.house),
+    ProfileFieldDef('city', 'Current city or town', LucideIcons.mapPin, suggest: SuggestKind.place),
+    ProfileFieldDef('hometown', 'Hometown', LucideIcons.house, suggest: SuggestKind.place),
     ProfileFieldDef('birthday', 'Birthday', LucideIcons.cake, kind: FieldKind.date),
     ProfileFieldDef('gender', 'Gender', LucideIcons.user,
         kind: FieldKind.choice, choices: ['Male', 'Female', 'Custom']),
@@ -67,36 +87,89 @@ final List<ProfileSection> kProfileSections = [
         kind: FieldKind.choice,
         choices: ['Single', 'In a relationship', 'Married', 'Prefer not to say']),
     ProfileFieldDef('family', 'Family', LucideIcons.users),
-    ProfileFieldDef('languages', 'Languages', LucideIcons.languages),
+    ProfileFieldDef('languages', 'Languages', LucideIcons.languages,
+        suggest: SuggestKind.language, multi: true),
   ]),
   ProfileSection('Work', [
-    ProfileFieldDef('work', 'Work experience', LucideIcons.briefcase),
+    ProfileFieldDef('work', 'Work experience', LucideIcons.briefcase,
+        suggest: SuggestKind.company, secondary: SuggestKind.jobTitle),
   ]),
   ProfileSection('Education', [
-    ProfileFieldDef('school', 'High school or college', LucideIcons.graduationCap),
+    ProfileFieldDef('school', 'High school or college', LucideIcons.graduationCap,
+        suggest: SuggestKind.school, secondary: SuggestKind.fieldOfStudy),
   ]),
   ProfileSection('Hobbies', [
-    ProfileFieldDef('hobbies', 'Hobbies', LucideIcons.smile),
+    ProfileFieldDef('hobbies', 'Hobbies', LucideIcons.smile,
+        suggest: SuggestKind.hobby, multi: true),
   ]),
   ProfileSection('Interests', [
-    ProfileFieldDef('music', 'Music', LucideIcons.music),
-    ProfileFieldDef('tv', 'TV shows', LucideIcons.tv),
-    ProfileFieldDef('movies', 'Movies', LucideIcons.video),
-    ProfileFieldDef('games', 'Games', LucideIcons.gamepad2),
-    ProfileFieldDef('sports', 'Sports teams and athletes', LucideIcons.shirt),
+    ProfileFieldDef('music', 'Music', LucideIcons.music, suggest: SuggestKind.music, multi: true),
+    ProfileFieldDef('tv', 'TV shows', LucideIcons.tv, suggest: SuggestKind.tv, multi: true),
+    ProfileFieldDef('movies', 'Movies', LucideIcons.video, suggest: SuggestKind.movie, multi: true),
+    ProfileFieldDef('games', 'Games', LucideIcons.gamepad2, suggest: SuggestKind.game, multi: true),
+    ProfileFieldDef('sports', 'Sports teams and athletes', LucideIcons.shirt,
+        suggest: SuggestKind.sport, multi: true),
   ]),
   ProfileSection('Travel', [
-    ProfileFieldDef('places', 'Places', LucideIcons.mapPin),
+    ProfileFieldDef('places', 'Places', LucideIcons.mapPin, suggest: SuggestKind.place, multi: true),
   ]),
   ProfileSection('Links', [
-    ProfileFieldDef('website', 'Websites, blogs, portfolios', LucideIcons.link),
+    ProfileFieldDef('website', 'Websites, blogs, portfolios', LucideIcons.link,
+        validator: FieldValidator.url),
   ]),
   ProfileSection('Contact info', [
-    ProfileFieldDef('socialMedia', 'Social media', LucideIcons.atSign),
-    ProfileFieldDef('email', 'Email', LucideIcons.mail),
-    ProfileFieldDef('phone', 'Phone number', LucideIcons.phone),
+    ProfileFieldDef('socialMedia', 'Social media', LucideIcons.atSign,
+        validator: FieldValidator.handle),
+    ProfileFieldDef('email', 'Email', LucideIcons.mail, validator: FieldValidator.email),
+    ProfileFieldDef('phone', 'Phone number', LucideIcons.phone, validator: FieldValidator.phone),
   ]),
 ];
+
+final RegExp _emailRe = RegExp(r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$');
+final RegExp _urlRe = RegExp(
+    r'^(https?://)?([A-Za-z0-9\-]+\.)+[A-Za-z]{2,}(:\d+)?(/\S*)?$',
+    caseSensitive: false);
+final RegExp _handleRe = RegExp(r'^[A-Za-z0-9._]{1,30}$');
+
+/// Tidies a typed value before it is checked and saved.
+String normalizeFieldText(ProfileFieldDef d, String raw) {
+  final v = raw.trim();
+  switch (d.validator) {
+    case FieldValidator.email:
+      return v.toLowerCase();
+    case FieldValidator.handle:
+      return v.startsWith('@') ? v.substring(1).trim() : v;
+    case FieldValidator.phone:
+      return v.replaceAll(RegExp(r'\s+'), ' ');
+    case FieldValidator.url:
+    case FieldValidator.none:
+      return v;
+  }
+}
+
+/// Returns a short message if [value] is not acceptable, or null if it is fine.
+/// An empty value is always fine (it clears the field).
+String? validateFieldText(ProfileFieldDef d, String value) {
+  if (value.isEmpty) return null;
+  switch (d.validator) {
+    case FieldValidator.email:
+      return _emailRe.hasMatch(value) ? null : 'Enter a valid email, like name@example.com';
+    case FieldValidator.phone:
+      final digits = value.replaceAll(RegExp(r'\D'), '');
+      final okChars = RegExp(r'^[0-9+\-() ]+$').hasMatch(value);
+      return okChars && digits.length >= 7 && digits.length <= 15
+          ? null
+          : 'Enter a valid phone number, like +234 801 234 5678';
+    case FieldValidator.url:
+      return _urlRe.hasMatch(value) ? null : 'Enter a valid link, like example.com';
+    case FieldValidator.handle:
+      return _handleRe.hasMatch(value)
+          ? null
+          : 'Use letters, numbers, dots and underscores only (max 30)';
+    case FieldValidator.none:
+      return null;
+  }
+}
 
 const List<String> _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',

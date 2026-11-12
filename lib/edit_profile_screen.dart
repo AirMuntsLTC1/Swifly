@@ -6,6 +6,8 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 import 'profile_store.dart';
+import 'suggest_engine.dart';
+import 'suggest_picker.dart';
 
 const Color _brandBlue = Color(0xFF1D6FDC);
 const Color _grey = Color(0xFF8E8E8E);
@@ -236,6 +238,13 @@ class _FieldEditorScreenState extends State<FieldEditorScreen> {
   late DateTime? _date;
   late Audience _audience;
 
+  // Search fields: the main pick (company, school, place ...) and, for work and
+  // school, an optional second pick (job title, field of study).
+  late String _primary;
+  late String _secondary;
+
+  String? _error;
+
   @override
   void initState() {
     super.initState();
@@ -244,6 +253,15 @@ class _FieldEditorScreenState extends State<FieldEditorScreen> {
     _choice = f.value;
     _date = DateTime.tryParse(f.value);
     _audience = f.audience;
+
+    if (widget.def.secondary != null) {
+      final parts = parseAt(f.value);
+      _primary = parts.primary;
+      _secondary = parts.secondary;
+    } else {
+      _primary = f.value;
+      _secondary = '';
+    }
   }
 
   @override
@@ -253,10 +271,13 @@ class _FieldEditorScreenState extends State<FieldEditorScreen> {
   }
 
   String get _valueToSave {
-    final kind = widget.def.kind;
-    if (kind == FieldKind.date) return _date == null ? '' : isoDate(_date!);
-    if (kind == FieldKind.choice) return _choice;
-    return _text.text;
+    final d = widget.def;
+    if (d.kind == FieldKind.date) return _date == null ? '' : isoDate(_date!);
+    if (d.kind == FieldKind.choice) return _choice;
+    if (d.suggest != null) {
+      return d.secondary != null ? composeAt(_primary, _secondary) : _primary.trim();
+    }
+    return normalizeFieldText(d, _text.text);
   }
 
   Future<void> _pickDate() async {
@@ -269,11 +290,106 @@ class _FieldEditorScreenState extends State<FieldEditorScreen> {
     if (picked != null) setState(() => _date = picked);
   }
 
+  /// Tells the suggestion service what was used, so it can be offered first next time.
+  void _rememberPicks() {
+    final d = widget.def;
+    final kind = d.suggest;
+    if (kind == null) return;
+    final service = SuggestService.instance;
+    if (d.multi) {
+      for (final v in splitMulti(_primary)) {
+        service.remember(kind, v);
+      }
+    } else if (_primary.trim().isNotEmpty) {
+      service.remember(kind, _primary);
+    }
+    final second = d.secondary;
+    if (second != null && _secondary.trim().isNotEmpty) {
+      service.remember(second, _secondary);
+    }
+  }
+
   void _save() {
+    final d = widget.def;
+
+    if (d.suggest != null && d.secondary != null && _primary.trim().isEmpty && _secondary.trim().isNotEmpty) {
+      setState(() {
+        _error = d.suggest == SuggestKind.company ? 'Add the company first' : 'Add the school first';
+      });
+      return;
+    }
+
+    if (d.suggest == null && (d.kind == FieldKind.text || d.kind == FieldKind.multiline)) {
+      final problem = validateFieldText(d, normalizeFieldText(d, _text.text));
+      if (problem != null) {
+        setState(() => _error = problem);
+        return;
+      }
+    }
+
     final store = ProfileStore.instance;
-    store.setValue(widget.def.key, _valueToSave);
-    store.setAudience(widget.def.key, _audience);
+    store.setValue(d.key, _valueToSave);
+    store.setAudience(d.key, _audience);
+    _rememberPicks();
     Navigator.pop(context);
+  }
+
+  TextInputType _keyboard(FieldValidator v) => switch (v) {
+        FieldValidator.email => TextInputType.emailAddress,
+        FieldValidator.phone => TextInputType.phone,
+        FieldValidator.url => TextInputType.url,
+        FieldValidator.handle => TextInputType.text,
+        FieldValidator.none => TextInputType.text,
+      };
+
+  Widget _smallLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(text,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF65676B))),
+    );
+  }
+
+  Widget _searchInput() {
+    final d = widget.def;
+    final kind = d.suggest!;
+    final second = d.secondary;
+    final maxLen = d.multi ? 250 : 80;
+
+    final primary = SuggestPicker(
+      key: ValueKey('primary-${d.key}'),
+      kind: kind,
+      multi: d.multi,
+      initialValue: _primary,
+      maxLength: maxLen,
+      autofocus: _primary.isEmpty,
+      errorText: _error,
+      onChanged: (v) {
+        _primary = v;
+        if (_error != null) setState(() => _error = null);
+      },
+    );
+    if (second == null) return primary;
+
+    final isWork = kind == SuggestKind.company;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _smallLabel(isWork ? 'Company' : 'School'),
+        primary,
+        const SizedBox(height: 24),
+        _smallLabel(isWork ? 'Position (optional)' : 'Field of study (optional)'),
+        SuggestPicker(
+          key: ValueKey('secondary-${d.key}'),
+          kind: second,
+          initialValue: _secondary,
+          onChanged: (v) {
+            _secondary = v;
+            if (_error != null) setState(() => _error = null);
+          },
+        ),
+      ],
+    );
   }
 
   Widget _input() {
@@ -305,14 +421,25 @@ class _FieldEditorScreenState extends State<FieldEditorScreen> {
         ],
       );
     }
+    if (d.suggest != null) return _searchInput();
+
     final multi = d.kind == FieldKind.multiline;
+    final strict = d.validator != FieldValidator.none;
     return TextField(
       controller: _text,
       cursorColor: Colors.black,
       maxLines: multi ? 4 : 1,
       maxLength: multi ? 150 : 80,
+      keyboardType: multi ? TextInputType.multiline : _keyboard(d.validator),
+      autocorrect: !strict,
+      enableSuggestions: !strict,
+      textCapitalization: strict ? TextCapitalization.none : TextCapitalization.sentences,
+      onChanged: (_) {
+        if (_error != null) setState(() => _error = null);
+      },
       decoration: InputDecoration(
         hintText: d.label,
+        errorText: _error,
         filled: true,
         fillColor: const Color(0xFFF2F2F2),
         border: OutlineInputBorder(
@@ -341,6 +468,7 @@ class _FieldEditorScreenState extends State<FieldEditorScreen> {
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
           _input(),
           const SizedBox(height: 28),

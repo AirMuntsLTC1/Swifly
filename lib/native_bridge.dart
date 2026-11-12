@@ -42,6 +42,18 @@ typedef _AgeDart = int Function(int by, int bm, int bd, int ty, int tm, int td);
 typedef _CanSeeNative = Int32 Function(Int32 audience, Int32 isOwner, Int32 viewerFollowsOwner);
 typedef _CanSeeDart = int Function(int audience, int isOwner, int viewerFollowsOwner);
 
+typedef _SuggestNative = Int32 Function(Pointer<Utf8> joined, Pointer<Utf8> query,
+    Int32 maxResults, Pointer<Int32> outIdx, Pointer<Int32> outScores);
+typedef _SuggestDart = int Function(Pointer<Utf8> joined, Pointer<Utf8> query,
+    int maxResults, Pointer<Int32> outIdx, Pointer<Int32> outScores);
+
+/// One search hit: the position in the candidate list and how well it matched.
+class SuggestHit {
+  final int index;
+  final int score;
+  const SuggestHit(this.index, this.score);
+}
+
 /// Bridge to the C++ core (cpp/swifly_core.cpp, built as libswifly_core.so).
 /// Every function falls back to pure Dart if the native library is missing.
 class NativeCore {
@@ -89,6 +101,9 @@ class NativeCore {
       (l) => l.lookupFunction<_AgeNative, _AgeDart>('swifly_age_years'));
   static final _CanSeeDart? _canSeeFn = _safe<_CanSeeDart>(
       (l) => l.lookupFunction<_CanSeeNative, _CanSeeDart>('swifly_can_see'));
+
+  static final _SuggestDart? _suggest = _safe<_SuggestDart>(
+      (l) => l.lookupFunction<_SuggestNative, _SuggestDart>('swifly_suggest_search'));
 
   static bool get isNativeReady => _library != null;
 
@@ -219,6 +234,29 @@ class NativeCore {
     return 0;
   }
 
+  /// Search-as-you-type ranking for profile suggestions.
+  /// [joined] holds every candidate (lowercase, accent-free) separated by '\n'.
+  /// [query] must be lowercase and accent-free too. Best match first.
+  static List<SuggestHit> suggestSearch(String joined, String query, int maxResults) {
+    if (query.isEmpty || maxResults <= 0 || joined.isEmpty) return const [];
+    final f = _suggest;
+    if (f == null) return _dartSuggest(joined, query, maxResults);
+
+    final j = joined.toNativeUtf8();
+    final q = query.toNativeUtf8();
+    final idx = calloc<Int32>(maxResults);
+    final scores = calloc<Int32>(maxResults);
+    try {
+      final n = f(j, q, maxResults, idx, scores);
+      return List<SuggestHit>.generate(n, (i) => SuggestHit(idx[i], scores[i]));
+    } finally {
+      malloc.free(j);
+      malloc.free(q);
+      calloc.free(idx);
+      calloc.free(scores);
+    }
+  }
+
   // ---- Pure Dart fallbacks (used if the native library is not present) ----
 
   static int _dartCountHashtag(String joinedTexts, String tag) {
@@ -298,5 +336,79 @@ class NativeCore {
     final order = List<int>.generate(n, (i) => i);
     order.sort((a, b) => scores[b].compareTo(scores[a]));
     return order;
+  }
+
+  // ---- Suggestion scoring fallback (mirrors swifly_suggest_search in C++) ----
+
+  static bool _isBreak(int c) =>
+      c == 32 || c == 45 || c == 46 || c == 47 || c == 38 || c == 40 || c == 44 || c == 58 || c == 43;
+
+  static bool _hasWordPrefix(String c, String w) {
+    if (w.isEmpty) return true;
+    var pos = c.indexOf(w);
+    while (pos >= 0) {
+      if (pos == 0 || _isBreak(c.codeUnitAt(pos - 1))) return true;
+      pos = c.indexOf(w, pos + 1);
+    }
+    return false;
+  }
+
+  static bool _oneTypoPrefix(String c, String q) {
+    final n = q.length;
+    if (n < 4 || c.length < n) return false;
+    var diff = 0;
+    var first = 0;
+    for (var i = 0; i < n; i++) {
+      if (c.codeUnitAt(i) != q.codeUnitAt(i)) {
+        if (diff == 0) first = i;
+        diff++;
+        if (diff > 2) return false;
+      }
+    }
+    if (diff == 1) return true;
+    return diff == 2 &&
+        first + 1 < n &&
+        c.codeUnitAt(first) == q.codeUnitAt(first + 1) &&
+        c.codeUnitAt(first + 1) == q.codeUnitAt(first);
+  }
+
+  static bool _isSubsequence(String c, String q) {
+    var qi = 0;
+    for (var ci = 0; ci < c.length && qi < q.length; ci++) {
+      if (c.codeUnitAt(ci) == q.codeUnitAt(qi)) qi++;
+    }
+    return qi == q.length;
+  }
+
+  static int _suggestScore(String c, String q, List<String> words) {
+    if (c == q) return 1000;
+    final extra = c.length - math.min(c.length, q.length);
+    if (c.length > q.length && c.startsWith(q)) return 900 - math.min(extra, 60);
+    var pos = c.indexOf(q);
+    final first = pos;
+    while (pos >= 0) {
+      if (pos > 0 && _isBreak(c.codeUnitAt(pos - 1))) return 700 - math.min(pos, 60);
+      pos = c.indexOf(q, pos + 1);
+    }
+    if (first >= 0) return 500 - math.min(first, 60);
+    if (words.length >= 2 && words.every((w) => _hasWordPrefix(c, w))) return 450;
+    if (_oneTypoPrefix(c, q)) return 320 - math.min(extra, 40);
+    if (q.length >= 3 && _isSubsequence(c, q)) return 150;
+    return 0;
+  }
+
+  static List<SuggestHit> _dartSuggest(String joined, String q, int maxResults) {
+    final words = q.split(' ').where((w) => w.isNotEmpty).toList();
+    final lines = joined.split('\n');
+    final hits = <SuggestHit>[];
+    for (var i = 0; i < lines.length; i++) {
+      final score = _suggestScore(lines[i], q, words);
+      if (score > 0) hits.add(SuggestHit(i, score));
+    }
+    hits.sort((a, b) {
+      final byScore = b.score.compareTo(a.score);
+      return byScore != 0 ? byScore : a.index.compareTo(b.index);
+    });
+    return hits.length > maxResults ? hits.sublist(0, maxResults) : hits;
   }
 }

@@ -214,3 +214,141 @@ SWIFLY_EXPORT int32_t swifly_can_see(int32_t audience, int32_t is_owner, int32_t
     if (audience == 1) return viewer_follows_owner ? 1 : 0;
     return 1;
 }
+
+
+// ---------------------------------------------------------------------------
+// Profile suggestions (company, school, hobby, place ... search-as-you-type).
+//
+// `joined` is every candidate, lowercase and accent-free, separated by '\n'.
+// `query` is already lowercase and accent-free (Dart folds both sides).
+// Scores (higher is better), kept identical to NativeCore._dartSuggest:
+//   1000 exact | 900 starts with | 700 a later word starts with
+//    500 contains | 450 every query word starts a word | 320 one typo
+//    150 letters appear in order (only for queries of 3+ letters)
+// Ties keep the list order, so each dataset's popularity order still counts.
+// ---------------------------------------------------------------------------
+namespace swifly {
+
+bool is_word_break(char c) {
+    return c == ' ' || c == '-' || c == '.' || c == '/' || c == '&' || c == '(' ||
+           c == ',' || c == ':' || c == '+';
+}
+
+// True if some word in `c` starts with `w`.
+bool has_word_prefix(const std::string& c, const std::string& w) {
+    if (w.empty()) return true;
+    size_t pos = 0;
+    while ((pos = c.find(w, pos)) != std::string::npos) {
+        if (pos == 0 || is_word_break(c[pos - 1])) return true;
+        ++pos;
+    }
+    return false;
+}
+
+bool one_typo_prefix(const std::string& c, const std::string& q) {
+    const size_t n = q.size();
+    if (n < 4 || c.size() < n) return false;
+    int diff = 0;
+    size_t first = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (c[i] != q[i]) {
+            if (diff == 0) first = i;
+            ++diff;
+            if (diff > 2) return false;
+        }
+    }
+    if (diff == 1) return true;
+    // Two neighbouring letters swapped ("googel" for "google").
+    return diff == 2 && first + 1 < n && c[first] == q[first + 1] && c[first + 1] == q[first];
+}
+
+bool is_subsequence(const std::string& c, const std::string& q) {
+    size_t qi = 0;
+    for (size_t ci = 0; ci < c.size() && qi < q.size(); ++ci) {
+        if (c[ci] == q[qi]) ++qi;
+    }
+    return qi == q.size();
+}
+
+int32_t suggest_score(const std::string& c, const std::string& q,
+                      const std::vector<std::string>& words) {
+    if (c == q) return 1000;
+    const int32_t extra = static_cast<int32_t>(c.size() - std::min(c.size(), q.size()));
+    if (c.size() > q.size() && c.compare(0, q.size(), q) == 0) {
+        return 900 - std::min<int32_t>(extra, 60);
+    }
+    size_t pos = 0;
+    while ((pos = c.find(q, pos)) != std::string::npos) {
+        if (pos > 0 && is_word_break(c[pos - 1])) {
+            return 700 - std::min<int32_t>(static_cast<int32_t>(pos), 60);
+        }
+        ++pos;
+    }
+    pos = c.find(q);
+    if (pos != std::string::npos) {
+        return 500 - std::min<int32_t>(static_cast<int32_t>(pos), 60);
+    }
+    if (words.size() >= 2) {
+        bool all = true;
+        for (const std::string& w : words) {
+            if (!has_word_prefix(c, w)) { all = false; break; }
+        }
+        if (all) return 450;
+    }
+    if (one_typo_prefix(c, q)) return 320 - std::min<int32_t>(extra, 40);
+    if (q.size() >= 3 && is_subsequence(c, q)) return 150;
+    return 0;
+}
+
+}  // namespace swifly
+
+// Fills out_idx / out_scores with the best matches (best first).
+// Returns how many were written (at most max_results).
+SWIFLY_EXPORT int32_t swifly_suggest_search(const char* joined, const char* query,
+                                            int32_t max_results, int32_t* out_idx,
+                                            int32_t* out_scores) {
+    if (joined == nullptr || query == nullptr || out_idx == nullptr ||
+        out_scores == nullptr || max_results <= 0) {
+        return 0;
+    }
+    const std::string q(query);
+    if (q.empty()) return 0;
+
+    std::vector<std::string> words;
+    {
+        std::string cur;
+        for (char ch : q) {
+            if (ch == ' ') {
+                if (!cur.empty()) words.push_back(cur);
+                cur.clear();
+            } else {
+                cur += ch;
+            }
+        }
+        if (!cur.empty()) words.push_back(cur);
+    }
+
+    struct Hit { int32_t index; int32_t score; };
+    std::vector<Hit> hits;
+    int32_t index = 0;
+    const char* p = joined;
+    while (true) {
+        const char* end = std::strchr(p, '\n');
+        const size_t len = end ? static_cast<size_t>(end - p) : std::strlen(p);
+        const std::string candidate(p, len);
+        const int32_t score = swifly::suggest_score(candidate, q, words);
+        if (score > 0) hits.push_back({index, score});
+        ++index;
+        if (end == nullptr) break;
+        p = end + 1;
+    }
+
+    std::stable_sort(hits.begin(), hits.end(),
+                     [](const Hit& a, const Hit& b) { return a.score > b.score; });
+    const int32_t n = std::min<int32_t>(max_results, static_cast<int32_t>(hits.size()));
+    for (int32_t i = 0; i < n; ++i) {
+        out_idx[i] = hits[static_cast<size_t>(i)].index;
+        out_scores[i] = hits[static_cast<size_t>(i)].score;
+    }
+    return n;
+}

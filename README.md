@@ -61,3 +61,45 @@ There are no friend requests. Everything is follow-based.
 - C++ (`cpp/swifly_core.cpp`): `swifly_age_years` calculates age from the birthday, and `swifly_can_see` applies the privacy rule. Both have Dart fallbacks in `lib/native_bridge.dart`.
 - Saving: `lib/database_service.dart` has `saveProfileField` and `uploadAvatar` to connect to your database.
 
+## Profile suggestions (search as you type)
+
+Work, school, hobbies, music, TV, movies, games, sports, places, languages and the two city fields search while you type.
+Type "J" and every name starting with J is listed. Keep typing and the list narrows until yours appears. Tap a row to pick it.
+Anything missing from the list can be saved as typed ("Add ...").
+
+- `lib/suggest_data.dart`: the built-in lists, one entry per line as `Title|Subtitle`. Most popular first. Add or remove lines freely.
+- `lib/suggest_engine.dart`: `SuggestService` (search, recent picks, merge with database results) and the helpers that join several picks or combine "Position at Company".
+- `lib/suggest_picker.dart`: the search box, the live list with the matched letters in bold, and the chips for fields that take several picks.
+- `lib/profile_store.dart`: each field says what it searches in `kProfileSections` (`suggest:`, `secondary:`, `multi:`). Email, phone number, website and social handle are checked before saving.
+- C++ (`cpp/swifly_core.cpp`): `swifly_suggest_search` ranks the matches (exact, starts with, a later word starts with, contains, small typos). `NativeCore.suggestSearch` has the same ranking in Dart as a fallback.
+- Tests: `flutter test test/suggest_engine_test.dart`.
+
+How several picks are stored: Hobbies, Music, TV shows, Movies, Games, Sports, Places and Languages are saved as one text value joined with " • ". Work and School are saved as "Position at Company".
+
+### Connecting shared suggestions (database)
+`DatabaseService.searchSuggestions` and `recordSuggestionPick` are stubs. When they are connected, things other people typed (a small company, a local school) start appearing for everyone, and popular ones rise. Example for Supabase:
+
+```sql
+create extension if not exists pg_trgm;
+create table profile_suggestions (
+  category text not null,
+  title text not null,
+  subtitle text not null default '',
+  uses int not null default 1,
+  primary key (category, title)
+);
+create index on profile_suggestions using gin (title gin_trgm_ops);
+
+create function search_profile_suggestions(p_category text, p_query text, p_limit int default 6)
+returns table(title text, subtitle text) language sql stable as $$
+  select title, subtitle from profile_suggestions
+  where category = p_category and title ilike p_query || '%'
+  order by uses desc limit p_limit;
+$$;
+
+create function record_profile_suggestion(p_category text, p_value text)
+returns void language sql as $$
+  insert into profile_suggestions (category, title) values (p_category, p_value)
+  on conflict (category, title) do update set uses = profile_suggestions.uses + 1;
+$$;
+```

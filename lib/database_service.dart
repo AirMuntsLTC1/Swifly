@@ -43,4 +43,24 @@ class DatabaseService {
     await Future.delayed(const Duration(milliseconds: 300));
     // Example: upload the file to storage, then save its URL on the profile.
   }
+
+  /// Values other people typed for a profile field that the built-in lists do
+  /// not have (a small company, a local school ...). [category] is the
+  /// SuggestKind name: company, school, jobTitle, fieldOfStudy, hobby, music,
+  /// tv, movie, game, sport, place, language.
+  /// Return rows like {'title': 'Acme Labs', 'subtitle': 'Lagos'}.
+  Future<List<Map<String, String>>> searchSuggestions(String category, String query) async {
+    await Future.delayed(const Duration(milliseconds: 120));
+    // Example (Supabase):
+    //   final rows = await supabase.rpc('search_profile_suggestions',
+    //       params: {'p_category': category, 'p_query': query, 'p_limit': 6});
+    //   return [for (final r in rows) {'title': r['title'], 'subtitle': r['subtitle'] ?? ''}];
+    return <Map<String, String>>[];
+  }
+
+  /// Counts one use of a value so popular entries rise in everyone's list.
+  Future<void> recordSuggestionPick(String category, String value) async {
+    await Future.delayed(const Duration(milliseconds: 80));
+    // Example: await supabase.rpc('record_profile_suggestion', params: {'p_category': category, 'p_value': value});
+  }
 }
