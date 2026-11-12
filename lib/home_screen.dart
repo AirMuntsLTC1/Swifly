@@ -10,7 +10,12 @@ import 'feed_widgets.dart';
 import 'post_model.dart';
 import 'follow_button.dart';
 import 'follow_store.dart';
+import 'add_story_screen.dart';
 import 'edit_profile_screen.dart';
+import 'inbox_store.dart';
+import 'responsive.dart';
+import 'story_viewer_screen.dart';
+import 'user_profile_screen.dart';
 import 'profile_details_section.dart';
 import 'profile_store.dart';
 import 'connections_screen.dart';
@@ -373,159 +378,236 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
 
+  Future<void> _addStory() async {
+    final posted = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const AddStoryScreen()),
+    );
+    if (posted == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your story is live')),
+      );
+    }
+  }
+
+  Widget _avatar(R r) {
+    final path = ProfileStore.instance.avatarPath;
+    final hasStory = StoryStore.instance.hasStory;
+    final radius = r.s(44);
+    final avatar = CircleAvatar(
+      radius: radius,
+      backgroundColor: Colors.black,
+      backgroundImage: path == null ? null : FileImage(File(path)),
+      child: path == null ? Icon(LucideIcons.user, color: Colors.white, size: r.s(40)) : null,
+    );
+    return GestureDetector(
+      onTap: () {
+        if (hasStory) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const StoryViewerScreen()));
+        } else {
+          Navigator.push(context, editProfileRoute());
+        }
+      },
+      child: hasStory
+          ? Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF1D6FDC), width: 3),
+              ),
+              child: avatar,
+            )
+          : avatar,
+    );
+  }
+
+  Widget _suggestionCard(R r, Person f) {
+    return GestureDetector(
+      onTap: () => Navigator.push(context, UserProfileScreen.route(f)),
+      child: Container(
+        width: r.w(130),
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFEAEAEA)),
+        ),
+        child: Column(
+          children: [
+            SizedBox(height: r.h(12)),
+            CircleAvatar(
+              radius: r.s(30),
+              backgroundColor: Colors.black,
+              child: Icon(LucideIcons.user, color: Colors.white, size: r.s(30)),
+            ),
+            SizedBox(height: r.h(8)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                f.name,
+                style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                f.handle,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: FollowButton(handle: f.handle, compact: true, expand: true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 44,
-            backgroundColor: Colors.black,
-            backgroundImage: ProfileStore.instance.avatarPath == null
-                ? null
-                : FileImage(File(ProfileStore.instance.avatarPath!)),
-            child: ProfileStore.instance.avatarPath == null
-                ? const Icon(LucideIcons.user, color: Colors.white, size: 40)
-                : null,
-          ),
-          const SizedBox(height: 14),
-          const Text(kMeName,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black)),
-          const SizedBox(height: 4),
-          const Text(kMeHandle, style: TextStyle(color: Color(0xFF8E8E8E))),
-          const SizedBox(height: 10),
-          Text(
-            ProfileStore.instance.fieldFor('bio').value.isEmpty
-                ? 'Add a bio'
-                : ProfileStore.instance.fieldFor('bio').value,
-            style: const TextStyle(color: Colors.black, height: 1.4),
-          ),
-          const SizedBox(height: 20),
-          ListenableBuilder(
-            listenable: FollowStore.instance,
-            builder: (context, _) => Row(
-              children: [
-                const _Stat(label: 'Posts', value: '24'),
-                const SizedBox(width: 32),
-                GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectionsScreen(initialFollowers: true))),
-                  child: _Stat(label: 'Followers', value: '${FollowStore.instance.followerHandles.length}'),
-                ),
-                const SizedBox(width: 32),
-                GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ConnectionsScreen(initialFollowers: false))),
-                  child: _Stat(label: 'Following', value: '${FollowStore.instance.followingHandles.length}'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
+    final r = R.of(context);
+    final bio = ProfileStore.instance.fieldFor('bio').value;
+    return ListenableBuilder(
+      listenable: StoryStore.instance,
+      builder: (context, _) => SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(r.pad, r.h(20), r.pad, r.h(96)),
+        child: ContentWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(LucideIcons.plus, size: 18, color: Colors.white),
-                  label: const Text('Add story', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1D6FDC),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => Navigator.push(context, editProfileRoute()),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1D6FDC),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text('Edit profile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          const ProfileDetailsSection(),
-          const SizedBox(height: 30),
-          Row(
-            children: [
-              const Text('Suggestions People',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
-              const Spacer(),
+              _avatar(r),
+              SizedBox(height: r.h(14)),
+              const Text(kMeName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black)),
+              const SizedBox(height: 4),
+              const Text(kMeHandle, style: TextStyle(color: Color(0xFF8E8E8E))),
+              SizedBox(height: r.h(10)),
               GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SuggestionsScreen())),
-                child: const Text(
-                  'See all',
+                onTap: () => Navigator.push(context, fieldEditorRoute(kProfileSections.first.fields.first)),
+                child: Text(
+                  bio.isEmpty ? 'Add a bio' : bio,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1D6FDC),
-                    decoration: TextDecoration.underline,
-                    decorationColor: Color(0xFF1D6FDC),
-                    decorationThickness: 2,
+                      color: bio.isEmpty ? const Color(0xFF8E8E8E) : Colors.black, height: 1.4),
+                ),
+              ),
+              SizedBox(height: r.h(20)),
+              ListenableBuilder(
+                listenable: FollowStore.instance,
+                builder: (context, _) => FlexRow(
+                  spacing: r.w(32),
+                  children: [
+                    const _Stat(label: 'Posts', value: '24'),
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ConnectionsScreen(initialFollowers: true))),
+                      child: _Stat(
+                          label: 'Followers',
+                          value: '${FollowStore.instance.followerHandles.length}'),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ConnectionsScreen(initialFollowers: false))),
+                      child: _Stat(
+                          label: 'Following',
+                          value: '${FollowStore.instance.followingHandles.length}'),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: r.h(20)),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _addStory,
+                      icon: const Icon(LucideIcons.plus, size: 18, color: Colors.white),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Add story',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1D6FDC),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        padding: EdgeInsets.symmetric(vertical: r.h(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.push(context, editProfileRoute()),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1D6FDC),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        padding: EdgeInsets.symmetric(vertical: r.h(12)),
+                      ),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Update profile',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: r.h(24)),
+              const ProfileDetailsSection(),
+              SizedBox(height: r.h(30)),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Suggestions People',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                        context, MaterialPageRoute(builder: (_) => const SuggestionsScreen())),
+                    child: const Text(
+                      'See all',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1D6FDC),
+                        decoration: TextDecoration.underline,
+                        decorationColor: Color(0xFF1D6FDC),
+                        decorationThickness: 2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: r.h(12)),
+              ListenableBuilder(
+                listenable: PostStore.instance,
+                builder: (context, _) => SizedBox(
+                  height: r.h(190),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: kPeople.take(10).length,
+                    itemBuilder: (context, i) => _suggestionCard(r, kPeople[i]),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          ListenableBuilder(
-            listenable: PostStore.instance,
-            builder: (context, _) => SizedBox(
-            height: 180,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: kPeople.take(10).length,
-              itemBuilder: (context, i) {
-                final f = kPeople[i];
-                return Container(
-                  width: 130,
-                  margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFEAEAEA)),
-                  ),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 12),
-                      const CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Colors.black,
-                        child: Icon(LucideIcons.user, color: Colors.white, size: 30),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        f.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        f.handle,
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const Spacer(),
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: FollowButton(handle: f.handle, compact: true, expand: true),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -638,3 +720,5 @@ class UploadBanner extends StatelessWidget {
     );
   }
 }
+
+

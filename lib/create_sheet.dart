@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'add_story_screen.dart';
 import 'composer_screen.dart';
 
 /// Small menu that slides up from the + button.
@@ -22,7 +23,12 @@ void showCreateSheet(BuildContext context) {
                 Navigator.of(context).push(composerRoute());
               },
               onGroups: () => Navigator.pop(dialogContext),
-              onStory: () => Navigator.pop(dialogContext),
+              onStory: () {
+                Navigator.pop(dialogContext);
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AddStoryScreen()),
+                );
+              },
             ),
           ),
         ),
@@ -71,7 +77,7 @@ class _CreateMenu extends StatelessWidget {
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        width: 210,
+        width: (MediaQuery.of(context).size.width - 48).clamp(160.0, 210.0).toDouble(),
         padding: const EdgeInsets.all(8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -122,3 +128,5 @@ class _CreateItem extends StatelessWidget {
     );
   }
 }
+
+

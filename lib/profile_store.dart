@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'database_service.dart';
 import 'native_bridge.dart';
@@ -214,6 +219,7 @@ class ProfileStore extends ChangeNotifier {
   /// Unknown keys are ignored and unknown audiences fall back to Everyone,
   /// so adding a field later never breaks older saved data.
   Future<void> loadFromDatabase() async {
+    await loadFromDevice();
     try {
       final rows = await DatabaseService.instance.fetchProfileFields();
       if (rows.isEmpty) return;
@@ -228,7 +234,9 @@ class ProfileStore extends ChangeNotifier {
         );
         saved[key] = ProfileField(value: (r['value'] ?? '').trim(), audience: audience);
       }
-      load(saved, avatar: avatarPath);
+      saved.forEach((k, v) => _fields[k] = v);
+      notifyListeners();
+      _saveToDevice();
     } catch (_) {}
   }
 
@@ -236,20 +244,91 @@ class ProfileStore extends ChangeNotifier {
     fieldFor(key).value = value.trim();
     notifyListeners();
     _save(key);
+    _saveToDevice();
   }
 
   void setAudience(String key, Audience audience) {
     fieldFor(key).audience = audience;
     notifyListeners();
     _save(key);
+    _saveToDevice();
   }
 
   Future<void> setAvatar(String path) async {
+    // Keep our own copy so the picture is still there after the phone cleans its cache.
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final ext = path.contains('.') ? path.substring(path.lastIndexOf('.')) : '.jpg';
+      final dest = '${dir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}$ext';
+      await File(path).copy(dest);
+      final old = avatarPath;
+      path = dest;
+      if (old != null && old.startsWith(dir.path)) {
+        try {
+          await File(old).delete();
+        } catch (_) {}
+      }
+    } catch (_) {}
     avatarPath = path;
     notifyListeners();
+    _saveToDevice();
     try {
       await DatabaseService.instance.uploadAvatar(path);
     } catch (_) {}
+  }
+
+  // ---- saved on the phone, so the profile is still there after you close the app ----
+
+  bool _deviceLoaded = false;
+  Timer? _deviceTimer;
+
+  Future<File> _deviceFile() async {
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}/profile.json');
+  }
+
+  /// Reads the profile saved on this phone. Safe to call more than once.
+  Future<void> loadFromDevice() async {
+    if (_deviceLoaded) return;
+    _deviceLoaded = true;
+    try {
+      final f = await _deviceFile();
+      if (!await f.exists()) return;
+      final data = jsonDecode(await f.readAsString());
+      if (data is! Map) return;
+      final known = {for (final s in kProfileSections) for (final d in s.fields) d.key};
+      final fields = data['fields'];
+      if (fields is Map) {
+        fields.forEach((k, v) {
+          if (k is! String || !known.contains(k) || v is! Map) return;
+          final audience = Audience.values.firstWhere(
+            (a) => a.name == v['audience'],
+            orElse: () => Audience.everyone,
+          );
+          _fields[k] = ProfileField(value: '${v['value'] ?? ''}'.trim(), audience: audience);
+        });
+      }
+      final av = data['avatar'];
+      if (av is String && av.isNotEmpty && await File(av).exists()) avatarPath = av;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  void _saveToDevice() {
+    _deviceTimer?.cancel();
+    _deviceTimer = Timer(const Duration(milliseconds: 400), () async {
+      try {
+        final f = await _deviceFile();
+        final data = {
+          'avatar': avatarPath ?? '',
+          'fields': {
+            for (final e in _fields.entries)
+              e.key: {'value': e.value.value, 'audience': e.value.audience.name},
+          },
+        };
+        await f.writeAsString(jsonEncode(data));
+      } catch (_) {}
+    });
   }
 
   void _save(String key) {
@@ -275,3 +354,5 @@ class ProfileStore extends ChangeNotifier {
         viewerFollowsOwner: viewerFollowsOwner,
       );
 }
+
+

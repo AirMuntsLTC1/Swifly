@@ -412,3 +412,5 @@ class NativeCore {
     return hits.length > maxResults ? hits.sublist(0, maxResults) : hits;
   }
 }
+
+

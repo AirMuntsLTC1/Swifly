@@ -650,21 +650,28 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                     ),
                   ),
                   if (_showEmojiPicker)
-                    SizedBox(
-                      height: 250,
-                      child: EmojiPicker(
-                        onEmojiSelected: (category, emoji) {
-                          _controller.text += emoji.emoji;
-                        },
-                        config: const Config(
-                          height: 256,
-                          checkPlatformCompatibility: true,
-                          emojiViewConfig: EmojiViewConfig(
-                            columns: 8,
-                            emojiSizeMax: 32,
+                    Builder(
+                      builder: (context) {
+                        final size = MediaQuery.of(context).size;
+                        final emojiHeight = (size.height * 0.34).clamp(220.0, 330.0).toDouble();
+                        final emojiColumns = (size.width / 46).floor().clamp(6, 10);
+                        return SizedBox(
+                          height: emojiHeight,
+                          child: EmojiPicker(
+                            onEmojiSelected: (category, emoji) {
+                              _controller.text += emoji.emoji;
+                            },
+                            config: Config(
+                              height: emojiHeight,
+                              checkPlatformCompatibility: true,
+                              emojiViewConfig: EmojiViewConfig(
+                                columns: emojiColumns,
+                                emojiSizeMax: 32,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                 ],
               );
@@ -684,3 +691,5 @@ class FeedFollowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FollowButton(handle: handle, compact: true);
 }
+
+

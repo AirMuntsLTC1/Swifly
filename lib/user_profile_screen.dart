@@ -7,6 +7,7 @@ import 'post_model.dart';
 import 'follow_button.dart';
 import 'tag_friends_screen.dart';
 import 'discover_panel.dart';
+import 'responsive.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final Person user;
@@ -40,6 +41,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget build(BuildContext context) {
     final f = widget.user;
     final stats = kPeopleStats[f.handle] ?? (0, 0);
+    final r = R.of(context);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -58,14 +60,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 96),
-        child: Column(
+        padding: EdgeInsets.fromLTRB(r.pad, 10, r.pad, 96),
+        child: ContentWidth(
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const CircleAvatar(
-              radius: 44,
+            CircleAvatar(
+              radius: r.s(44),
               backgroundColor: Colors.black,
-              child: Icon(LucideIcons.user, color: Colors.white, size: 40),
+              child: Icon(LucideIcons.user, color: Colors.white, size: r.s(40)),
             ),
             const SizedBox(height: 14),
             Text(f.name,
@@ -151,7 +154,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 180,
+              height: r.h(190),
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 itemCount: kPeople.take(10).length,
@@ -165,6 +168,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
           ],
         ),
+        ),
       ),
     );
   }
@@ -176,10 +180,11 @@ class _SuggestionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final r = R.of(context);
     return GestureDetector(
       onTap: () => Navigator.push(context, UserProfileScreen.route(friend)),
       child: Container(
-        width: 130,
+        width: r.w(130),
         margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -237,3 +242,5 @@ class _Stat extends StatelessWidget {
     );
   }
 }
+
+

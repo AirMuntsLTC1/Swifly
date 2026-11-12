@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'database_service.dart';
+import 'location_service.dart';
+import 'logo_service.dart';
 import 'native_bridge.dart';
 import 'suggest_data.dart';
 
@@ -138,7 +140,20 @@ class SuggestEntry {
   /// True for the "Add what you typed" row.
   final bool custom;
 
-  const SuggestEntry(this.title, this.subtitle, this.value, {this.custom = false});
+  /// Address of the real logo (companies and schools). Empty if unknown.
+  final String logo;
+
+  /// Country flag emoji for places found online. Empty if unknown.
+  final String flag;
+
+  const SuggestEntry(
+    this.title,
+    this.subtitle,
+    this.value, {
+    this.custom = false,
+    this.logo = '',
+    this.flag = '',
+  });
 }
 
 class _Index {
@@ -170,7 +185,12 @@ class _Index {
       if (kind.searchSubtitle && sub.isNotEmpty && !isCountry) {
         hay = '$hay, ${foldText(sub)}';
       }
-      entries.add(SuggestEntry(title, sub, value));
+      var logo = '';
+      if (kind == SuggestKind.company || kind == SuggestKind.school) {
+        final d = kKnownDomains[foldText(title).trim()];
+        if (d != null) logo = LogoService.faviconUrl(d);
+      }
+      entries.add(SuggestEntry(title, sub, value, logo: logo));
       foldedValues.add(key);
       haystacks.add(hay.replaceAll('\n', ' '));
     }
@@ -224,22 +244,33 @@ class SuggestService {
     return out;
   }
 
-  /// Values other people entered that the built-in list does not have.
+  /// Live results that the built-in list does not have: real places from
+  /// OpenStreetMap, real companies and schools from Wikidata, plus values other
+  /// people entered (database).
   Future<List<SuggestEntry>> searchRemote(SuggestKind kind, String query) async {
     final q = query.trim();
     if (q.length < 2) return const [];
+    final out = <SuggestEntry>[];
+    try {
+      if (kind == SuggestKind.place) {
+        final places = await LocationService.instance.search(q);
+        for (final p in places) {
+          out.add(SuggestEntry(p.name, p.detail, p.full, flag: flagEmoji(p.countryCode)));
+        }
+      } else if (kind == SuggestKind.company || kind == SuggestKind.school) {
+        out.addAll(await LogoService.instance.searchOrgs(kind, q));
+      }
+    } catch (_) {}
     try {
       final rows = await DatabaseService.instance
           .searchSuggestions(kind.name, q)
           .timeout(const Duration(seconds: 3));
-      return [
-        for (final r in rows)
-          if ((r['title'] ?? '').trim().isNotEmpty)
-            SuggestEntry(r['title']!.trim(), (r['subtitle'] ?? '').trim(), r['title']!.trim()),
-      ];
-    } catch (_) {
-      return const [];
-    }
+      for (final r in rows) {
+        final t = (r['title'] ?? '').trim();
+        if (t.isNotEmpty) out.add(SuggestEntry(t, (r['subtitle'] ?? '').trim(), t));
+      }
+    } catch (_) {}
+    return out;
   }
 
   /// Adds database results under the built-in ones without repeats.
@@ -302,3 +333,5 @@ class SuggestService {
   /// Whether the empty box is showing the person's recent picks.
   bool hasRecent(SuggestKind kind) => (_recent[kind] ?? const <String>[]).isNotEmpty;
 }
+
+

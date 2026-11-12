@@ -352,3 +352,5 @@ SWIFLY_EXPORT int32_t swifly_suggest_search(const char* joined, const char* quer
     }
     return n;
 }
+
+

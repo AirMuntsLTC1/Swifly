@@ -136,3 +136,5 @@ if [ -f "$OUTPUT" ]; then
     echo "Download folder:"
     ls -lh ~/storage/downloads/INTLY_SUPABASE_COMPLETE_EXPORT.txt
 fi
+
+

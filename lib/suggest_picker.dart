@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'location_service.dart';
+import 'logo_service.dart';
 import 'suggest_engine.dart';
 
 const Color _brandBlue = Color(0xFF1D6FDC);
@@ -119,7 +121,7 @@ class _SuggestPickerState extends State<SuggestPicker> {
       final remote = await _service.searchRemote(widget.kind, query);
       if (!mounted || ticket != _ticket || remote.isEmpty) return;
       setState(() {
-        _results = _service.merge(_results, remote, exclude: exclude, limit: _kMaxRows + 2);
+        _results = _service.merge(_results, remote, exclude: exclude, limit: _kMaxRows + 4);
       });
     });
   }
@@ -157,6 +159,10 @@ class _SuggestPickerState extends State<SuggestPicker> {
   void _pick(SuggestEntry entry) {
     final value = entry.value.trim();
     if (value.isEmpty) return;
+    if (entry.logo.isNotEmpty &&
+        (widget.kind == SuggestKind.company || widget.kind == SuggestKind.school)) {
+      LogoService.instance.remember(widget.kind, value, entry.logo);
+    }
 
     if (widget.multi) {
       if (_chosen.any((c) => foldText(c) == foldText(value))) {
@@ -180,6 +186,10 @@ class _SuggestPickerState extends State<SuggestPicker> {
       _focus.unfocus();
       _emit();
     }
+  }
+
+  void _pickPlace(PlaceResult p) {
+    _pick(SuggestEntry(p.name, p.detail, p.full, flag: flagEmoji(p.countryCode)));
   }
 
   void _removeChip(String value) {
@@ -239,7 +249,30 @@ class _SuggestPickerState extends State<SuggestPicker> {
     ];
   }
 
+  Widget _leading(SuggestEntry? e, IconData icon, Color iconColor, Color circle) {
+    final kind = widget.kind;
+    if (e != null && (kind == SuggestKind.company || kind == SuggestKind.school)) {
+      return LogoAvatar(kind: kind, name: e.title, size: 40, knownUrl: e.logo);
+    }
+    if (e != null && e.flag.isNotEmpty) {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(color: circle, shape: BoxShape.circle),
+        alignment: Alignment.center,
+        child: Text(e.flag, style: const TextStyle(fontSize: 22)),
+      );
+    }
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(color: circle, shape: BoxShape.circle),
+      child: Icon(icon, size: 20, color: iconColor),
+    );
+  }
+
   Widget _tile({
+    SuggestEntry? entry,
     required IconData icon,
     required List<InlineSpan> title,
     String subtitle = '',
@@ -254,12 +287,7 @@ class _SuggestPickerState extends State<SuggestPicker> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: circle, shape: BoxShape.circle),
-              child: Icon(icon, size: 20, color: iconColor),
-            ),
+            _leading(entry, icon, iconColor, circle),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -306,6 +334,7 @@ class _SuggestPickerState extends State<SuggestPicker> {
 
     for (final e in _results) {
       rows.add(_tile(
+        entry: e,
         icon: widget.kind.icon,
         title: _titleSpans(e.title, query),
         subtitle: e.subtitle,
@@ -389,6 +418,10 @@ class _SuggestPickerState extends State<SuggestPicker> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (widget.multi && _chosen.isNotEmpty) _chips(chipWidth),
+        if (widget.kind == SuggestKind.place) ...[
+          UseLocationButton(onPlace: _pickPlace),
+          const SizedBox(height: 12),
+        ],
         TextField(
           controller: _controller,
           focusNode: _focus,
@@ -453,3 +486,5 @@ class _SuggestPickerState extends State<SuggestPicker> {
     );
   }
 }
+
+

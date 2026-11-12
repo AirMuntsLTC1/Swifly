@@ -22,3 +22,5 @@ sed -i "s/LucideIcons.checkCircle2/LucideIcons.circleCheck/" lib/home_screen.dar
 
 echo "Done. Now run:"
 echo "  git add . && git commit -m 'Fix video freeze and build errors' && git push"
+
+

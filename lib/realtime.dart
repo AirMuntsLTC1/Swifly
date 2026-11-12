@@ -97,3 +97,5 @@ class UnfollowedEvent extends RealtimeEvent {
   final String actorHandle;
   const UnfollowedEvent({required this.actorName, required this.actorHandle});
 }
+
+

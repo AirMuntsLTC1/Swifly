@@ -195,7 +195,30 @@ class StoryStore extends ChangeNotifier {
   static final StoryStore instance = StoryStore._();
 
   String caption = '';
+  String? imagePath;
+  int bgColor = 0xFF1D6FDC;
+  DateTime? postedAt;
   final List<StoryReaction> _reactions = [];
+
+  bool get hasStory => caption.trim().isNotEmpty || imagePath != null;
+
+  /// Posts a new story (replaces the old one and its reactions).
+  void post({required String caption, String? imagePath, int? bgColor}) {
+    this.caption = caption.trim();
+    this.imagePath = imagePath;
+    if (bgColor != null) this.bgColor = bgColor;
+    postedAt = DateTime.now();
+    _reactions.clear();
+    notifyListeners();
+  }
+
+  void delete() {
+    caption = '';
+    imagePath = null;
+    postedAt = null;
+    _reactions.clear();
+    notifyListeners();
+  }
 
   List<StoryReaction> get reactions => List.unmodifiable(_reactions);
 
@@ -215,3 +238,5 @@ class StoryStore extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'inbox_store.dart';
@@ -18,6 +20,16 @@ class StoryViewerScreen extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text('Your story',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(
+            tooltip: 'Delete story',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () {
+              StoryStore.instance.delete();
+              Navigator.pop(context);
+            },
+          ),
+        ],
       ),
       body: ListenableBuilder(
         listenable: StoryStore.instance,
@@ -26,15 +38,37 @@ class StoryViewerScreen extends StatelessWidget {
           return Column(
             children: [
               Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      store.caption,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800),
-                    ),
+                child: Container(
+                  width: double.infinity,
+                  color: store.imagePath == null ? Color(store.bgColor) : Colors.black,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (store.imagePath != null)
+                        Image.file(
+                          File(store.imagePath!),
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      if (store.caption.isNotEmpty)
+                        Align(
+                          alignment: store.imagePath == null
+                              ? Alignment.center
+                              : Alignment.bottomCenter,
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              store.caption,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                  shadows: [Shadow(blurRadius: 8, color: Colors.black54)]),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -53,7 +87,7 @@ class StoryViewerScreen extends StatelessWidget {
                         style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 10),
                     SizedBox(
-                      height: 220,
+                      height: MediaQuery.of(context).size.height * 0.26,
                       child: ListView(
                         children: [
                           for (final r in store.reactions)
@@ -96,3 +130,5 @@ class StoryViewerScreen extends StatelessWidget {
     );
   }
 }
+
+

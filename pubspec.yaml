@@ -17,6 +17,7 @@ dependencies:
   video_player: ^2.9.2
   visibility_detector: ^0.4.0+2
   path_provider: ^2.1.4
+  geolocator: ^13.0.2
 
 dev_dependencies:
   flutter_test:
@@ -25,3 +26,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+
