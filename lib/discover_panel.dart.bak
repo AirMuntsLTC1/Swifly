@@ -186,6 +186,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
 
   Widget _results(String q) {
     final people = kPeople
+        .where((f) => f.handle != kMeHandle)
         .where((f) =>
             NativeCore.containsCI(f.name, q) ||
             NativeCore.containsCI(f.handle, q))

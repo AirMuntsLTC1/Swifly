@@ -32,22 +32,30 @@ Future<void> main() async {
   VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 120);
   // Sign in: starts Supabase and restores a saved login. Does nothing until
   // lib/supabase_config.dart is filled in.
-  await AuthService.init();
-  final inApp = !AuthService.instance.needsLogin;
-  if (inApp) {
-    AuthService.instance.applyUser();
-    // Loads everything from Supabase.
-    await loadAppData();
+  try {
+    // 10-second max wait for login restoration
+    await AuthService.init().timeout(const Duration(seconds: 10));
+    if (!AuthService.instance.needsLogin) {
+      AuthService.instance.applyUser();
+    }
+  } catch (e) {
+    debugPrint('Startup error: $e');
   }
-  // Bring back the profile saved on this phone and the saved company/school logos.
+  
   ProfileStore.instance.loadFromDevice();
   LogoService.instance.load();
   RealtimeRouter.init();
   NotificationBanner.init();
+  
+  // Load the UI immediately so it never gets stuck on the Flutter logo
   runApp(const SocialApp());
-  // Unpack the PHP media scripts and trim the local media cache in the background.
+  
+  final inApp = !AuthService.instance.needsLogin;
+  if (inApp) {
+    // Load database in the background AFTER the UI is drawn
+    loadAppData().then((_) => startLiveActivity());
+  }
   MediaPipeline.instance.ensureReady().then((_) => MediaPipeline.instance.trimCache());
-  if (inApp) startLiveActivity();
 }
 
 class SocialApp extends StatelessWidget {

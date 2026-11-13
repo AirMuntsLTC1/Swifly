@@ -27,9 +27,21 @@ void startLiveActivity() {
 Future<void> refreshPosts() async {
   final saved = await DatabaseService.instance.fetchPosts();
   final pending = PostStore.instance.unsaved;
+  
+  final filteredSaved = saved.where((savedRow) {
+    final savedText = '${savedRow['text'] ?? ''}'.trim();
+    final savedMediaLen = (savedRow['media'] as List?)?.length ?? 0;
+    for (final local in pending) {
+      if (local.text.trim() == savedText && local.media.length == savedMediaLen) {
+        return false;
+      }
+    }
+    return true;
+  }).toList();
+
   PostStore.instance.load(posts: [
     ...pending,
-    for (final r in saved) postFromRow(r),
+    for (final r in filteredSaved) postFromRow(r),
   ]);
 }
 
