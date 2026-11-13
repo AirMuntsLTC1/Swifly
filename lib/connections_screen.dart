@@ -14,13 +14,15 @@ import 'people_directory.dart';
 /// other people's lists come from the database.
 class ConnectionsScreen extends StatefulWidget {
   final bool initialFollowers;
-  final String userHandle;
-  final String userName;
+  // Optional. Not used yet. Defaults cannot read kMeHandle/kMeName here because
+  // those values are only known at runtime, not at compile time.
+  final String? userHandle;
+  final String? userName;
   const ConnectionsScreen({
     super.key,
     required this.initialFollowers,
-    this.userHandle = kMeHandle,
-    this.userName = kMeName,
+    this.userHandle,
+    this.userName,
   });
 
   @override
