@@ -62,17 +62,30 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" > /dev/null || true
 
-      - name: Cache PHP runtime for Android
+      # The PHP runtime is only cached when it was really built. (An empty cache
+      # entry would make every later run skip the build.)
+      - name: Restore PHP runtime for Android
         id: phpcache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: build/php-android/out
           key: php-android-${{ hashFiles('tools/build_php_android.sh') }}
 
       - name: Build PHP runtime for Android (optional, app still builds if it fails)
         if: steps.phpcache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: bash tools/build_php_android.sh
+        run: |
+          if bash tools/build_php_android.sh; then
+            echo "PHP runtime built"
+          else
+            echo "::warning title=PHP runtime::The PHP runtime could not be built. The app still builds and uses the C++ fallback for photos and videos. Open this step's log to see why."
+          fi
+
+      - name: Save PHP runtime to cache
+        if: steps.phpcache.outputs.cache-hit != 'true' && hashFiles('build/php-android/out/libphp_cli.so') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/php-android/out
+          key: php-android-${{ hashFiles('tools/build_php_android.sh') }}
 
       - name: Add PHP runtime to the APK
         run: |
@@ -81,7 +94,7 @@ jobs:
             cp build/php-android/out/libphp_cli.so android/app/src/main/jniLibs/arm64-v8a/
             echo "PHP runtime added to the APK"
           else
-            echo "::warning::No PHP runtime was built. Photos and videos use the C++ fallback."
+            echo "::notice::No PHP runtime was built. Photos and videos use the C++ fallback."
           fi
 
       - name: Wire C++ core into the Android build

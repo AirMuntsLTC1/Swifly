@@ -85,7 +85,7 @@ List<Person> dmSuggestedPeople() {
   return [for (final i in order) list[i]];
 }
 
-/// One row of "Accounts to follow".
+/// One row of "Suggestions People".
 class DmPersonRow extends StatelessWidget {
   final Person person;
   final Widget? trailing;
@@ -130,44 +130,6 @@ class DmPersonRow extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// "See all" from the bottom of the inbox.
-class DmSuggestionsScreen extends StatelessWidget {
-  const DmSuggestionsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: dmListenable(),
-      builder: (context, _) {
-        final c = DmTheme.instance.c;
-        final people = dmSuggestedPeople();
-        return Scaffold(
-          backgroundColor: c.bg,
-          appBar: AppBar(
-            backgroundColor: c.bg,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            leading: IconButton(
-              icon: Icon(LucideIcons.arrowLeft, color: c.text),
-              onPressed: () => Navigator.pop(context),
-            ),
-            title: Text('Accounts to follow',
-                style: TextStyle(color: c.text, fontWeight: FontWeight.w800, fontSize: 18)),
-          ),
-          body: people.isEmpty
-              ? Center(
-                  child: Text("You're following everyone suggested",
-                      style: TextStyle(color: c.sub)))
-              : ListView(
-                  padding: const EdgeInsets.only(top: 4, bottom: 24),
-                  children: [for (final p in people) DmPersonRow(person: p)],
-                ),
-        );
-      },
     );
   }
 }

@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'database_service.dart';
 import 'follow_store.dart';
 import 'native_bridge.dart';
-import 'post_model.dart';
 import 'story_models.dart';
 
 enum NotifType { like, comment, reply, save, follow, message, storyReact, tag, storyReply }
@@ -521,10 +520,6 @@ class StoryStore extends ChangeNotifier {
 
   /// Fires for every new reaction, so an open story can show animated hearts.
   Stream<StoryReaction> get onReaction => _reactionStream.stream;
-
-  String get caption => data.caption;
-  String? get imagePath => data.photoPath;
-  int get bgColor => data.bgColor;
 
   /// A story lasts 24 hours, like a real story.
   bool get hasStory {

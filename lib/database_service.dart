@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 
 /// This is the ONLY file you need to edit when connecting to Firebase, Supabase, or a REST API.
 /// Currently, it simulates network delays so the UI works exactly as it does now.
@@ -7,11 +6,6 @@ class DatabaseService {
   DatabaseService._();
 
   // TODO: Replace these with real API calls
-  Future<void> fetchPosts() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // Example: final response = await http.get(Uri.parse('https://api.swifly.com/posts'));
-  }
-
   Future<void> savePost(String text, String audience, List<String> taggedHandles, List<String> mediaPaths) async {
     await Future.delayed(const Duration(milliseconds: 300));
   }

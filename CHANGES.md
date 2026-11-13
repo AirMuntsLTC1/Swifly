@@ -30,3 +30,8 @@
 ## Fix: people lists and Posts on profile
 - Follow button no longer stretches across the row (names were showing one letter per line in Search > People to follow, Followers and Following).
 - Profile now has a bold "Posts" section under Suggestions People: all your posts, newest first, each with its day, date and time.
+
+## Messages + Suggestions People update
+- Inbox section "Accounts to follow" is now **Suggestions People**; "See all" opens the same `SuggestionsScreen` as the Profile tab (removed the duplicate `DmSuggestionsScreen`).
+- Profile "Message" button now opens the real `ChatScreen` (notifications, story replies, inbox, new message and profile all use the same chat).
+- Removed dead code: old comments sheet in feed_widgets.dart, `Post.mediaPaths`, `PostStore._seed/hashtagUsage`, `DatabaseService.fetchPosts`, unused Story getters, unused imports, `.bak` file, `swifly_fixes/` (applied: build_php_android.sh, build-apk.yml, `circleCheck` icon).

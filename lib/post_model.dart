@@ -68,9 +68,6 @@ class Post {
     List<CommentItem>? comments,
   }) : comments = comments ?? <CommentItem>[];
 
-  /// Paths of the files, kept for code that only needs the list of files.
-  List<String> get mediaPaths => media.map((m) => m.path).toList();
-
   List<String> get hashtags => NativeCore.extractHashtags(text);
   bool hasHashtag(String tag) => NativeCore.countHashtag(text, tag) > 0;
   double get hoursOld => DateTime.now().difference(created).inSeconds / 3600.0;
@@ -88,19 +85,12 @@ class Post {
 }
 
 class PostStore extends ChangeNotifier {
-  PostStore._() {
-    _seed();
-  }
+  PostStore._();
 
   static final PostStore instance = PostStore._();
 
   final List<Post> _posts = [];
   int _nextId = 1;
-
-  void _seed() {
-    // TODO: Replace _seed() with DatabaseService.instance.fetchPosts() when connecting DB
-    // Sample data lives in mock_data.dart (see kUseMockData in app_config.dart).
-  }
 
   /// Replaces all posts. Called with mock data now, database results later.
   void load({required List<Post> posts}) {
@@ -131,13 +121,6 @@ class PostStore extends ChangeNotifier {
   /// Call when the PHP pipeline finishes a photo or video that a post already shows.
   void mediaUpdated() => notifyListeners();
 
-  int hashtagUsage(String tag) {
-    final users = <String>{};
-    for (final p in _posts) {
-      if (p.hasHashtag(tag)) users.add(p.authorHandle);
-    }
-    return users.length;
-  }
 
   List<Post> postsWithHashtag(String tag) {
     final list = _posts.where((p) => p.hasHashtag(tag)).toList()

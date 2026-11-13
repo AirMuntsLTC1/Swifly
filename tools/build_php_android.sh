@@ -8,8 +8,8 @@
 # It tries to include GD (JPEG and PNG resizing). If that fails it builds PHP without GD
 # (photos are then copied instead of resized).
 #
-# The GitHub workflow runs this with "continue-on-error", so the APK still builds if
-# this script fails; the app then uses the C++ fallback for photos and videos.
+# The GitHub workflow turns a failure of this script into a yellow warning, so the APK
+# still builds; the app then uses the C++ fallback for photos and videos.
 set -euo pipefail
 
 PHP_VER="${PHP_VER:-8.3.14}"
@@ -29,6 +29,7 @@ OUT="$ROOT/out"
 JOBS="$(nproc)"
 mkdir -p "$ROOT/src" "$PFX/lib/pkgconfig" "$PFX/include" "$OUT"
 cd "$ROOT"
+rm -f "$OUT/libphp_cli.so"
 
 export CC="$TC/bin/${TRIPLE}${API}-clang"
 export CXX="$TC/bin/${TRIPLE}${API}-clang++"
@@ -36,8 +37,23 @@ export AR="$TC/bin/llvm-ar"
 export RANLIB="$TC/bin/llvm-ranlib"
 export STRIP="$TC/bin/llvm-strip"
 export NM="$TC/bin/llvm-nm"
+export PKG_CONFIG_PATH="$PFX/lib/pkgconfig:$PFX/lib64/pkgconfig"
 
-fetch() { [ -f "$2" ] || curl -fsSL --retry 3 "$1" -o "$2"; }
+# fetch <output> <url> [more urls...]  - tries each address until one works.
+fetch() {
+  local out="$1"; shift
+  [ -s "$out" ] && return 0
+  local url
+  for url in "$@"; do
+    echo "download: $url"
+    if curl -fsSL --retry 3 "$url" -o "$out"; then
+      [ -s "$out" ] && return 0
+    fi
+    rm -f "$out"
+  done
+  echo "could not download $out"
+  return 1
+}
 
 # libpng's pkg-config file asks for zlib; Android has zlib built in, so give it a stub.
 cat > "$PFX/lib/pkgconfig/zlib.pc" <<'PC'
@@ -61,21 +77,39 @@ cmake_android() { # source-dir, extra cmake args...
 
 build_gd_libs() {
   echo "== libjpeg-turbo $JPEG_VER"
-  fetch "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/${JPEG_VER}/libjpeg-turbo-${JPEG_VER}.tar.gz" jpeg.tgz
+  fetch jpeg.tgz "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/${JPEG_VER}/libjpeg-turbo-${JPEG_VER}.tar.gz" \
+                 "https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/${JPEG_VER}.tar.gz"
   rm -rf src/jpeg && mkdir -p src/jpeg && tar xzf jpeg.tgz -C src/jpeg --strip-components=1
   cmake_android "$ROOT/src/jpeg" -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_TURBOJPEG=OFF
 
   echo "== libpng $PNG_VER"
-  fetch "https://github.com/pnggroup/libpng/archive/refs/tags/v${PNG_VER}.tar.gz" png.tgz
+  fetch png.tgz "https://github.com/pnggroup/libpng/archive/refs/tags/v${PNG_VER}.tar.gz" \
+                "https://github.com/glennrp/libpng/archive/refs/tags/v${PNG_VER}.tar.gz"
   rm -rf src/png && mkdir -p src/png && tar xzf png.tgz -C src/png --strip-components=1
   cmake_android "$ROOT/src/png" -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TESTS=OFF -DPNG_TOOLS=OFF
+}
+
+# php.net only keeps the newest tarballs, so an older pinned version can disappear.
+# Try the pinned one, then the museum, then the newest release of the same 8.3 line.
+download_php() {
+  [ -s php.txz ] && return 0
+  if fetch php.txz "https://www.php.net/distributions/php-${PHP_VER}.tar.xz" \
+                   "https://museum.php.net/php8/php-${PHP_VER}.tar.xz"; then
+    return 0
+  fi
+  echo "pinned PHP $PHP_VER not available, looking up the newest 8.3 release"
+  local latest
+  latest="$(curl -fsSL 'https://www.php.net/releases/index.php?json&version=8.3' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"])')" || return 1
+  echo "using PHP $latest"
+  fetch php.txz "https://www.php.net/distributions/php-${latest}.tar.xz"
 }
 
 build_php() { # 1 = with GD, 0 = without
   local with_gd="$1"
   if [ ! -d src/php ]; then
-    echo "== PHP $PHP_VER (download)"
-    fetch "https://www.php.net/distributions/php-${PHP_VER}.tar.xz" php.txz
+    echo "== PHP (download)"
+    download_php || return 1
     mkdir -p src/php && tar xJf php.txz -C src/php --strip-components=1
   fi
   cd "$ROOT/src/php"
@@ -92,12 +126,27 @@ build_php() { # 1 = with GD, 0 = without
     export PNG_CFLAGS="-I$PFX/include" PNG_LIBS="-L$libdir -lpng16 -lz -lm"
   fi
 
+  # configure cannot run test programs while cross compiling, so answer the
+  # questions that cannot be tested (Android's libc is "bionic").
+  export ac_cv_func_getaddrinfo=yes
+  export ac_cv_func_res_nsearch=no ac_cv_func_res_search=no ac_cv_func_dn_skipname=no
+  export ac_cv_func_dn_expand=no ac_cv_func_res_ninit=no
+  export php_cv_have_crypt_r=no
+
   echo "== PHP configure (gd=$with_gd)"
-  CFLAGS="-O2 -fPIE -I$PFX/include" LDFLAGS="-pie -L$libdir" LIBS="-lm" \
-    ./configure "${args[@]}" || { tail -n 60 config.log || true; cd "$ROOT"; return 1; }
+  if ! CFLAGS="-O2 -fPIE -I$PFX/include" LDFLAGS="-pie -L$libdir" LIBS="-lm" \
+       ./configure "${args[@]}"; then
+    echo "---- last lines of config.log ----"
+    tail -n 80 config.log || true
+    cd "$ROOT"; return 1
+  fi
 
   echo "== PHP make"
-  make -j "$JOBS" sapi/cli/php || { cd "$ROOT"; return 1; }
+  if ! make -j "$JOBS" sapi/cli/php; then
+    echo "PHP make failed (retrying once without parallel jobs to show the real error)"
+    make sapi/cli/php 2>&1 | tail -n 60 || true
+    cd "$ROOT"; return 1
+  fi
   "$STRIP" -o "$OUT/libphp_cli.so" sapi/cli/php
   cd "$ROOT"
 }

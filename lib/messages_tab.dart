@@ -12,11 +12,12 @@ import 'native_bridge.dart';
 import 'post_model.dart';
 import 'story_player_screen.dart';
 import 'story_viewer_screen.dart';
+import 'suggestions_screen.dart';
 import 'tag_friends_screen.dart';
 import 'user_profile_screen.dart';
 
 /// Instagram-style inbox: notes + stories row, Filters / Primary / Requests /
-/// General, unread badges, message requests, and "Accounts to follow" at the bottom.
+/// General, unread badges, message requests, and "Suggestions People" at the bottom.
 class MessagesTab extends StatefulWidget {
   /// Called by the back arrow (goes back to the feed).
   final VoidCallback? onBack;
@@ -573,12 +574,12 @@ class _MessagesTabState extends State<MessagesTab> {
           child: Row(
             children: [
               Expanded(
-                child: Text('Accounts to follow',
+                child: Text('Suggestions People',
                     style: TextStyle(color: c.text, fontSize: 17, fontWeight: FontWeight.w800)),
               ),
               GestureDetector(
                 onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const DmSuggestionsScreen())),
+                    MaterialPageRoute(builder: (_) => const SuggestionsScreen())),
                 child: Text('See all',
                     style: TextStyle(color: c.blue, fontSize: 15, fontWeight: FontWeight.w700)),
               ),

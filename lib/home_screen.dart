@@ -843,7 +843,7 @@ class UploadBanner extends StatelessWidget {
                     ),
                   ),
                   if (isSuccess)
-                    const Icon(LucideIcons.checkCircle2, color: Colors.green, size: 20),
+                    const Icon(LucideIcons.circleCheck, color: Colors.green, size: 20),
                 ],
               ),
             ),

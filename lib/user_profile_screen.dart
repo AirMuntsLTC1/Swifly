@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'chat_screen.dart';
 import 'connections_screen.dart';
 import 'native_bridge.dart';
-import 'post_model.dart';
 import 'follow_button.dart';
 import 'tag_friends_screen.dart';
-import 'discover_panel.dart';
 import 'responsive.dart';
 import 'inbox_store.dart';
 import 'story_player_screen.dart';
@@ -152,11 +151,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Messaging ${f.name}')),
-                      );
-                    },
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => ChatScreen(handle: f.handle)),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1D6FDC),
                       shape: RoundedRectangleBorder(
