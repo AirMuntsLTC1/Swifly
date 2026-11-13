@@ -434,17 +434,38 @@ class _FieldEditorScreenState extends State<FieldEditorScreen> {
       autocorrect: !strict,
       enableSuggestions: !strict,
       textCapitalization: strict ? TextCapitalization.none : TextCapitalization.sentences,
-      onChanged: (_) {
-        if (_error != null) setState(() => _error = null);
+      onChanged: (v) {
+        // Links are checked while typing, so the border turns red right away.
+        final live = d.validator == FieldValidator.url
+            ? validateFieldText(d, normalizeFieldText(d, v))
+            : null;
+        if (live != _error) setState(() => _error = live);
       },
       decoration: InputDecoration(
-        hintText: d.label,
+        hintText: d.validator == FieldValidator.url ? 'www.example.com' : d.label,
         errorText: _error,
+        errorMaxLines: 2,
         filled: true,
         fillColor: const Color(0xFFF2F2F2),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE53935), width: 1.6),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE53935), width: 1.6),
         ),
       ),
     );

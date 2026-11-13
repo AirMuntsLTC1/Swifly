@@ -124,7 +124,7 @@ final List<ProfileSection> kProfileSections = [
   ]),
   ProfileSection('Contact info', [
     ProfileFieldDef('socialMedia', 'Social media', LucideIcons.atSign,
-        validator: FieldValidator.handle),
+        validator: FieldValidator.url),
     ProfileFieldDef('email', 'Email', LucideIcons.mail, validator: FieldValidator.email),
     ProfileFieldDef('phone', 'Phone number', LucideIcons.phone, validator: FieldValidator.phone),
   ]),
@@ -132,7 +132,7 @@ final List<ProfileSection> kProfileSections = [
 
 final RegExp _emailRe = RegExp(r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$');
 final RegExp _urlRe = RegExp(
-    r'^(https?://)?([A-Za-z0-9\-]+\.)+[A-Za-z]{2,}(:\d+)?(/\S*)?$',
+    r'^(https?://(www\.)?|www\.)([A-Za-z0-9\-]+\.)+[A-Za-z]{2,}(:\d+)?(/\S*)?$',
     caseSensitive: false);
 final RegExp _handleRe = RegExp(r'^[A-Za-z0-9._]{1,30}$');
 
@@ -166,7 +166,7 @@ String? validateFieldText(ProfileFieldDef d, String value) {
           ? null
           : 'Enter a valid phone number, like +234 801 234 5678';
     case FieldValidator.url:
-      return _urlRe.hasMatch(value) ? null : 'Enter a valid link, like example.com';
+      return _urlRe.hasMatch(value) ? null : 'Enter a link that starts with www. or https://, like www.example.com';
     case FieldValidator.handle:
       return _handleRe.hasMatch(value)
           ? null
