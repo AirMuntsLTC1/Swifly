@@ -25,10 +25,10 @@ class RealtimeRouter {
     } else if (e is MessageReceivedEvent) {
       final senderId = e.row['sender'];
       final postId = e.row['post_id'];
-      DatabaseService.instance.personById('\$senderId').then((who) async {
+      DatabaseService.instance.personById('$senderId').then((who) async {
         PostRef? postRef;
         if (postId != null) {
-          final p = await DatabaseService.instance.fetchPostById('\$postId');
+          final p = await DatabaseService.instance.fetchPostById('$postId');
           if (p != null) {
             postRef = PostRef(
               postId: p['id'],
@@ -41,7 +41,7 @@ class RealtimeRouter {
             );
           }
         }
-        ChatStore.instance.receive(who['handle']!, '\${e.row['text']}', post: postRef, story: null, replyTo: null);
+        ChatStore.instance.receive(who['handle']!, '${e.row['text']}', post: postRef, story: null, replyTo: null);
       });
     } else if (e is ChatTypingEvent) {
       ChatTypingStore.instance.setTyping(e.handle, e.isTyping);
