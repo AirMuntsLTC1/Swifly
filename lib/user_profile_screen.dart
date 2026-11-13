@@ -11,6 +11,7 @@ import 'responsive.dart';
 import 'inbox_store.dart';
 import 'story_player_screen.dart';
 import 'people_directory.dart';
+import 'post_model.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final Person user;
@@ -95,13 +96,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     color: Colors.black)),
             const SizedBox(height: 4),
             Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
-            const SizedBox(height: 10),
-            const Text('Living life one step at a time. Exploring the world.',
-                style: TextStyle(color: Colors.black, height: 1.4)),
             const SizedBox(height: 20),
             Row(
               children: [
-                const _Stat(label: 'Posts', value: '12'),
+                _Stat(label: 'Posts', value: '${PostStore.instance.countFor(f.handle)}'),
                 const SizedBox(width: 32),
                 GestureDetector(
                   onTap: () => pushOnce(

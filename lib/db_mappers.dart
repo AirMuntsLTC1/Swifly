@@ -1,3 +1,4 @@
+import 'story_models.dart';
 import 'inbox_store.dart';
 import 'people_directory.dart';
 import 'post_model.dart';
@@ -12,6 +13,8 @@ DateTime _t(dynamic v) => DateTime.tryParse(_s(v))?.toLocal() ?? DateTime.now();
 List<String> _list(dynamic v) => v is List ? [for (final e in v) e.toString()] : <String>[];
 
 /// Accepts name/handle or display_name/username columns.
+double _d(dynamic v, double d) => v is num ? v.toDouble() : d;
+
 String _nameOf(Map<String, dynamic> r) => _s(r['name'] ?? r['display_name'] ?? r['username']);
 String _handleOf(Map<String, dynamic> r) =>
     r['handle'] != null ? _s(r['handle']) : (r['username'] != null ? '@${_s(r['username'])}' : '');
@@ -85,6 +88,40 @@ Map<String, DmNote> notesFromRows(List<Map<String, dynamic>> rows) => {
       for (final r in rows)
         _s(r['handle']): DmNote(handle: _s(r['handle']), text: _s(r['text']), time: _t(r['created_at'])),
     };
+
+StoryLayer _layerFromJson(Map<String, dynamic> j) => StoryLayer(
+      id: _s(j['id'], 'layer'),
+      kind: StoryLayerKind.values.firstWhere(
+        (k) => k.name == _s(j['kind']),
+        orElse: () => StoryLayerKind.text,
+      ),
+      text: _s(j['text']),
+      color: j['color'] is num ? (j['color'] as num).toInt() : 0xFFFFFFFF,
+      boxed: _b(j['boxed']),
+      dx: _d(j['dx'], 0.5),
+      dy: _d(j['dy'], 0.5),
+      scale: _d(j['scale'], 1),
+      rotation: _d(j['rotation'], 0),
+    );
+
+/// One active story row (from DatabaseService.fetchStories) as the app's OtherStory.
+OtherStory storyFromRow(Map<String, dynamic> r) {
+  final layers = r['layers'] is List ? r['layers'] as List : const [];
+  final bg = r['bg_color'];
+  return OtherStory(
+    id: _s(r['id']),
+    time: _t(r['created_at']),
+    data: StoryData(
+      bgColor: bg is num ? bg.toInt() : 0xFF1D6FDC,
+      photoPath: r['photo_local'] == null ? null : _s(r['photo_local']),
+      photoScale: _d(r['photo_scale'], 1),
+      photoDx: _d(r['photo_dx'], 0),
+      photoDy: _d(r['photo_dy'], 0),
+      photoRotation: _d(r['photo_rotation'], 0),
+      layers: [for (final l in layers) _layerFromJson(Map<String, dynamic>.from(l as Map))],
+    ),
+  );
+}
 
 Map<String, (int, int)> statsFromRows(List<Map<String, dynamic>> rows) => {
       for (final r in rows) _handleOf(r): (_i(r['followers_count']), _i(r['following_count'])),

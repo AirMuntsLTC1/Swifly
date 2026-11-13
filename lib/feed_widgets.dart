@@ -1,3 +1,5 @@
+import 'app_feedback.dart';
+import 'app_bootstrap.dart';
 import 'package:flutter/material.dart';
 import 'nav_guard.dart';
 import 'package:flutter/gestures.dart';
@@ -19,17 +21,34 @@ class FeedTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: PostStore.instance,
-      builder: (context, _) {
-        final posts = PostStore.instance.ranked;
-        return ListView.builder(
-          padding: const EdgeInsets.only(bottom: 96),
-          itemCount: posts.length,
-          itemBuilder: (context, i) =>
-              PostCard(key: ValueKey(posts[i].id), post: posts[i]),
-        );
-      },
+    return RefreshIndicator(
+      color: Colors.black,
+      onRefresh: () => refreshPosts()
+          .catchError((Object e) => reportError("Couldn't refresh posts", e)),
+      child: ListenableBuilder(
+        listenable: PostStore.instance,
+        builder: (context, _) {
+          final posts = PostStore.instance.ranked;
+          if (posts.isEmpty) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(height: 160),
+                Center(
+                  child: Text('No posts yet. Pull down to refresh.',
+                      style: TextStyle(color: Color(0xFF8E8E8E))),
+                ),
+              ],
+            );
+          }
+          return ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 96),
+            itemCount: posts.length,
+            itemBuilder: (context, i) => PostCard(key: ValueKey(posts[i].id), post: posts[i]),
+          );
+        },
+      ),
     );
   }
 }

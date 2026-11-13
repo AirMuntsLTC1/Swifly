@@ -1,3 +1,6 @@
+import 'story_models.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -434,6 +437,160 @@ class DatabaseService {
       for (final r in rows)
         {'key': '${r['key']}', 'value': '${r['value']}', 'audience': '${r['audience']}'},
     ];
+  }
+
+  // ---------------------------------------------------------------------------
+  // STORIES
+  // ---------------------------------------------------------------------------
+
+  /// Saves a story: uploads its photo to the "stories" bucket, then stores the
+  /// editor data. Returns the story id.
+  Future<String> publishStory(StoryData data) async {
+    final me = _requireMe();
+    String? storagePath;
+    final photo = data.photoPath;
+    if (photo != null && File(photo).existsSync()) {
+      final dot = photo.lastIndexOf('.');
+      final ext = dot == -1 ? 'jpg' : photo.substring(dot + 1).toLowerCase();
+      storagePath = '$me/${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await _db.storage.from('stories').upload(
+            storagePath,
+            File(photo),
+            fileOptions: const FileOptions(upsert: true),
+          );
+    }
+    final row = await _db.from('stories').insert({
+      'author_id': me,
+      'bg_color': data.bgColor,
+      'photo_path': storagePath,
+      'photo_scale': data.photoScale,
+      'photo_dx': data.photoDx,
+      'photo_dy': data.photoDy,
+      'photo_rotation': data.photoRotation,
+      'layers': [for (final l in data.layers) _layerToJson(l)],
+      'place': data.place,
+    }).select('id').single();
+    return '${row['id']}';
+  }
+
+  static Map<String, dynamic> _layerToJson(StoryLayer l) => <String, dynamic>{
+        'id': l.id,
+        'kind': l.kind.name,
+        'text': l.text,
+        'color': l.color,
+        'boxed': l.boxed,
+        'dx': l.dx,
+        'dy': l.dy,
+        'scale': l.scale,
+        'rotation': l.rotation,
+      };
+
+  /// Removes my story (its reactions and replies go with it).
+  Future<void> deleteStory(String storyId) async {
+    if (!isUuid(storyId)) return;
+    await _db.from('stories').delete().eq('id', storyId).eq('author_id', _requireMe());
+  }
+
+  /// Active stories I can see (mine and people I follow), newest one per person.
+  /// Each row has the story fields plus handle, name and photo_local (a file on this phone).
+  Future<List<Map<String, dynamic>>> fetchStories() async {
+    _requireMe();
+    final rows = await _db
+        .from('stories')
+        .select('id,author_id,bg_color,photo_path,photo_scale,photo_dx,photo_dy,photo_rotation,layers,place,created_at,author:profiles!author_id(username,display_name)')
+        .gt('expires_at', DateTime.now().toUtc().toIso8601String())
+        .order('created_at', ascending: false)
+        .limit(300);
+    final newest = <String, Map<String, dynamic>>{};
+    for (final r in rows) {
+      newest.putIfAbsent('${r['author_id']}', () => Map<String, dynamic>.from(r));
+    }
+    final out = <Map<String, dynamic>>[];
+    for (final r in newest.values) {
+      final who = _Who.fromRow(_embedded(r['author']));
+      final photoPath = r['photo_path'];
+      out.add({
+        ...r,
+        'handle': who.handle,
+        'name': who.name,
+        'photo_local': photoPath == null ? null : await _cachedStoryPhoto('$photoPath'),
+      });
+    }
+    return out;
+  }
+
+  /// Downloads a story photo once and keeps it on the phone. Null if it fails.
+  Future<String?> _cachedStoryPhoto(String storagePath) async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/story_photos/${storagePath.replaceAll('/', '_')}');
+      if (await file.exists()) return file.path;
+      await file.parent.create(recursive: true);
+      final bytes = await _db.storage.from('stories').download(storagePath);
+      await file.writeAsBytes(bytes);
+      return file.path;
+    } catch (e) {
+      debugPrint('[Swifly] story photo not downloaded: $e');
+      return null;
+    }
+  }
+
+  /// Reactions and replies one story received, oldest first.
+  /// Returns {'reactions': [{name, handle, emoji, created_at}], 'replies': [{name, handle, text, created_at}]}.
+  Future<Map<String, List<Map<String, dynamic>>>> fetchStoryActivity(String storyId) async {
+    if (!isUuid(storyId)) {
+      return {'reactions': <Map<String, dynamic>>[], 'replies': <Map<String, dynamic>>[]};
+    }
+    final reactionRows = await _db
+        .from('story_reactions')
+        .select('emoji,created_at,who:profiles!user_id(username,display_name)')
+        .eq('story_id', storyId)
+        .order('created_at', ascending: true);
+    final replyRows = await _db
+        .from('story_replies')
+        .select('text,created_at,who:profiles!user_id(username,display_name)')
+        .eq('story_id', storyId)
+        .order('created_at', ascending: true);
+    return {
+      'reactions': [
+        for (final r in reactionRows)
+          {
+            'name': _Who.fromRow(_embedded(r['who'])).name,
+            'handle': _Who.fromRow(_embedded(r['who'])).handle,
+            'emoji': '${r['emoji']}',
+            'created_at': '${r['created_at']}',
+          },
+      ],
+      'replies': [
+        for (final r in replyRows)
+          {
+            'name': _Who.fromRow(_embedded(r['who'])).name,
+            'handle': _Who.fromRow(_embedded(r['who'])).handle,
+            'text': '${r['text']}',
+            'created_at': '${r['created_at']}',
+          },
+      ],
+    };
+  }
+
+  /// Saves an emoji reaction to someone's story.
+  Future<void> sendStoryReaction(String storyId, String emoji) async {
+    if (!isUuid(storyId)) return;
+    await _db.from('story_reactions').insert({
+      'story_id': storyId,
+      'user_id': _requireMe(),
+      'emoji': emoji,
+    });
+  }
+
+  /// Saves a text reply to someone's story.
+  Future<void> sendStoryReply(String storyId, String text) async {
+    if (!isUuid(storyId)) return;
+    await _db.from('story_replies').insert({
+      'story_id': storyId,
+      'user_id': _requireMe(),
+      'text': text,
+    });
   }
 
   // ---------------------------------------------------------------------------

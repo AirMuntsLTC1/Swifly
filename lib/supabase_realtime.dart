@@ -1,3 +1,4 @@
+import 'app_feedback.dart';
 import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -16,6 +17,7 @@ import 'supabase_config.dart';
 class SupabaseRealtime {
   static RealtimeChannel? _channel;
   static Timer? _postRefresh;
+  static Timer? _storyRefresh;
 
   static String? get _me =>
       kAuthEnabled ? Supabase.instance.client.auth.currentUser?.id : null;
@@ -114,6 +116,32 @@ class SupabaseRealtime {
           table: 'posts',
           callback: (p) => _onPost(p.newRecord),
         )
+        // Stories: someone posted or removed one (refresh the list)
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'stories',
+          callback: (p) => _onStoryChanged(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'stories',
+          callback: (p) => _onStoryChanged(),
+        )
+        // Reactions and replies that people sent to my story
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'story_reactions',
+          callback: (p) => _onStoryReaction(p.newRecord),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'story_replies',
+          callback: (p) => _onStoryReply(p.newRecord),
+        )
         .subscribe();
   }
 
@@ -121,6 +149,8 @@ class SupabaseRealtime {
   static Future<void> stop() async {
     _postRefresh?.cancel();
     _postRefresh = null;
+    _storyRefresh?.cancel();
+    _storyRefresh = null;
     final channel = _channel;
     _channel = null;
     if (channel != null) {
@@ -217,12 +247,39 @@ class SupabaseRealtime {
     ));
   }
 
+  static void _onStoryChanged() {
+    _storyRefresh?.cancel();
+    _storyRefresh = Timer(const Duration(milliseconds: 800), () {
+      refreshStories().catchError((Object e) => reportError('Could not refresh stories', e));
+    });
+  }
+
+  static Future<void> _onStoryReaction(Map<String, dynamic> r) async {
+    if ('${r['user_id']}' == _me) return;
+    final who = await DatabaseService.instance.personById('${r['user_id']}');
+    Realtime.instance.publish(StoryReactionEvent(
+      actorName: who['name'] ?? '',
+      actorHandle: who['handle'] ?? '',
+      emoji: '${r['emoji']}',
+    ));
+  }
+
+  static Future<void> _onStoryReply(Map<String, dynamic> r) async {
+    if ('${r['user_id']}' == _me) return;
+    final who = await DatabaseService.instance.personById('${r['user_id']}');
+    Realtime.instance.publish(StoryReplyEvent(
+      actorName: who['name'] ?? '',
+      actorHandle: who['handle'] ?? '',
+      text: '${r['text']}',
+    ));
+  }
+
   /// A new post from someone else. Wait a moment in case several arrive together.
   static void _onPost(Map<String, dynamic> r) {
     if ('${r['author_id']}' == _me) return;
     _postRefresh?.cancel();
     _postRefresh = Timer(const Duration(milliseconds: 800), () {
-      refreshPosts().catchError((_) {});
+      refreshPosts().catchError((Object e) => reportError('Could not refresh posts', e));
     });
   }
 }

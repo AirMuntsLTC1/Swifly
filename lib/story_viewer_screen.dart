@@ -1,3 +1,5 @@
+import 'database_service.dart';
+import 'app_feedback.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -102,7 +104,13 @@ class _StoryViewerScreenState extends State<StoryViewerScreen> {
             tooltip: 'Delete story',
             icon: const Icon(LucideIcons.trash2),
             onPressed: () {
+              final storyId = StoryStore.instance.storyId;
               StoryStore.instance.delete();
+              if (storyId != null) {
+                DatabaseService.instance
+                    .deleteStory(storyId)
+                    .catchError((Object e) => reportError('Story not deleted', e));
+              }
               Navigator.pop(context);
             },
           ),

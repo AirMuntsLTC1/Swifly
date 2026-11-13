@@ -1,3 +1,5 @@
+import 'database_service.dart';
+import 'app_feedback.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -294,8 +296,14 @@ class _AddStoryScreenState extends State<AddStoryScreen> {
       );
       return;
     }
-    StoryStore.instance.post(_data.copy());
+    final data = _data.copy();
+    StoryStore.instance.post(data);
     Navigator.pop(context, true);
+    // Saved to Supabase in the background; the id is kept so it can be deleted or answered.
+    DatabaseService.instance
+        .publishStory(data)
+        .then((id) => StoryStore.instance.setStoryId(id))
+        .catchError((Object e) => reportError('Story not shared', e));
   }
 
   // ---------- UI ----------

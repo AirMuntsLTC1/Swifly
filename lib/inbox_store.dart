@@ -1,3 +1,4 @@
+import 'app_feedback.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -113,20 +114,20 @@ class NotificationStore extends ChangeNotifier {
     if (n.read) return;
     n.read = true;
     notifyListeners();
-    DatabaseService.instance.setNotificationRead(n.id, true).catchError((_) {});
+    DatabaseService.instance.setNotificationRead(n.id, true).catchError((Object e) => reportError('Notification not updated', e));
   }
 
   void markUnread(AppNotification n) {
     if (!n.read) return;
     n.read = false;
     notifyListeners();
-    DatabaseService.instance.setNotificationRead(n.id, false).catchError((_) {});
+    DatabaseService.instance.setNotificationRead(n.id, false).catchError((Object e) => reportError('Notification not updated', e));
   }
 
   void remove(AppNotification n) {
     _items.remove(n);
     notifyListeners();
-    DatabaseService.instance.deleteNotification(n.id).catchError((_) {});
+    DatabaseService.instance.deleteNotification(n.id).catchError((Object e) => reportError('Notification not removed', e));
   }
 
   void markAllRead() {
@@ -134,7 +135,7 @@ class NotificationStore extends ChangeNotifier {
       n.read = true;
     }
     notifyListeners();
-    DatabaseService.instance.markAllNotificationsRead().catchError((_) {});
+    DatabaseService.instance.markAllNotificationsRead().catchError((Object e) => reportError('Notifications not updated', e));
   }
 }
 
@@ -409,7 +410,8 @@ class ChatStore extends ChangeNotifier {
           post: post),
     );
     DatabaseService.instance
-        .sendMessage(handle, text, replyToId: replyTo?.messageId, postId: post?.postId);
+        .sendMessage(handle, text, replyToId: replyTo?.messageId, postId: post?.postId)
+        .catchError((Object e) => reportError('Message not sent', e));
   }
 
   void receive(String handle, String text,
@@ -494,13 +496,13 @@ class NoteStore extends ChangeNotifier {
     if (t.isEmpty) return;
     _mine = DmNote(handle: kMeHandle, text: t, time: DateTime.now());
     notifyListeners();
-    DatabaseService.instance.saveNote(t);
+    DatabaseService.instance.saveNote(t).catchError((Object e) => reportError('Note not saved', e));
   }
 
   void deleteMine() {
     _mine = null;
     notifyListeners();
-    DatabaseService.instance.saveNote('');
+    DatabaseService.instance.saveNote('').catchError((Object e) => reportError('Note not removed', e));
   }
 
   void load(Map<String, DmNote> all) {
@@ -556,7 +558,9 @@ class StoryReply {
 class OtherStory {
   final StoryData data;
   final DateTime time;
-  const OtherStory({required this.data, required this.time});
+  /// Database id of the story (null for stories not saved yet).
+  final String? id;
+  const OtherStory({required this.data, required this.time, this.id});
 }
 
 /// The user's single active story, the reactions and replies it received,
@@ -567,6 +571,8 @@ class StoryStore extends ChangeNotifier {
 
   StoryData data = StoryData();
   DateTime? postedAt;
+  /// Database id of my story (null until it is saved).
+  String? storyId;
   final List<StoryReaction> _reactions = [];
   final List<StoryReply> _replies = [];
   final Map<String, OtherStory> _others = {};
@@ -589,6 +595,7 @@ class StoryStore extends ChangeNotifier {
   void post(StoryData newData) {
     data = newData;
     postedAt = DateTime.now();
+    storyId = null;
     _reactions.clear();
     _replies.clear();
     notifyListeners();
@@ -597,6 +604,7 @@ class StoryStore extends ChangeNotifier {
   void delete() {
     data = StoryData();
     postedAt = null;
+    storyId = null;
     _reactions.clear();
     _replies.clear();
     notifyListeners();
@@ -630,6 +638,31 @@ class StoryStore extends ChangeNotifier {
       0,
       StoryReply(name: name, handle: handle, text: text, time: DateTime.now()),
     );
+    notifyListeners();
+  }
+
+  /// Records the database id once my story is saved.
+  void setStoryId(String id) {
+    storyId = id;
+    notifyListeners();
+  }
+
+  /// Loads my active story from the database (after a restart or a refresh).
+  void loadMine(OtherStory story) {
+    data = story.data;
+    postedAt = story.time;
+    storyId = story.id;
+    notifyListeners();
+  }
+
+  /// Loads the reactions and replies my story received.
+  void loadActivity(List<StoryReaction> reactions, List<StoryReply> replies) {
+    _reactions
+      ..clear()
+      ..addAll(reactions);
+    _replies
+      ..clear()
+      ..addAll(replies);
     notifyListeners();
   }
 

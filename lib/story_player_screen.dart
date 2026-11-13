@@ -1,3 +1,5 @@
+import 'database_service.dart';
+import 'app_feedback.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -88,6 +90,12 @@ class _StoryPlayerScreenState extends State<StoryPlayerScreen>
     if (_reacted.add(emoji)) {
       ChatStore.instance.send(widget.handle, 'Reacted $emoji to their story',
           story: _ref(reaction: true));
+      final storyId = StoryStore.instance.otherStory(widget.handle)?.id;
+      if (storyId != null) {
+        DatabaseService.instance
+            .sendStoryReaction(storyId, emoji)
+            .catchError((Object e) => reportError('Reaction not sent', e));
+      }
     }
   }
 

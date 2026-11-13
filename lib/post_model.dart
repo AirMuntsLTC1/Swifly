@@ -1,3 +1,4 @@
+import 'app_feedback.dart';
 import 'package:flutter/foundation.dart';
 
 import 'media/media_item.dart';
@@ -109,6 +110,12 @@ class PostStore extends ChangeNotifier {
     );
     return [...mine, for (final i in order) others[i]];
   }
+
+  /// How many posts a person has (used on their profile).
+  int countFor(String handle) => _posts.where((p) => p.authorHandle == handle).length;
+
+  /// Posts that are still being saved (their id is not a database id yet).
+  List<Post> get unsaved => _posts.where((p) => !DatabaseService.isUuid(p.id)).toList();
 
   /// Everything you posted, newest first. Shown on your profile.
   List<Post> get myPosts => _posts.where((p) => p.authorHandle == kMeHandle).toList()
@@ -230,6 +237,7 @@ class PostStore extends ChangeNotifier {
           text, audience, taggedHandles, media.map((m) => m.path).toList());
       if (serverId != null) newPost.id = serverId;
     } catch (e) {
+      reportError('Post not saved', e);
       _posts.removeWhere((p) => p.id == newPost.id);
       notifyListeners(); // Rollback on error
     }
@@ -246,6 +254,7 @@ class PostStore extends ChangeNotifier {
     try {
       await DatabaseService.instance.toggleLike(id, p.liked);
     } catch (e) {
+      reportError('Like not saved', e);
       p.liked = !p.liked;
       p.likes += p.liked ? 1 : -1;
       notifyListeners();
@@ -258,7 +267,7 @@ class PostStore extends ChangeNotifier {
     if (p == null || count <= 0) return;
     p.shares += count;
     notifyListeners();
-    DatabaseService.instance.registerShare(id, count).catchError((_) {});
+    DatabaseService.instance.registerShare(id, count).catchError((Object e) => reportError('Share not saved', e));
   }
 
   Future<void> toggleSave(String id) async {
@@ -272,6 +281,7 @@ class PostStore extends ChangeNotifier {
     try {
       await DatabaseService.instance.toggleSave(id, p.saved);
     } catch (e) {
+      reportError('Save not saved', e);
       p.saved = !p.saved;
       p.saves += p.saved ? 1 : -1;
       notifyListeners();
@@ -298,6 +308,7 @@ class PostStore extends ChangeNotifier {
     try {
       newReply.id = await DatabaseService.instance.addComment(postId, text, parentId: commentId);
     } catch (e) {
+      reportError('Reply not sent', e);
       parent.replies.remove(newReply);
       notifyListeners();
     }
@@ -314,6 +325,7 @@ class PostStore extends ChangeNotifier {
     try {
       newComment.id = await DatabaseService.instance.addComment(id, text);
     } catch (e) {
+      reportError('Comment not sent', e);
       p.comments.remove(newComment);
       notifyListeners();
     }

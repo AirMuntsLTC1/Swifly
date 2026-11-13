@@ -554,11 +554,11 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
               SizedBox(height: r.h(20)),
               ListenableBuilder(
-                listenable: FollowStore.instance,
+                listenable: Listenable.merge([FollowStore.instance, PostStore.instance]),
                 builder: (context, _) => FlexRow(
                   spacing: r.w(32),
                   children: [
-                    const _Stat(label: 'Posts', value: '24'),
+                    _Stat(label: 'Posts', value: '${PostStore.instance.myPosts.length}'),
                     GestureDetector(
                       onTap: () => pushOnce(
                           context,

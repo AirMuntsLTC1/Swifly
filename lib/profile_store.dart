@@ -1,3 +1,4 @@
+import 'app_feedback.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -347,7 +348,7 @@ class ProfileStore extends ChangeNotifier {
     final f = fieldFor(key);
     DatabaseService.instance
         .saveProfileField(key, f.value, f.audience.name)
-        .catchError((_) {});
+        .catchError((Object e) => reportError('Profile not saved', e));
   }
 
   /// Age from the birthday, calculated by the C++ core. Null if no valid birthday is set.
