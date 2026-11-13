@@ -322,3 +322,5 @@ Route<void> postDetailRoute(String postId) => fastRoute<void>(
       name: 'post:$postId',
       child: PostDetailScreen(postId: postId),
     );
+
+

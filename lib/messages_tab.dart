@@ -15,8 +15,8 @@ import 'post_model.dart';
 import 'story_player_screen.dart';
 import 'story_viewer_screen.dart';
 import 'suggestions_screen.dart';
-import 'tag_friends_screen.dart';
 import 'user_profile_screen.dart';
+import 'people_directory.dart';
 
 /// Instagram-style inbox: notes + stories row, Filters / Primary / Requests /
 /// General, unread badges, message requests, and "Suggestions People" at the bottom.
@@ -686,3 +686,5 @@ class _MessagesTabState extends State<MessagesTab> {
     );
   }
 }
+
+

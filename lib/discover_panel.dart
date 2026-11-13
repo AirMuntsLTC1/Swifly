@@ -8,31 +8,8 @@ import 'native_bridge.dart';
 import 'post_model.dart';
 import 'follow_button.dart';
 import 'search_history.dart';
-import 'tag_friends_screen.dart';
 import 'user_profile_screen.dart';
-
-const List<String> kTrendingTags = [
-  'travel',
-  'coffee',
-  'coding',
-  'design',
-  'hiking',
-  'books',
-];
-
-/// Mock follower and following counts per handle. Replace with database values later.
-const Map<String, (int, int)> kPeopleStats = {
-  '@avastone': (1243, 310),
-  '@liampark': (856, 402),
-  '@miachen': (3120, 198),
-  '@noahreed': (412, 260),
-  '@zaraali': (9800, 121),
-  '@ethanb': (67, 88),
-  '@sofial': (2210, 540),
-  '@maxturner': (533, 97),
-  '@hanasato': (1540, 376),
-  '@omarkh': (98, 143),
-};
+import 'people_directory.dart';
 
 class DiscoverPanel extends StatefulWidget {
   final String query;
@@ -384,3 +361,5 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     );
   }
 }
+
+

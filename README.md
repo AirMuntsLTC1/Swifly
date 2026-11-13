@@ -168,3 +168,5 @@ final rows = await supabase.from('profile_fields').select('key,value,audience')
     .eq('user_id', supabase.auth.currentUser!.id);
 ```
 An empty value should delete the row (or save an empty string), so a cleared field disappears from the profile.
+
+

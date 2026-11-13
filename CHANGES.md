@@ -35,3 +35,5 @@
 - Inbox section "Accounts to follow" is now **Suggestions People**; "See all" opens the same `SuggestionsScreen` as the Profile tab (removed the duplicate `DmSuggestionsScreen`).
 - Profile "Message" button now opens the real `ChatScreen` (notifications, story replies, inbox, new message and profile all use the same chat).
 - Removed dead code: old comments sheet in feed_widgets.dart, `Post.mediaPaths`, `PostStore._seed/hashtagUsage`, `DatabaseService.fetchPosts`, unused Story getters, unused imports, `.bak` file, `swifly_fixes/` (applied: build_php_android.sh, build-apk.yml, `circleCheck` icon).
+
+

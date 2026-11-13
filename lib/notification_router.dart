@@ -4,8 +4,8 @@ import 'chat_screen.dart';
 import 'inbox_store.dart';
 import 'post_detail_screen.dart';
 import 'story_viewer_screen.dart';
-import 'tag_friends_screen.dart';
 import 'user_profile_screen.dart';
+import 'people_directory.dart';
 
 /// Used by the popup banner and the notifications list to navigate from anywhere.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -49,3 +49,5 @@ class NotificationRouter {
     }
   }
 }
+
+

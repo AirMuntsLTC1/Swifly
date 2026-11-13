@@ -6,6 +6,7 @@ import 'follow_button.dart';
 import 'follow_store.dart';
 import 'post_model.dart';
 import 'user_profile_screen.dart';
+import 'people_directory.dart';
 
 /// Followers and Following lists. Both come from [FollowStore], so they update
 /// live when someone follows or unfollows.
@@ -138,3 +139,5 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     );
   }
 }
+
+

@@ -5,6 +5,7 @@ import 'inbox_store.dart';
 import 'post_model.dart';
 import 'realtime.dart';
 import 'typing_store.dart';
+import 'people_directory.dart';
 
 /// Applies every realtime event to the stores and creates the matching notification.
 /// Each screen listens to the stores, so changes show up everywhere at once.
@@ -108,3 +109,5 @@ class RealtimeRouter {
     }
   }
 }
+
+

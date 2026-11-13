@@ -21,3 +21,5 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SWIFLY_PHP_FILE
 add_library(swifly_core SHARED swifly_core.cpp media_bridge.cpp)
 target_include_directories(swifly_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_options(swifly_core PRIVATE -O2 -fvisibility=hidden)
+
+

@@ -34,3 +34,5 @@ class TypingStore extends ChangeNotifier {
     if (!wasTyping) notifyListeners();
   }
 }
+
+

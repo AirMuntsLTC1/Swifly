@@ -8,8 +8,8 @@ import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
-import 'tag_friends_screen.dart';
 import 'user_profile_screen.dart';
+import 'people_directory.dart';
 
 /// Follow / Follow back / Following button in the Messages (Instagram) style.
 class DmFollowButton extends StatelessWidget {
@@ -240,3 +240,5 @@ class _NewMessageScreenState extends State<NewMessageScreen> {
     );
   }
 }
+
+

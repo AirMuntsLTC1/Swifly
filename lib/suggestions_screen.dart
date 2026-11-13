@@ -3,8 +3,8 @@ import 'nav_guard.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'follow_button.dart';
-import 'tag_friends_screen.dart';
 import 'user_profile_screen.dart';
+import 'people_directory.dart';
 
 class SuggestionsScreen extends StatelessWidget {
   const SuggestionsScreen({super.key});
@@ -48,3 +48,5 @@ class SuggestionsScreen extends StatelessWidget {
     );
   }
 }
+
+

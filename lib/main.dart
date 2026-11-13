@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'app_config.dart';
+import 'app_bootstrap.dart';
 import 'media/media_pipeline.dart';
 import 'logo_service.dart';
-import 'mock_data.dart';
-import 'mock_realtime.dart';
 import 'notification_banner.dart';
 import 'notification_router.dart';
 import 'profile_store.dart';
 import 'realtime_router.dart';
 import 'splash_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Check how much of a video is on screen about 8 times a second.
   VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 120);
-  if (kUseMockData) loadMockData();
+  // Mock data or the real database, depending on kUseMockData (app_config.dart).
+  await loadAppData();
   // Bring back the profile saved on this phone and the saved company/school logos.
   ProfileStore.instance.loadFromDevice();
   LogoService.instance.load();
@@ -25,7 +24,7 @@ void main() {
   runApp(const SocialApp());
   // Unpack the PHP media scripts and trim the local media cache in the background.
   MediaPipeline.instance.ensureReady().then((_) => MediaPipeline.instance.trimCache());
-  if (kUseMockData) MockRealtime.start();
+  startLiveActivity();
 }
 
 class SocialApp extends StatelessWidget {
@@ -79,3 +78,5 @@ TextTheme _appTextTheme() {
       )
       .apply(fontFamily: kAppFont);
 }
+
+

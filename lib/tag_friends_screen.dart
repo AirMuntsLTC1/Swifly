@@ -1,25 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-class Person {
-  final String name;
-  final String handle;
-  const Person(this.name, this.handle);
-}
+import 'people_directory.dart';
 
-// Placeholder friends list. Replace with real data when the database is connected.
-const List<Person> kPeople = [
-  Person('Ava Stone', '@avastone'),
-  Person('Liam Park', '@liampark'),
-  Person('Mia Chen', '@miachen'),
-  Person('Noah Reed', '@noahreed'),
-  Person('Zara Ali', '@zaraali'),
-  Person('Ethan Brooks', '@ethanb'),
-  Person('Sofia Lopez', '@sofial'),
-  Person('Max Turner', '@maxturner'),
-  Person('Hana Sato', '@hanasato'),
-  Person('Omar Khalid', '@omarkh'),
-];
 
 /// Slides up full screen. Pops with the selected handles, or null if cancelled.
 Route<List<String>> tagFriendsRoute(List<String> initial) {
@@ -177,3 +160,5 @@ class _TagFriendsScreenState extends State<TagFriendsScreen> {
     );
   }
 }
+
+

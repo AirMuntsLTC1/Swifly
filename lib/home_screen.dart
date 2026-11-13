@@ -24,11 +24,11 @@ import 'connections_screen.dart';
 import 'suggestions_screen.dart';
 import 'search_history.dart';
 import 'upload_manager.dart';
-import 'tag_friends_screen.dart';
 import 'messages_tab.dart';
 import 'dm_theme.dart';
 import 'package:flutter/services.dart';
 import 'notifications_tab.dart';
+import 'people_directory.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -536,12 +536,12 @@ class _ProfileTabState extends State<ProfileTab> {
                   children: [
               _avatar(r),
               SizedBox(height: r.h(14)),
-              const Text(kMeName,
+              Text(kMeName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black)),
               const SizedBox(height: 4),
-              const Text(kMeHandle, style: TextStyle(color: Color(0xFF8E8E8E))),
+              Text(kMeHandle, style: TextStyle(color: Color(0xFF8E8E8E))),
               SizedBox(height: r.h(10)),
               GestureDetector(
                 onTap: () => Navigator.push(context, fieldEditorRoute(kProfileSections.first.fields.first)),
@@ -841,3 +841,5 @@ class UploadBanner extends StatelessWidget {
     );
   }
 }
+
+

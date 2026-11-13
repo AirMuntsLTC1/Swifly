@@ -8,11 +8,11 @@ import 'burst_icons.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
 import 'user_profile_screen.dart';
-import 'tag_friends_screen.dart';
 import 'follow_button.dart';
 import 'post_detail_screen.dart';
 import 'media/post_media_view.dart';
 import 'share_sheet.dart';
+import 'people_directory.dart';
 
 class FeedTab extends StatelessWidget {
   const FeedTab({super.key});
@@ -361,3 +361,5 @@ class FeedFollowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FollowButton(handle: handle, compact: true);
 }
+
+

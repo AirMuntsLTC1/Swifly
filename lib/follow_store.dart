@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'database_service.dart';
-import 'tag_friends_screen.dart';
+import 'people_directory.dart';
 
 /// How the signed-in user and another person follow each other.
 enum FollowState { none, follower, following, mutual }
@@ -95,11 +95,12 @@ class FollowStore extends ChangeNotifier {
   }
 }
 
-/// Name and handle for a handle. Uses sample people for now.
-/// When the database is connected, replace the body with a user lookup.
+/// Name and handle for a handle, from the people directory.
 Person personFor(String handle) {
   for (final p in kPeople) {
     if (p.handle == handle) return p;
   }
   return Person(handle.replaceFirst('@', ''), handle);
 }
+
+

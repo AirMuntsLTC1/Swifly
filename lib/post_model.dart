@@ -2,14 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import 'media/media_item.dart';
 import 'native_bridge.dart';
-import 'tag_friends_screen.dart';
 import 'database_service.dart';
-
-const String kMeName = 'Your Name';
-const String kMeHandle = '@yourhandle';
-
-/// The user's own demo post. Incoming likes, comments and saves land here.
-const String kMyPostId = 'm1';
+import 'people_directory.dart';
 
 String nameForHandle(String handle) {
   for (final f in kPeople) {
@@ -318,3 +312,5 @@ class PostStore extends ChangeNotifier {
     }
   }
 }
+
+

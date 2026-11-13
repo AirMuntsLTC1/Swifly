@@ -7,6 +7,7 @@ import 'follow_store.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
 import 'story_models.dart';
+import 'people_directory.dart';
 
 enum NotifType { like, comment, reply, save, follow, message, storyReact, tag, storyReply }
 
@@ -641,3 +642,5 @@ class StoryStore extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+

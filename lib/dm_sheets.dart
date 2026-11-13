@@ -4,6 +4,7 @@ import 'chat_screen.dart';
 import 'dm_theme.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
+import 'people_directory.dart';
 
 const int kNoteMax = 60;
 
@@ -375,3 +376,5 @@ class _FilterSheetState extends State<_FilterSheet> {
     );
   }
 }
+
+

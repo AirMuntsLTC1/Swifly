@@ -81,4 +81,60 @@ class DatabaseService {
     await Future.delayed(const Duration(milliseconds: 150));
     // Example: await supabase.from('notes').upsert({'user_id': uid, 'text': text});
   }
+
+  // ---------------------------------------------------------------------------
+  // READ METHODS. These are the only functions you fill in to go live.
+  // Each returns plain rows (Map). app_bootstrap.dart + db_mappers.dart turn the
+  // rows into the objects the screens already use, so the design never changes.
+  // Table and column names match supabase/schema.sql.
+  // Return an empty list / null while a table is not connected yet.
+  // ---------------------------------------------------------------------------
+
+  /// {'name': 'Your Name', 'handle': '@you'} for the signed-in user, or null.
+  Future<Map<String, dynamic>?> fetchMe() async {
+    // Example: final r = await supabase.from('profiles').select('name,handle').eq('id', uid).single();
+    return null;
+  }
+
+  /// Rows: {handle, name, followers_count, following_count}
+  Future<List<Map<String, dynamic>>> fetchPeople() async {
+    // Example: return List<Map<String, dynamic>>.from(await supabase.from('profiles').select('handle,name,followers_count,following_count'));
+    return <Map<String, dynamic>>[];
+  }
+
+  /// Hashtag names without the #, most popular first.
+  Future<List<String>> fetchTrendingTags() async {
+    // Example: final rows = await supabase.from('trending_tags').select('tag').limit(12);
+    return <String>[];
+  }
+
+  /// Rows: {id, author_name, author_handle, text, audience, tagged_handles (list),
+  /// created_at, likes, saves, shares, liked, saved,
+  /// comments: [{id, name, text, created_at, replies: [same shape]}]}
+  Future<List<Map<String, dynamic>>> fetchPosts() async {
+    // Example: await supabase.from('posts_feed').select().order('created_at', ascending: false);
+    return <Map<String, dynamic>>[];
+  }
+
+  /// {'following': ['@a', ...], 'followers': ['@b', ...]}
+  Future<Map<String, List<String>>> fetchFollows() async {
+    // Example: read the follows table where follower = me / followee = me.
+    return <String, List<String>>{'following': <String>[], 'followers': <String>[]};
+  }
+
+  /// Rows: {id, type, actor_name, actor_handle, post_id, comment_id, emoji, preview, created_at, read}
+  /// type is one of: like, comment, reply, save, follow, message, storyReact, tag, storyReply.
+  Future<List<Map<String, dynamic>>> fetchNotifications() async {
+    return <Map<String, dynamic>>[];
+  }
+
+  /// Rows: {id, peer_handle, text, from_me, created_at}
+  Future<List<Map<String, dynamic>>> fetchMessages() async {
+    return <Map<String, dynamic>>[];
+  }
+
+  /// Rows: {handle, text, created_at} (notes of people you follow).
+  Future<List<Map<String, dynamic>>> fetchNotes() async {
+    return <Map<String, dynamic>>[];
+  }
 }

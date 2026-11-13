@@ -5,6 +5,7 @@ import 'dm_theme.dart';
 import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
+import 'people_directory.dart';
 
 const Color _blue = Color(0xFF1D6FDC);
 const Color _grey = Color(0xFF8E8E8E);
@@ -367,3 +368,5 @@ class _ShareDialogState extends State<_ShareDialog> {
     );
   }
 }
+
+

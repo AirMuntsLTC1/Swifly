@@ -7,10 +7,10 @@ import 'connections_screen.dart';
 import 'native_bridge.dart';
 import 'discover_panel.dart';
 import 'follow_button.dart';
-import 'tag_friends_screen.dart';
 import 'responsive.dart';
 import 'inbox_store.dart';
 import 'story_player_screen.dart';
+import 'people_directory.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final Person user;
@@ -265,3 +265,5 @@ class _Stat extends StatelessWidget {
     );
   }
 }
+
+

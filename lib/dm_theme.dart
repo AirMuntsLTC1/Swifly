@@ -6,6 +6,7 @@ import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
 import 'profile_store.dart';
+import 'people_directory.dart';
 
 /// Colors for the Messages screens (inbox, chat, notes, filters).
 /// Dark is the default (like the Instagram screenshots); switch in the inbox menu.
@@ -142,3 +143,5 @@ Listenable dmListenable() => Listenable.merge([
       StoryStore.instance,
       DmTheme.instance,
     ]);
+
+

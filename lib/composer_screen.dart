@@ -11,6 +11,7 @@ import 'upload_manager.dart';
 import 'media/media_item.dart';
 import 'media/media_pipeline.dart';
 import 'media/media_thumb.dart';
+import 'people_directory.dart';
 
 Route<void> composerRoute() {
   return PageRouteBuilder(
@@ -279,13 +280,13 @@ class _ComposerScreenState extends State<ComposerScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(kMeName,
+                        Text(kMeName,
                             style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,
                                 color: Colors.black)),
                         const SizedBox(height: 2),
-                        const Text(kMeHandle,
+                        Text(kMeHandle,
                             style: TextStyle(fontSize: 14, color: Color(0xFF8E8E8E))),
                         const SizedBox(height: 10),
                         Wrap(
@@ -510,3 +511,5 @@ class _Chip extends StatelessWidget {
     );
   }
 }
+
+
