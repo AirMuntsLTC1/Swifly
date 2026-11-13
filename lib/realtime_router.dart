@@ -2,6 +2,7 @@ import 'dart:async';
 import 'inbox_store.dart';
 import 'post_model.dart';
 import 'realtime.dart';
+import 'database_service.dart';
 
 class RealtimeRouter {
   static StreamSubscription<RealtimeEvent>? _sub;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_bootstrap.dart';
 import '../auth_service.dart';
 import '../home_screen.dart';
+import '../post_model.dart';
 import 'sign_in_screen.dart';
 
 Route<T> _fade<T>(Widget page) => PageRouteBuilder<T>(

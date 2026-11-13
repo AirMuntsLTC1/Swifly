@@ -219,6 +219,101 @@ class PostStore extends ChangeNotifier {
     }
   }
 
+  List<Post> postsWithHashtag(String tag) {
+    return _posts.where((p) => p.hasHashtag(tag)).toList()..sort((a, b) => b.created.compareTo(a.created));
+  }
+
+  List<Post> search(String query) {
+    return _posts.where((p) {
+      if (NativeCore.containsCI(p.text, query)) return true;
+      if (NativeCore.containsCI(p.authorName, query)) return true;
+      for (final h in p.taggedHandles) {
+        if (NativeCore.containsCI(nameForHandle(h), query)) return true;
+        if (NativeCore.containsCI(h, query)) return true;
+      }
+      return false;
+    }).toList();
+  }
+
+  bool receiveLike(String postId) {
+    final p = byId(postId);
+    if (p == null) return false;
+    p.likes++;
+    notifyListeners();
+    return true;
+  }
+
+  bool receiveSave(String postId) {
+    final p = byId(postId);
+    if (p == null) return false;
+    p.saves++;
+    notifyListeners();
+    return true;
+  }
+
+  bool applyComment({required String postId, required String id, required String name, required String text, String? parentId}) {
+    final p = byId(postId);
+    if (p == null) return false;
+    final exists = p.comments.any((c) => c.id == id || c.replies.any((r) => r.id == id));
+    if (exists) return false;
+
+    final item = CommentItem(id: id, name: name, text: text, created: DateTime.now());
+    if (parentId == null) {
+      p.comments.add(item);
+    } else {
+      CommentItem? parent;
+      for (final c in p.comments) { if (c.id == parentId) { parent = c; break; } }
+      if (parent == null) return false;
+      parent.replies.add(item);
+    }
+    notifyListeners();
+    return true;
+  }
+
+  void registerShare(String id, int count) {
+    final p = byId(id);
+    if (p == null || count <= 0) return;
+    p.shares += count;
+    notifyListeners();
+    DatabaseService.instance.registerShare(id, count).catchError((Object e) => reportError('Share not saved', e));
+  }
+
+  Future<void> addReply(String postId, String commentId, String text) async {
+    final p = byId(postId);
+    if (p == null) return;
+    CommentItem? parent;
+    for (final c in p.comments) { if (c.id == commentId) { parent = c; break; } }
+    if (parent == null) return;
+
+    final newReply = CommentItem(name: kMeName, text: text, created: DateTime.now());
+    parent.replies.add(newReply);
+    notifyListeners();
+
+    try {
+      newReply.id = await DatabaseService.instance.addComment(postId, text, parentId: commentId);
+    } catch (e) {
+      reportError('Reply not sent', e);
+      parent.replies.remove(newReply);
+      notifyListeners();
+    }
+  }
+
+  Future<void> addComment(String id, String text) async {
+    final p = byId(id);
+    if (p == null) return;
+    final newComment = CommentItem(name: kMeName, text: text, created: DateTime.now());
+    p.comments.add(newComment);
+    notifyListeners();
+
+    try {
+      newComment.id = await DatabaseService.instance.addComment(id, text);
+    } catch (e) {
+      reportError('Comment not sent', e);
+      p.comments.remove(newComment);
+      notifyListeners();
+    }
+  }
+
   Future<void> toggleLike(String id) async {
     final p = byId(id); if (p == null) return;
     p.liked = !p.liked; p.likes += p.liked ? 1 : -1; notifyListeners();

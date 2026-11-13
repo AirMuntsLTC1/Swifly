@@ -31,6 +31,24 @@ Future<void> loadAppData() async {
   }
 }
 
+Future<void> refreshPosts() async {
+  final saved = await DatabaseService.instance.fetchPosts(limit: 20, offset: 0);
+  final pending = PostStore.instance.unsaved;
+  
+  final filteredSaved = saved.where((savedRow) {
+    final savedText = '${savedRow['text'] ?? ''}'.trim();
+    final savedMediaLen = (savedRow['media'] as List?)?.length ?? 0;
+    for (final local in pending) {
+      if (local.text.trim() == savedText && local.media.length == savedMediaLen) return false;
+    }
+    return true;
+  }).toList();
+
+  PostStore.instance.merge(newPosts: [
+    for (final r in filteredSaved) postFromRow(r),
+  ]);
+}
+
 void startLiveActivity() {
   if (!kAuthEnabled) return;
   SupabaseRealtime.start();

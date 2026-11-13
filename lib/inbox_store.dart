@@ -130,6 +130,24 @@ class NotificationStore extends ChangeNotifier {
     DatabaseService.instance.deleteNotification(n.id).catchError((Object e) => reportError('Notification not removed', e));
   }
 
+  void insertFromRow(Map<String, dynamic> row) {
+    final n = AppNotification(
+      id: '${row['id']}',
+      type: NotifType.values.firstWhere((t) => t.name == row['type'], orElse: () => NotifType.like),
+      actorName: '${row['actor_name'] ?? ''}',
+      actorHandle: '${row['actor_handle'] ?? ''}',
+      created: DateTime.tryParse('${row['created_at']}')?.toLocal() ?? DateTime.now(),
+      postId: row['post_id']?.toString(),
+      commentId: row['comment_id']?.toString(),
+      emoji: row['emoji']?.toString(),
+      preview: row['preview']?.toString(),
+      read: row['read'] == true,
+    );
+    _items.insert(0, n);
+    notifyListeners();
+    _incoming.add(n);
+  }
+
   void markAllRead() {
     for (final n in _items) {
       n.read = true;
