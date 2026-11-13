@@ -1,3 +1,4 @@
+import 'media/media_item.dart';
 import 'story_models.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
@@ -83,14 +84,72 @@ class DatabaseService {
 
   /// Saves a post and returns its database id. Photos and videos are not
   /// uploaded yet, so [mediaPaths] stay on this phone for now.
-  Future<String?> savePost(String text, String audience, List<String> taggedHandles, List<String> mediaPaths) async {
+  /// Saves a post with its photos and videos. Each file goes to the "post-media"
+  /// bucket and a row goes to post_media. If an upload fails, the post is
+  /// removed again, so nobody sees a post with missing media.
+  Future<String?> savePost(String text, String audience, List<String> taggedHandles, List<MediaItem> media) async {
+    final me = _requireMe();
     final row = await _db.from('posts').insert({
-      'author_id': _requireMe(),
+      'author_id': me,
       'text': text,
       'audience': audience == 'Followers' ? 'Followers' : 'Everyone',
       'tagged_handles': taggedHandles,
     }).select('id').single();
-    return '${row['id']}';
+    final postId = '${row['id']}';
+    try {
+      for (var i = 0; i < media.length; i++) {
+        final item = media[i];
+        await _waitForProcessing(item);
+        final mainPath = '$me/$postId/$i.${_extOf(item.path, item.isVideo ? 'mp4' : 'jpg')}';
+        await _uploadFile('post-media', mainPath, item.path);
+
+        String? thumbPath;
+        final thumb = item.thumbPath;
+        if (thumb != null && thumb.isNotEmpty && File(thumb).existsSync()) {
+          thumbPath = '$me/$postId/thumb_$i.${_extOf(thumb, 'jpg')}';
+          await _uploadFile('post-media', thumbPath, thumb);
+        }
+
+        await _db.from('post_media').insert({
+          'post_id': postId,
+          'position': i,
+          'kind': item.isVideo ? 'video' : 'photo',
+          'storage_path': mainPath,
+          'thumb_path': thumbPath,
+          'width': item.width,
+          'height': item.height,
+          'duration_ms': item.durationMs,
+          'engine': item.engine,
+        });
+      }
+    } catch (e) {
+      await _db.from('posts').delete().eq('id', postId);
+      rethrow;
+    }
+    return postId;
+  }
+
+  /// The pipeline may still be preparing a video or photo. Wait for it (up to a minute).
+  Future<void> _waitForProcessing(MediaItem item) async {
+    var waited = 0;
+    while (item.processing && waited < 60000) {
+      await Future.delayed(const Duration(milliseconds: 250));
+      waited += 250;
+    }
+  }
+
+  Future<void> _uploadFile(String bucket, String storagePath, String localPath) async {
+    final file = File(localPath);
+    if (!await file.exists()) {
+      throw StateError('A photo or video could not be found on this phone. Try adding it again.');
+    }
+    await _db.storage.from(bucket).upload(storagePath, file, fileOptions: const FileOptions(upsert: true));
+  }
+
+  static String _extOf(String path, String fallback) {
+    final dot = path.lastIndexOf('.');
+    if (dot == -1 || dot < path.lastIndexOf('/')) return fallback;
+    return path.substring(dot + 1).toLowerCase();
   }
 
   Future<void> toggleLike(String postId, bool isLiked) async {
@@ -332,6 +391,28 @@ class DatabaseService {
       }
     }
 
+    final mediaRows = await _db
+        .from('post_media')
+        .select('post_id,position,kind,storage_path,thumb_path,width,height,duration_ms,engine')
+        .inFilter('post_id', ids)
+        .order('position', ascending: true);
+    final mediaByPost = <String, List<Map<String, dynamic>>>{};
+    for (final m in mediaRows) {
+      final local = await _cachedFile('post-media', '${m['storage_path']}');
+      if (local == null) continue; // could not download: skip it rather than show a broken tile
+      final thumbPath = m['thumb_path'];
+      final thumb = thumbPath == null ? null : await _cachedFile('post-media', '$thumbPath');
+      mediaByPost.putIfAbsent('${m['post_id']}', () => <Map<String, dynamic>>[]).add({
+        'kind': m['kind'],
+        'path': local,
+        'thumb': thumb,
+        'width': m['width'],
+        'height': m['height'],
+        'duration_ms': m['duration_ms'],
+        'engine': m['engine'] ?? '',
+      });
+    }
+
     return [
       for (final r in postRows)
         _postMap(
@@ -339,6 +420,7 @@ class DatabaseService {
           liked: liked.contains('${r['id']}'),
           saved: saved.contains('${r['id']}'),
           comments: topLevel['${r['id']}'] ?? <Map<String, dynamic>>[],
+          media: mediaByPost['${r['id']}'] ?? <Map<String, dynamic>>[],
         ),
     ];
   }
@@ -348,6 +430,7 @@ class DatabaseService {
     required bool liked,
     required bool saved,
     required List<Map<String, dynamic>> comments,
+    List<Map<String, dynamic>> media = const [],
   }) {
     final author = _Who.fromRow(_embedded(r['author']));
     return <String, dynamic>{
@@ -364,6 +447,7 @@ class DatabaseService {
       'liked': liked,
       'saved': saved,
       'comments': comments,
+      'media': media,
     };
   }
 
@@ -519,18 +603,20 @@ class DatabaseService {
     return out;
   }
 
-  /// Downloads a story photo once and keeps it on the phone. Null if it fails.
-  Future<String?> _cachedStoryPhoto(String storagePath) async {
+  Future<String?> _cachedStoryPhoto(String storagePath) => _cachedFile('stories', storagePath);
+
+  /// Downloads a file from a bucket once and keeps it on the phone. Null if it fails.
+  Future<String?> _cachedFile(String bucket, String storagePath) async {
     try {
       final dir = await getApplicationSupportDirectory();
-      final file = File('${dir.path}/story_photos/${storagePath.replaceAll('/', '_')}');
+      final file = File('${dir.path}/media_cache/$bucket/${storagePath.replaceAll('/', '_')}');
       if (await file.exists()) return file.path;
       await file.parent.create(recursive: true);
-      final bytes = await _db.storage.from('stories').download(storagePath);
+      final bytes = await _db.storage.from(bucket).download(storagePath);
       await file.writeAsBytes(bytes);
       return file.path;
     } catch (e) {
-      debugPrint('[Swifly] story photo not downloaded: $e');
+      debugPrint('[Swifly] file not downloaded ($bucket/$storagePath): $e');
       return null;
     }
   }

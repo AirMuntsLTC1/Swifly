@@ -1,3 +1,4 @@
+import 'media/media_item.dart';
 import 'story_models.dart';
 import 'inbox_store.dart';
 import 'people_directory.dart';
@@ -32,7 +33,23 @@ CommentItem commentFromRow(Map<String, dynamic> r) => CommentItem(
       ],
     );
 
+/// One saved photo or video, already downloaded to this phone.
+MediaItem mediaFromRow(Map<String, dynamic> r) => MediaItem(
+      kind: _s(r['kind']) == 'video' ? MediaKind.video : MediaKind.photo,
+      path: _s(r['path']),
+      thumbPath: r['thumb'] == null ? null : _s(r['thumb']),
+      width: _i(r['width']),
+      height: _i(r['height']),
+      durationMs: _i(r['duration_ms']),
+      processing: false,
+      engine: _s(r['engine']),
+    );
+
 Post postFromRow(Map<String, dynamic> r) => Post(
+      media: [
+        if (r['media'] is List)
+          for (final m in r['media'] as List) mediaFromRow(Map<String, dynamic>.from(m as Map)),
+      ],
       id: _s(r['id']),
       authorName: _s(r['author_name']),
       authorHandle: _s(r['author_handle']),

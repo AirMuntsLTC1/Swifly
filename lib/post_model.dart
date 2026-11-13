@@ -234,7 +234,7 @@ class PostStore extends ChangeNotifier {
     // DB Sync
     try {
       final serverId = await DatabaseService.instance.savePost(
-          text, audience, taggedHandles, media.map((m) => m.path).toList());
+          text, audience, taggedHandles, media);
       if (serverId != null) newPost.id = serverId;
     } catch (e) {
       reportError('Post not saved', e);
