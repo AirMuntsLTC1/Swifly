@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'add_story_screen.dart';
 import 'chat_screen.dart';
+import 'count_badge.dart';
 import 'dm_people_screens.dart';
 import 'dm_sheets.dart';
 import 'dm_theme.dart';
@@ -306,12 +307,13 @@ class _MessagesTabState extends State<MessagesTab> {
 
   Widget _chip(DmColors c,
       {required String label, required bool selected, required VoidCallback onTap, Widget? trailing, Widget? leading}) {
+    final s = dmScale(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 40,
-        margin: const EdgeInsets.only(right: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        height: 40 * s,
+        margin: EdgeInsets.only(right: 10 * s),
+        padding: EdgeInsets.symmetric(horizontal: 14 * s),
         decoration: BoxDecoration(
           color: selected ? c.chipFill : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
@@ -323,28 +325,21 @@ class _MessagesTabState extends State<MessagesTab> {
             if (leading != null) ...[leading, const SizedBox(width: 6)],
             Text(label,
                 style: TextStyle(
-                    color: c.text, fontWeight: FontWeight.w700, fontSize: 15)),
-            if (trailing != null) ...[const SizedBox(width: 6), trailing],
+                    color: c.text, fontWeight: FontWeight.w700, fontSize: 15 * s)),
+            if (trailing != null) ...[SizedBox(width: 6 * s), trailing],
           ],
         ),
       ),
     );
   }
 
-  Widget _countDot(int n) => Container(
-        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-        padding: const EdgeInsets.symmetric(horizontal: 5),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: DmTheme.instance.c.badge, borderRadius: BorderRadius.circular(9)),
-        child: Text(n > 9 ? '9+' : '$n',
-            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
-      );
+  Widget _countDot(int n) => CountBadge(count: n, color: DmTheme.instance.c.badge);
 
   Widget _chips(DmColors c) {
     final store = ChatStore.instance;
     final requests = store.requestCount;
     return SizedBox(
-      height: 46,
+      height: 46 * dmScale(context),
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.fromLTRB(16, 4, 6, 2),

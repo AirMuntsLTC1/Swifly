@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'count_badge.dart';
 import 'inbox_store.dart';
 import 'notification_router.dart';
 import 'follow_button.dart';
@@ -36,27 +37,10 @@ class UnreadBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: NotificationStore.instance,
-      builder: (context, _) {
-        final count = NotificationStore.instance.unreadCount;
-        if (count == 0) return const SizedBox.shrink();
-        return IgnorePointer(
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.red,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: Colors.white, width: 1.5),
-            ),
-            child: Text(
-              count > 9 ? '9+' : '$count',
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
-            ),
-          ),
-        );
-      },
+      builder: (context, _) => CountBadge(
+        count: NotificationStore.instance.unreadCount,
+        borderColor: Colors.white,
+      ),
     );
   }
 }

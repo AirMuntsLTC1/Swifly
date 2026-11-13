@@ -51,6 +51,7 @@ class Post {
   bool liked;
   int saves;
   bool saved;
+  int shares;
 
   Post({
     required this.id,
@@ -65,6 +66,7 @@ class Post {
     this.liked = false,
     this.saves = 0,
     this.saved = false,
+    this.shares = 0,
     List<CommentItem>? comments,
   }) : comments = comments ?? <CommentItem>[];
 
@@ -253,6 +255,14 @@ class PostStore extends ChangeNotifier {
       p.likes += p.liked ? 1 : -1;
       notifyListeners();
     }
+  }
+
+  /// Counts a share (the post was sent to [count] people in Messages).
+  void registerShare(String id, int count) {
+    final p = byId(id);
+    if (p == null || count <= 0) return;
+    p.shares += count;
+    notifyListeners();
   }
 
   Future<void> toggleSave(String id) async {

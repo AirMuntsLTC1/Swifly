@@ -11,8 +11,7 @@ import 'tag_friends_screen.dart';
 import 'follow_button.dart';
 import 'post_detail_screen.dart';
 import 'media/post_media_view.dart';
-
-const Color _saveOrange = Color(0xFFFF9800);
+import 'share_sheet.dart';
 
 class FeedTab extends StatelessWidget {
   const FeedTab({super.key});
@@ -44,7 +43,7 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard> {
   int _heartBurst = 0;
-  int _saveBurst = 0;
+  int _shareBurst = 0;
   final List<TapGestureRecognizer> _recognizers = [];
   late TextSpan _textSpan;
 
@@ -115,9 +114,12 @@ class _PostCardState extends State<PostCard> {
     if (widget.post.liked) setState(() => _heartBurst++);
   }
 
-  void _onSave() {
-    PostStore.instance.toggleSave(widget.post.id);
-    if (widget.post.saved) setState(() => _saveBurst++);
+  void _onShare() {
+    setState(() => _shareBurst++);
+    // Let the paper plane animation start, then open the dialog.
+    Future<void>.delayed(const Duration(milliseconds: 140), () {
+      if (mounted) showSharePostDialog(context, widget.post);
+    });
   }
 
   IconData _audienceIcon(String audience) {
@@ -194,8 +196,8 @@ class _PostCardState extends State<PostCard> {
   String _countsLine(Post p) {
     final likes = NativeCore.formatCount(p.likes);
     final comments = NativeCore.formatCount(p.totalComments);
-    final saves = NativeCore.formatCount(p.saves);
-    return '$likes likes · $comments comments · $saves saves';
+    final shares = NativeCore.formatCount(p.shares);
+    return '$likes likes · $comments comments · $shares shares';
   }
 
   Widget _pop(int burst, Widget child) {
@@ -281,18 +283,27 @@ class _PostCardState extends State<PostCard> {
           ),
           _actionCell(
             icon: _iconStack(
-              burst: _saveBurst,
-              burstIcon: Icons.bookmark,
-              burstColor: _saveOrange,
-              child: _pop(
-                _saveBurst,
-                p.saved
-                    ? const Icon(Icons.bookmark, color: _saveOrange, size: 22)
-                    : const Icon(LucideIcons.bookmark, color: Colors.black, size: 22),
+              burst: _shareBurst,
+              burstIcon: LucideIcons.send,
+              burstColor: const Color(0xFF1D6FDC),
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey('share_$_shareBurst'),
+                tween: Tween<double>(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 520),
+                curve: Curves.easeOutCubic,
+                builder: (context, t, c) {
+                  // Plane tilts, flies up-right a little and settles back.
+                  final fly = _shareBurst == 0 ? 0.0 : (t < 0.5 ? t * 2 : (1 - t) * 2);
+                  return Transform.translate(
+                    offset: Offset(7 * fly, -7 * fly),
+                    child: Transform.rotate(angle: -0.35 * fly, child: c),
+                  );
+                },
+                child: const Icon(LucideIcons.send, color: Colors.black, size: 22),
               ),
             ),
-            label: p.saved ? 'Saved' : 'Save',
-            onTap: _onSave,
+            label: 'Share',
+            onTap: _onShare,
           ),
         ],
       ),

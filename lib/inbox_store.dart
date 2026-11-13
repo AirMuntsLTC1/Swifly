@@ -156,6 +156,27 @@ class StoryRef {
   });
 }
 
+/// A post that was shared inside a chat (card with thumbnail, author and caption).
+class PostRef {
+  final String postId;
+  final String authorName;
+  final String authorHandle;
+  final String title;
+  final String? thumbPath;
+  final bool isVideo;
+  final int mediaCount;
+
+  const PostRef({
+    required this.postId,
+    required this.authorName,
+    required this.authorHandle,
+    required this.title,
+    this.thumbPath,
+    this.isVideo = false,
+    this.mediaCount = 0,
+  });
+}
+
 /// What kind of thing a reply points at.
 enum ReplyKind { message, note }
 
@@ -190,6 +211,9 @@ class ChatMessage {
   final DateTime time;
   final StoryRef? story;
 
+  /// Set when this message is a shared post.
+  final PostRef? post;
+
   /// Set when this message is a reply to another message or to a note.
   final ReplyRef? replyTo;
 
@@ -203,6 +227,7 @@ class ChatMessage {
     required this.fromMe,
     required this.time,
     this.story,
+    this.post,
     this.replyTo,
     this.myReaction,
     this.theirReaction,
@@ -217,6 +242,10 @@ class ChatMessage {
       }
       final t = NativeCore.dmClip(text, 60);
       return fromMe ? 'You replied to their story: $t' : 'Replied to your story: $t';
+    }
+    if (post != null) {
+      final extra = text.trim().isEmpty ? '' : ': ${NativeCore.dmClip(text, 50)}';
+      return fromMe ? 'You sent a post$extra' : 'Sent you a post$extra';
     }
     final t = NativeCore.dmClip(text, 70);
     return fromMe ? 'You: $t' : t;
@@ -362,17 +391,31 @@ class ChatStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void send(String handle, String text, {StoryRef? story, ReplyRef? replyTo}) {
+  void send(String handle, String text,
+      {StoryRef? story, ReplyRef? replyTo, PostRef? post}) {
     _add(
       handle,
-      ChatMessage(text: text, fromMe: true, time: DateTime.now(), story: story, replyTo: replyTo),
+      ChatMessage(
+          text: text,
+          fromMe: true,
+          time: DateTime.now(),
+          story: story,
+          replyTo: replyTo,
+          post: post),
     );
-    DatabaseService.instance.sendMessage(handle, text, replyToId: replyTo?.messageId);
+    DatabaseService.instance
+        .sendMessage(handle, text, replyToId: replyTo?.messageId, postId: post?.postId);
   }
 
-  void receive(String handle, String text, {StoryRef? story, ReplyRef? replyTo}) {
+  void receive(String handle, String text,
+      {StoryRef? story, ReplyRef? replyTo, PostRef? post}) {
     final m = ChatMessage(
-        text: text, fromMe: false, time: DateTime.now(), story: story, replyTo: replyTo);
+        text: text,
+        fromMe: false,
+        time: DateTime.now(),
+        story: story,
+        replyTo: replyTo,
+        post: post);
     _add(handle, m);
     if (openHandle == handle) return;
     _unread[handle] = (_unread[handle] ?? 0) + 1;

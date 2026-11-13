@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'count_badge.dart';
 import 'create_sheet.dart';
 import 'discover_panel.dart';
 import 'feed_widgets.dart';
@@ -390,27 +391,10 @@ class _MessageBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: ChatStore.instance,
-      builder: (context, _) {
-        final count = ChatStore.instance.unreadThreads;
-        if (count == 0) return const SizedBox.shrink();
-        return IgnorePointer(
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.red,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: Colors.white, width: 1.5),
-            ),
-            child: Text(
-              count > 9 ? '9+' : '$count',
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
-            ),
-          ),
-        );
-      },
+      builder: (context, _) => CountBadge(
+        count: ChatStore.instance.unreadThreads,
+        borderColor: Colors.white,
+      ),
     );
   }
 }

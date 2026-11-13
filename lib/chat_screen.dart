@@ -8,6 +8,8 @@ import 'dm_people_screens.dart';
 import 'dm_theme.dart';
 import 'follow_store.dart';
 import 'inbox_store.dart';
+import 'media/preview_image.dart';
+import 'post_detail_screen.dart';
 import 'post_model.dart';
 import 'story_player_screen.dart';
 import 'story_viewer_screen.dart';
@@ -59,7 +61,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   ReplyRef _refFor(ChatMessage m) => ReplyRef(
         messageId: m.id,
-        text: m.text,
+        text: m.text.trim().isEmpty ? (m.post?.title ?? m.text) : m.text,
         fromMe: m.fromMe,
         authorName: dmName(m.fromMe ? kMeHandle : _handle),
         authorHandle: m.fromMe ? kMeHandle : _handle,
@@ -215,7 +217,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ConstrainedBox(
                       constraints: BoxConstraints(
                           maxWidth: MediaQuery.of(context).size.width * 0.8),
-                      child: _bubbleBody(m, c),
+                      child: _messageBody(m, c),
                     ),
                     const SizedBox(height: 12),
                     Container(
@@ -229,7 +231,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         children: [
                           action(Icons.reply_rounded, 'Reply', () => _startReply(m)),
                           action(Icons.copy_rounded, 'Copy', () {
-                            Clipboard.setData(ClipboardData(text: m.text));
+                            Clipboard.setData(ClipboardData(
+                                text: m.text.trim().isNotEmpty ? m.text : (m.post?.title ?? '')));
                           }),
                           if (m.fromMe)
                             action(Icons.undo_rounded, 'Unsend', () {
@@ -250,6 +253,105 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ------------------------------------------------------------- bubbles
+
+  /// A shared post card (if any) followed by the typed text (if any).
+  Widget _messageBody(ChatMessage m, DmColors c) {
+    final post = m.post;
+    if (post == null) return _bubbleBody(m, c);
+    final hasText = m.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _postCard(post, c),
+        if (hasText) ...[
+          const SizedBox(height: 4),
+          _bubbleBody(m, c),
+        ],
+      ],
+    );
+  }
+
+  Widget _postCard(PostRef post, DmColors c) {
+    final width = (MediaQuery.of(context).size.width * 0.62).clamp(190.0, 280.0).toDouble();
+    final title = post.title.isEmpty ? 'Photo or video post' : post.title;
+    return GestureDetector(
+      onTap: () => Navigator.push(context, postDetailRoute(post.postId)),
+      child: Container(
+        width: width,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: c.bubbleThem,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: c.divider),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+              child: Row(
+                children: [
+                  DmAvatar(handle: post.authorHandle, size: 26),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(post.authorName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: c.text, fontWeight: FontWeight.w800, fontSize: 13.5)),
+                  ),
+                ],
+              ),
+            ),
+            if (post.thumbPath != null || post.mediaCount > 0)
+              AspectRatio(
+                aspectRatio: 1,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    PreviewImage(
+                      path: post.thumbPath,
+                      cacheWidth: 600,
+                      placeholderIcon:
+                          post.isVideo ? LucideIcons.video : LucideIcons.image,
+                    ),
+                    if (post.isVideo)
+                      const Center(
+                        child: Icon(LucideIcons.play, color: Colors.white, size: 36),
+                      ),
+                    if (post.mediaCount > 1)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(12)),
+                          child: Text('1/${post.mediaCount}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
+              child: Text(title,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: c.text, fontSize: 14, height: 1.3)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _bubbleBody(ChatMessage m, DmColors c) {
     final onlyEmoji = m.text.runes.length <= 2 && m.text.trim().isNotEmpty && m.text.runes.every((r) => r > 255);
@@ -350,7 +452,7 @@ class _ChatScreenState extends State<ChatScreen> {
           GestureDetector(
             onLongPress: () => _showActions(m),
             onDoubleTap: () => ChatStore.instance.react(_handle, m.id, '❤️'),
-            child: _bubbleBody(m, c),
+            child: _messageBody(m, c),
           ),
           if (reaction != null)
             Transform.translate(
@@ -440,7 +542,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     style: TextStyle(
                         color: c.text, fontWeight: FontWeight.w700, fontSize: 13)),
                 const SizedBox(height: 2),
-                Text(m.story != null ? m.preview : m.text,
+                Text(m.story != null || m.text.trim().isEmpty ? m.preview : m.text,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: c.sub, fontSize: 13)),

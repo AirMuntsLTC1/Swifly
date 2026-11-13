@@ -70,10 +70,10 @@ class DatabaseService {
   }
 
   /// Sends a direct message. [replyToId] is the message being replied to, if any.
-  Future<void> sendMessage(String handle, String text, {String? replyToId}) async {
+  Future<void> sendMessage(String handle, String text, {String? replyToId, String? postId}) async {
     await Future.delayed(const Duration(milliseconds: 150));
     // Example (Supabase):
-    //   await supabase.from('messages').insert({'to': handle, 'text': text, 'reply_to': replyToId});
+    //   await supabase.from('messages').insert({'to': handle, 'text': text, 'reply_to': replyToId, 'post_id': postId});
   }
 
   /// Saves my note (shown above the inbox for 24 hours). Empty text deletes it.
