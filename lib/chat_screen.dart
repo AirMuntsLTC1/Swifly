@@ -682,6 +682,7 @@ class _ChatScreenState extends State<ChatScreen> {
         final c = DmTheme.instance.c;
         final store = ChatStore.instance;
         final msgs = store.thread(_handle).reversed.toList();
+        final isTyping = ChatTypingStore.instance.isTyping(_handle);
         final isRequest =
             store.hasThread(_handle) && store.bucketOf(_handle) == InboxTab.requests;
         final story = hasUnseenStory(_handle);
@@ -774,6 +775,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
               ),
               isRequest ? _requestBar(c) : _composer(c),
+              if (isTyping) Padding(padding: const EdgeInsets.all(8.0), child: Text('typing...', style: TextStyle(color: c.sub, fontStyle: FontStyle.italic))),
             ],
           ),
         );

@@ -348,13 +348,13 @@ class DatabaseService {
 
   /// Posts you are allowed to see (the database decides), newest first, with
   /// comments, replies, and whether you liked or saved each one.
-  Future<List<Map<String, dynamic>>> fetchPosts() async {
+  Future<List<Map<String, dynamic>>> fetchPosts({int limit = 4, int offset = 0}) async {
     final me = _requireMe();
     final postRows = await _db
         .from('posts')
         .select('id,text,audience,tagged_handles,likes,saves,shares,created_at,author:profiles!author_id(username,display_name)')
         .order('created_at', ascending: false)
-        .limit(100);
+        .range(offset, offset + limit - 1);
     if (postRows.isEmpty) return <Map<String, dynamic>>[];
 
     final ids = [for (final r in postRows) '${r['id']}'];
@@ -472,7 +472,7 @@ class DatabaseService {
         .select('*')
         .eq('user_id', _requireMe())
         .order('created_at', ascending: false)
-        .limit(100);
+        .range(offset, offset + limit - 1);
     return [for (final r in rows) Map<String, dynamic>.from(r)];
   }
 

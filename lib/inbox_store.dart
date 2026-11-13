@@ -692,3 +692,20 @@ class StoryStore extends ChangeNotifier {
 
 
 
+
+
+class ChatTypingStore extends ChangeNotifier {
+  ChatTypingStore._();
+  static final ChatTypingStore instance = ChatTypingStore._();
+  final Set<String> _typingHandles = {};
+
+  bool isTyping(String handle) => _typingHandles.contains(handle);
+
+  void setTyping(String handle, bool typing) {
+    if (typing) {
+      if (_typingHandles.add(handle)) notifyListeners();
+    } else {
+      if (_typingHandles.remove(handle)) notifyListeners();
+    }
+  }
+}

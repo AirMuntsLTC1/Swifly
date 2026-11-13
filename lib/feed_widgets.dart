@@ -17,8 +17,30 @@ import 'share_sheet.dart';
 import 'people_directory.dart';
 import 'dm_theme.dart';
 
-class FeedTab extends StatelessWidget {
+class FeedTab extends StatefulWidget {
   const FeedTab({super.key});
+  @override
+  State<FeedTab> createState() => _FeedTabState();
+}
+
+class _FeedTabState extends State<FeedTab> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        PostStore.instance.loadMorePosts();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,10 +65,16 @@ class FeedTab extends StatelessWidget {
             );
           }
           return ListView.builder(
+            controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.only(bottom: 96),
-            itemCount: posts.length,
-            itemBuilder: (context, i) => PostCard(key: ValueKey(posts[i].id), post: posts[i]),
+            itemCount: posts.length + (PostStore.instance.isLoadingMore ? 1 : 0),
+            itemBuilder: (context, i) {
+              if (i == posts.length) {
+                return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)));
+              }
+              return PostCard(key: ValueKey(posts[i].id), post: posts[i]);
+            },
           );
         },
       ),
