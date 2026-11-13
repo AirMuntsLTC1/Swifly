@@ -88,9 +88,20 @@ AppNotification notificationFromRow(Map<String, dynamic> r) => AppNotification(
 Map<String, List<ChatMessage>> threadsFromRows(List<Map<String, dynamic>> rows) {
   final out = <String, List<ChatMessage>>{};
   for (final r in rows) {
+    final text = _s(r['text']);
+    final postId = r['post_id'];
+    final replyToId = r['reply_to_id'];
+    String displayText = text;
+    
+    if (displayText.isEmpty) {
+      if (postId != null) displayText = "Shared a post";
+      else if (replyToId != null) displayText = "Replied to a message";
+      else displayText = "Story reply";
+    }
+
     out.putIfAbsent(_s(r['peer_handle']), () => <ChatMessage>[]).add(ChatMessage(
           id: _s(r['id']).isEmpty ? null : _s(r['id']),
-          text: _s(r['text']),
+          text: displayText,
           fromMe: _b(r['from_me']),
           time: _t(r['created_at']),
         ));

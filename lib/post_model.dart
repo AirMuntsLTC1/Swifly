@@ -99,9 +99,10 @@ class PostStore extends ChangeNotifier {
 
   /// Your own new posts first (newest), then everyone else ranked by the C++ core.
   List<Post> get ranked {
-    final mine = _posts.where((p) => p.authorHandle == kMeHandle).toList()
+    final validPosts = _posts.where((p) => p.text.trim().isNotEmpty || p.media.isNotEmpty).toList();
+    final mine = validPosts.where((p) => p.authorHandle == kMeHandle).toList()
       ..sort((a, b) => b.created.compareTo(a.created));
-    final others = _posts.where((p) => p.authorHandle != kMeHandle).toList();
+    final others = validPosts.where((p) => p.authorHandle != kMeHandle).toList();
     final order = NativeCore.rankOrder(
       others.map((p) => p.likes).toList(),
       others.map((p) => p.totalComments).toList(),

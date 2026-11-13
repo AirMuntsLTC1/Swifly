@@ -331,6 +331,7 @@ class _FieldEditorScreenState extends State<FieldEditorScreen> {
     store.setValue(d.key, _valueToSave);
     store.setAudience(d.key, _audience);
     _rememberPicks();
+    store.loadFromDatabase(); // Force refresh
     Navigator.pop(context);
   }
 

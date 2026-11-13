@@ -657,8 +657,8 @@ class _ProfileTabState extends State<ProfileTab> {
                   height: r.h(190),
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    itemCount: kPeople.take(10).length,
-                    itemBuilder: (context, i) => _suggestionCard(r, kPeople[i]),
+                    itemCount: kPeople.where((p) => p.handle != kMeHandle).take(10).length,
+                    itemBuilder: (context, i) => _suggestionCard(r, kPeople.where((p) => p.handle != kMeHandle).toList()[i]),
                   ),
                 ),
               ),

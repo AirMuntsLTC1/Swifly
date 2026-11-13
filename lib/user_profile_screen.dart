@@ -178,9 +178,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               height: r.h(190),
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: kPeople.take(10).length,
+                itemCount: kPeople.where((p) => p.handle != kMeHandle).take(10).length,
                 itemBuilder: (context, i) {
-                  final suggest = kPeople[i];
+                  final suggest = kPeople.where((p) => p.handle != kMeHandle).toList()[i];
                   if (suggest.handle == f.handle)
                     return const SizedBox.shrink();
                   return _SuggestionCard(friend: suggest);

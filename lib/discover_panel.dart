@@ -117,7 +117,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
               ),
             ),
             _title('People to follow'),
-            for (final f in kPeople) _personTile(f),
+            for (final f in kPeople.where((p) => p.handle != kMeHandle)) _personTile(f),
           ],
         );
       },
@@ -186,6 +186,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
 
   Widget _results(String q) {
     final people = kPeople
+        .where((f) => f.handle != kMeHandle)
         .where((f) =>
             NativeCore.containsCI(f.name, q) ||
             NativeCore.containsCI(f.handle, q))

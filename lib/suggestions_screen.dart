@@ -26,12 +26,15 @@ class SuggestionsScreen extends StatelessWidget {
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
         ),
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: kPeople.length,
-        separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
-        itemBuilder: (context, i) {
-          final p = kPeople[i];
+      body: Builder(
+        builder: (context) {
+          final others = kPeople.where((p) => p.handle != kMeHandle).toList();
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: others.length,
+            separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
+            itemBuilder: (context, i) {
+              final p = others[i];
           return ListTile(
             onTap: () => pushOnce(context, UserProfileScreen.route(p)),
             contentPadding: EdgeInsets.zero,
@@ -42,12 +45,13 @@ class SuggestionsScreen extends StatelessWidget {
             title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(p.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
             trailing: FollowButton(handle: p.handle, compact: true),
+              );
+            },
           );
         },
-      ),
-    );
+      );
+    }
   }
-}
 
 
 

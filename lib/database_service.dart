@@ -478,7 +478,7 @@ class DatabaseService {
     final me = _requireMe();
     final rows = await _db
         .from('messages')
-        .select('id,sender,recipient,text,created_at')
+        .select('id,sender,recipient,text,reply_to_id,post_id,created_at')
         .or('sender.eq.$me,recipient.eq.$me')
         .order('created_at', ascending: true)
         .limit(1000);
@@ -494,6 +494,8 @@ class DatabaseService {
         'text': '${r['text']}',
         'from_me': fromMe,
         'created_at': '${r['created_at']}',
+        'post_id': r['post_id'],
+        'reply_to_id': r['reply_to_id'],
       });
     }
     return out;

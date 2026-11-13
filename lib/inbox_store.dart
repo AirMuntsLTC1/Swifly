@@ -455,6 +455,10 @@ class ChatStore extends ChangeNotifier {
   }
 
   void _add(String handle, ChatMessage m) {
+    final cleanText = m.text.replaceAll('\u200B', '').trim();
+    if (cleanText.isEmpty && m.post == null && m.story == null && m.replyTo == null) {
+      return;
+    }
     _threads.putIfAbsent(handle, () => <ChatMessage>[]).add(m);
     notifyListeners();
   }
