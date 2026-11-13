@@ -103,7 +103,10 @@ class DmPersonRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            DmAvatar(handle: person.handle, size: 52, ring: hasUnseenStory(person.handle)),
+            DmAvatar(
+                handle: person.handle,
+                size: 52 * dmScale(context),
+                ring: hasUnseenStory(person.handle)),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

@@ -23,7 +23,9 @@ class DmColors {
   Color get bubbleThem => dark ? const Color(0xFF262A30) : const Color(0xFFEFEFEF);
   Color get quoteBubble => dark ? const Color(0xFF1B1F24) : const Color(0xFFE4E4E4);
   Color get divider => dark ? const Color(0xFF20252B) : const Color(0xFFEAEAEA);
-  Color get blue => const Color(0xFF4C8DFF);
+  Color get blue => const Color(0xFF3E7BFA);
+  /// Unread badges and dots.
+  Color get badge => const Color(0xFFFF3B30);
   Color get noteBubble => dark ? const Color(0xFF22262B) : const Color(0xFFF0F0F0);
   Color get noteText => dark ? const Color(0xFFB8BCC2) : const Color(0xFF555555);
 }
@@ -33,7 +35,8 @@ class DmTheme extends ChangeNotifier {
   DmTheme._();
   static final DmTheme instance = DmTheme._();
 
-  bool _dark = true;
+  // White theme by default, like the rest of the app.
+  bool _dark = false;
   bool get dark => _dark;
   DmColors get c => DmColors(_dark);
 
@@ -42,6 +45,10 @@ class DmTheme extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// Scale for sizes so the Messages screens fit small and large phones.
+double dmScale(BuildContext context) =>
+    (MediaQuery.of(context).size.width / 390).clamp(0.82, 1.12).toDouble();
 
 const LinearGradient kStoryRing = LinearGradient(
   begin: Alignment.bottomLeft,

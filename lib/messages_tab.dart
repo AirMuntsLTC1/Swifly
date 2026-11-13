@@ -164,11 +164,11 @@ class _MessagesTabState extends State<MessagesTab> {
       for (final h in StoryStore.instance.otherHandles)
         if (notes.noteOf(h) == null) h,
     ];
-    return SizedBox(
-      height: 142,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _myNoteItem(c),
           for (final h in handles) _noteItem(c, h),
@@ -179,7 +179,7 @@ class _MessagesTabState extends State<MessagesTab> {
 
   Widget _noteBubble(DmColors c, String text, {bool dim = false}) {
     return Container(
-      constraints: const BoxConstraints(maxWidth: 84, minHeight: 36),
+      constraints: BoxConstraints(maxWidth: 84 * dmScale(context), minHeight: 36),
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
         color: dim ? c.noteBubble : (c.dark ? const Color(0xFF2C3036) : const Color(0xFFEFEFEF)),
@@ -199,8 +199,9 @@ class _MessagesTabState extends State<MessagesTab> {
   Widget _myNoteItem(DmColors c) {
     final note = NoteStore.instance.mine;
     final hasStory = StoryStore.instance.hasStory;
+    final s = dmScale(context);
     return SizedBox(
-      width: 88,
+      width: 88 * s,
       child: Column(
         children: [
           GestureDetector(
@@ -221,7 +222,7 @@ class _MessagesTabState extends State<MessagesTab> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                DmAvatar(handle: kMeHandle, size: 68, ring: hasStory),
+                DmAvatar(handle: kMeHandle, size: 68 * s, ring: hasStory),
                 if (!hasStory)
                   Positioned(
                     right: -2,
@@ -253,6 +254,7 @@ class _MessagesTabState extends State<MessagesTab> {
   Widget _noteItem(DmColors c, String handle) {
     final note = NoteStore.instance.noteOf(handle);
     final story = StoryStore.instance.otherStory(handle);
+    final s = dmScale(context);
     void openStory() {
       if (story == null) {
         Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(handle: handle)));
@@ -272,7 +274,7 @@ class _MessagesTabState extends State<MessagesTab> {
     }
 
     return SizedBox(
-      width: 88,
+      width: 88 * s,
       child: Column(
         children: [
           if (note != null)
@@ -287,7 +289,7 @@ class _MessagesTabState extends State<MessagesTab> {
             onTap: story != null
                 ? openStory
                 : () => showNoteReplySheet(context, handle),
-            child: DmAvatar(handle: handle, size: 68, ring: story != null),
+            child: DmAvatar(handle: handle, size: 68 * s, ring: story != null),
           ),
           const SizedBox(height: 4),
           Text(dmName(handle),
@@ -332,7 +334,7 @@ class _MessagesTabState extends State<MessagesTab> {
         constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
         padding: const EdgeInsets.symmetric(horizontal: 5),
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: const Color(0xFF3E7BFA), borderRadius: BorderRadius.circular(9)),
+        decoration: BoxDecoration(color: DmTheme.instance.c.badge, borderRadius: BorderRadius.circular(9)),
         child: Text(n > 9 ? '9+' : '$n',
             style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
       );
@@ -341,10 +343,10 @@ class _MessagesTabState extends State<MessagesTab> {
     final store = ChatStore.instance;
     final requests = store.requestCount;
     return SizedBox(
-      height: 44,
+      height: 46,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 4, 6, 0),
+        padding: const EdgeInsets.fromLTRB(16, 4, 6, 2),
         children: [
           _chip(
             c,
@@ -412,7 +414,7 @@ class _MessagesTabState extends State<MessagesTab> {
           children: [
             GestureDetector(
               onTap: () => _openAvatar(handle),
-              child: DmAvatar(handle: handle, size: 62, ring: hasUnseenStory(handle)),
+              child: DmAvatar(handle: handle, size: 62 * dmScale(context), ring: hasUnseenStory(handle)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -442,7 +444,7 @@ class _MessagesTabState extends State<MessagesTab> {
               Container(
                 width: 10,
                 height: 10,
-                decoration: const BoxDecoration(color: Color(0xFF3E7BFA), shape: BoxShape.circle),
+                decoration: BoxDecoration(color: c.badge, shape: BoxShape.circle),
               ),
             ],
           ],
