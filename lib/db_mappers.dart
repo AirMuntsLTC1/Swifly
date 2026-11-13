@@ -89,3 +89,4 @@ Map<String, DmNote> notesFromRows(List<Map<String, dynamic>> rows) => {
 Map<String, (int, int)> statsFromRows(List<Map<String, dynamic>> rows) => {
       for (final r in rows) _handleOf(r): (_i(r['followers_count']), _i(r['following_count'])),
     };
+

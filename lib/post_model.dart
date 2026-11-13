@@ -15,7 +15,7 @@ String nameForHandle(String handle) {
 int _commentSeq = 0;
 
 class CommentItem {
-  final String id;
+  String id;
   final String name;
   final String text;
   final DateTime created;
@@ -32,7 +32,7 @@ class CommentItem {
 }
 
 class Post {
-  final String id;
+  String id;
   final String authorName;
   final String authorHandle;
   final String text;
@@ -144,7 +144,7 @@ class PostStore extends ChangeNotifier {
   }
 
   // --- INCOMING ACTIVITY FROM OTHER PEOPLE ---
-  // A real backend would deliver these as push events. MockRealtime calls them in demo mode.
+  // Called by supabase_realtime.dart when another person likes, comments or saves.
 
   bool receiveLike(String postId) {
     final p = byId(postId);
@@ -226,8 +226,9 @@ class PostStore extends ChangeNotifier {
 
     // DB Sync
     try {
-      await DatabaseService.instance.savePost(
+      final serverId = await DatabaseService.instance.savePost(
           text, audience, taggedHandles, media.map((m) => m.path).toList());
+      if (serverId != null) newPost.id = serverId;
     } catch (e) {
       _posts.removeWhere((p) => p.id == newPost.id);
       notifyListeners(); // Rollback on error
@@ -257,6 +258,7 @@ class PostStore extends ChangeNotifier {
     if (p == null || count <= 0) return;
     p.shares += count;
     notifyListeners();
+    DatabaseService.instance.registerShare(id, count).catchError((_) {});
   }
 
   Future<void> toggleSave(String id) async {
@@ -279,20 +281,25 @@ class PostStore extends ChangeNotifier {
   Future<void> addReply(String postId, String commentId, String text) async {
     final p = byId(postId);
     if (p == null) return;
-    
-    final newReply = CommentItem(name: kMeName, text: text, created: DateTime.now());
+
+    CommentItem? parent;
     for (final c in p.comments) {
       if (c.id == commentId) {
-        c.replies.add(newReply);
+        parent = c;
         break;
       }
     }
+    if (parent == null) return;
+
+    final newReply = CommentItem(name: kMeName, text: text, created: DateTime.now());
+    parent.replies.add(newReply);
     notifyListeners();
 
     try {
-      await DatabaseService.instance.addComment(postId, text);
+      newReply.id = await DatabaseService.instance.addComment(postId, text, parentId: commentId);
     } catch (e) {
-      // Rollback logic if needed
+      parent.replies.remove(newReply);
+      notifyListeners();
     }
   }
 
@@ -305,12 +312,13 @@ class PostStore extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await DatabaseService.instance.addComment(id, text);
+      newComment.id = await DatabaseService.instance.addComment(id, text);
     } catch (e) {
       p.comments.remove(newComment);
       notifyListeners();
     }
   }
 }
+
 
 

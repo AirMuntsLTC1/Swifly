@@ -50,3 +50,4 @@ class SuggestionsScreen extends StatelessWidget {
 }
 
 
+

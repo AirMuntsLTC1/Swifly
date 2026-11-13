@@ -47,3 +47,4 @@ class PeopleDirectory extends ChangeNotifier {
 List<Person> get kPeople => PeopleDirectory.instance.people;
 Map<String, (int, int)> get kPeopleStats => PeopleDirectory.instance.stats;
 List<String> get kTrendingTags => PeopleDirectory.instance.trending;
+

@@ -21,7 +21,7 @@ Future<void> main() async {
   final inApp = !AuthService.instance.needsLogin;
   if (inApp) {
     AuthService.instance.applyUser();
-    // Mock data or the real database, depending on kUseMockData (app_config.dart).
+    // Loads everything from Supabase.
     await loadAppData();
   }
   // Bring back the profile saved on this phone and the saved company/school logos.
@@ -86,5 +86,6 @@ TextTheme _appTextTheme() {
       )
       .apply(fontFamily: kAppFont);
 }
+
 
 

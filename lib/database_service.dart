@@ -1,140 +1,471 @@
+import 'dart:io';
 
-/// This is the ONLY file you need to edit when connecting to Firebase, Supabase, or a REST API.
-/// Currently, it simulates network delays so the UI works exactly as it does now.
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'supabase_config.dart';
+
+/// Every read and write the app makes to Supabase goes through this file.
+/// Tables, columns, policies and triggers: supabase/schema.sql.
+///
+/// Read methods return plain rows (Maps). db_mappers.dart turns them into the
+/// objects the screens use, so no screen needs to know about Supabase.
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._();
   DatabaseService._();
 
-  // TODO: Replace these with real API calls
-  Future<void> savePost(String text, String audience, List<String> taggedHandles, List<String> mediaPaths) async {
-    await Future.delayed(const Duration(milliseconds: 300));
+  static final RegExp _uuidPattern = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  /// True when the value is a database id. Ids made on the phone before the
+  /// server answered (for example "p3") are not, so they are not sent.
+  static bool isUuid(String? value) => value != null && _uuidPattern.hasMatch(value);
+
+  SupabaseClient get _db => Supabase.instance.client;
+
+  /// The signed-in user's id, or null before sign in.
+  String? get myId => kAuthEnabled ? _db.auth.currentUser?.id : null;
+
+  String _requireMe() {
+    final id = myId;
+    if (id == null) throw StateError('Not signed in.');
+    return id;
+  }
+
+  final Map<String, _Who> _byId = {};
+  final Map<String, String> _idByUsername = {};
+
+  Future<_Who> _who(String id) async {
+    final cached = _byId[id];
+    if (cached != null) return cached;
+    final row = await _db
+        .from('profiles')
+        .select('id,username,display_name')
+        .eq('id', id)
+        .maybeSingle();
+    if (row == null) return _Who(id: id, username: '', name: '');
+    final who = _Who.fromRow(Map<String, dynamic>.from(row));
+    _byId[id] = who;
+    _idByUsername[who.username] = id;
+    return who;
+  }
+
+  /// '@wilme' -> the profile id of that account.
+  Future<String> _idForHandle(String handle) async {
+    final username = handle.replaceFirst('@', '').trim().toLowerCase();
+    final cached = _idByUsername[username];
+    if (cached != null) return cached;
+    final row = await _db.from('profiles').select('id').eq('username', username).single();
+    final id = '${row['id']}';
+    _idByUsername[username] = id;
+    return id;
+  }
+
+  /// Name and @handle of a person by user id. Used by the live listener.
+  Future<Map<String, String>> personById(String id) async {
+    final who = await _who(id);
+    return {'name': who.name, 'handle': who.handle};
+  }
+
+  /// Text of one message (used to show the quote of a reply).
+  Future<String> messageText(String id) async {
+    if (!isUuid(id)) return '';
+    final row = await _db.from('messages').select('text').eq('id', id).maybeSingle();
+    return row == null ? '' : '${row['text']}';
+  }
+
+  // ---------------------------------------------------------------------------
+  // WRITE METHODS
+  // ---------------------------------------------------------------------------
+
+  /// Saves a post and returns its database id. Photos and videos are not
+  /// uploaded yet, so [mediaPaths] stay on this phone for now.
+  Future<String?> savePost(String text, String audience, List<String> taggedHandles, List<String> mediaPaths) async {
+    final row = await _db.from('posts').insert({
+      'author_id': _requireMe(),
+      'text': text,
+      'audience': audience == 'Followers' ? 'Followers' : 'Everyone',
+      'tagged_handles': taggedHandles,
+    }).select('id').single();
+    return '${row['id']}';
   }
 
   Future<void> toggleLike(String postId, bool isLiked) async {
-    await Future.delayed(const Duration(milliseconds: 200));
+    if (!isUuid(postId)) throw StateError('This post is still being saved.');
+    final me = _requireMe();
+    if (isLiked) {
+      await _db.from('post_likes').upsert(
+        {'user_id': me, 'post_id': postId},
+        onConflict: 'user_id,post_id',
+        ignoreDuplicates: true,
+      );
+    } else {
+      await _db.from('post_likes').delete().eq('user_id', me).eq('post_id', postId);
+    }
   }
 
   Future<void> toggleSave(String postId, bool isSaved) async {
-    await Future.delayed(const Duration(milliseconds: 200));
+    if (!isUuid(postId)) throw StateError('This post is still being saved.');
+    final me = _requireMe();
+    if (isSaved) {
+      await _db.from('post_saves').upsert(
+        {'user_id': me, 'post_id': postId},
+        onConflict: 'user_id,post_id',
+        ignoreDuplicates: true,
+      );
+    } else {
+      await _db.from('post_saves').delete().eq('user_id', me).eq('post_id', postId);
+    }
   }
 
-  Future<void> addComment(String postId, String text) async {
-    await Future.delayed(const Duration(milliseconds: 200));
+  /// Adds a comment, or a reply when [parentId] is given. Returns the new id.
+  Future<String> addComment(String postId, String text, {String? parentId}) async {
+    if (!isUuid(postId) || (parentId != null && !isUuid(parentId))) {
+      throw StateError('This post or comment is still being saved.');
+    }
+    final row = await _db.from('comments').insert({
+      'post_id': postId,
+      'author_id': _requireMe(),
+      'text': text,
+      if (parentId != null) 'parent_id': parentId,
+    }).select('id').single();
+    return '${row['id']}';
+  }
+
+  /// Adds a share count to a post (the number of people it was sent to).
+  Future<void> registerShare(String postId, int count) async {
+    if (!isUuid(postId) || count <= 0) return;
+    await _db.rpc('increment_post_shares', params: {'p_post_id': postId, 'p_count': count});
   }
 
   Future<void> toggleFollow(String handle, bool isFollowing) async {
-    await Future.delayed(const Duration(milliseconds: 200));
+    final me = _requireMe();
+    final target = await _idForHandle(handle);
+    if (isFollowing) {
+      await _db.from('follows').upsert(
+        {'follower': me, 'followee': target},
+        onConflict: 'follower,followee',
+        ignoreDuplicates: true,
+      );
+    } else {
+      await _db.from('follows').delete().eq('follower', me).eq('followee', target);
+    }
   }
 
-  /// Saves one profile field and who can see it.
+  /// Saves one profile field and who can see it. An empty value removes the field.
   Future<void> saveProfileField(String key, String value, String audience) async {
-    await Future.delayed(const Duration(milliseconds: 150));
-    // Example: await supabase.from('profiles').update({key: value, '${key}_audience': audience}).eq('handle', kMeHandle);
+    final me = _requireMe();
+    if (value.trim().isEmpty) {
+      await _db.from('profile_fields').delete().eq('user_id', me).eq('key', key);
+      return;
+    }
+    await _db.from('profile_fields').upsert(
+      {'user_id': me, 'key': key, 'value': value.trim(), 'audience': audience, 'updated_at': DateTime.now().toUtc().toIso8601String()},
+      onConflict: 'user_id,key',
+    );
   }
 
-  /// Uploads a new profile picture from a local file path.
+  /// Uploads a new profile picture to the "avatars" bucket and saves its link.
   Future<void> uploadAvatar(String localPath) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    // Example: upload the file to storage, then save its URL on the profile.
+    final me = _requireMe();
+    final dot = localPath.lastIndexOf('.');
+    final ext = dot == -1 ? 'jpg' : localPath.substring(dot + 1).toLowerCase();
+    final path = '$me/avatar.$ext';
+    final storage = _db.storage.from('avatars');
+    await storage.upload(path, File(localPath), fileOptions: const FileOptions(upsert: true));
+    final url = storage.getPublicUrl(path);
+    await _db.from('profiles').update({
+      'avatar_url': '$url?v=${DateTime.now().millisecondsSinceEpoch}',
+    }).eq('id', me);
   }
 
   /// Values other people typed for a profile field that the built-in lists do
-  /// not have (a small company, a local school ...). [category] is the
-  /// SuggestKind name: company, school, jobTitle, fieldOfStudy, hobby, music,
-  /// tv, movie, game, sport, place, language.
-  /// Return rows like {'title': 'Acme Labs', 'subtitle': 'Lagos'}.
+  /// not have. [category] is the SuggestKind name (company, school, hobby ...).
   Future<List<Map<String, String>>> searchSuggestions(String category, String query) async {
-    await Future.delayed(const Duration(milliseconds: 120));
-    // Example (Supabase):
-    //   final rows = await supabase.rpc('search_profile_suggestions',
-    //       params: {'p_category': category, 'p_query': query, 'p_limit': 6});
-    //   return [for (final r in rows) {'title': r['title'], 'subtitle': r['subtitle'] ?? ''}];
-    return <Map<String, String>>[];
+    final rows = await _db.rpc('search_profile_suggestions', params: {
+      'p_category': category,
+      'p_query': query,
+      'p_limit': 6,
+    });
+    return [
+      for (final r in (rows as List))
+        {'title': '${r['title'] ?? ''}', 'subtitle': '${r['subtitle'] ?? ''}'},
+    ];
   }
 
   /// Counts one use of a value so popular entries rise in everyone's list.
   Future<void> recordSuggestionPick(String category, String value) async {
-    await Future.delayed(const Duration(milliseconds: 80));
-    // Example: await supabase.rpc('record_profile_suggestion', params: {'p_category': category, 'p_value': value});
-  }
-
-  /// Loads the signed-in user's saved profile.
-  /// Return one row per filled field: {'key': 'work', 'value': 'Dev at Google', 'audience': 'everyone'}.
-  /// audience is onlyMe, followers or everyone. Used by ProfileStore.loadFromDatabase.
-  Future<List<Map<String, String>>> fetchProfileFields() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    // Example (Supabase):
-    //   final rows = await supabase.from('profile_fields').select('key,value,audience').eq('user_id', uid);
-    //   return [for (final r in rows) {'key': r['key'], 'value': r['value'], 'audience': r['audience']}];
-    return <Map<String, String>>[];
+    await _db.rpc('record_profile_suggestion', params: {'p_category': category, 'p_value': value});
   }
 
   /// Sends a direct message. [replyToId] is the message being replied to, if any.
   Future<void> sendMessage(String handle, String text, {String? replyToId, String? postId}) async {
-    await Future.delayed(const Duration(milliseconds: 150));
-    // Example (Supabase):
-    //   await supabase.from('messages').insert({'to': handle, 'text': text, 'reply_to': replyToId, 'post_id': postId});
+    final me = _requireMe();
+    final to = await _idForHandle(handle);
+    await _db.from('messages').insert({
+      'sender': me,
+      'recipient': to,
+      'text': text,
+      if (isUuid(replyToId)) 'reply_to_id': replyToId,
+      if (isUuid(postId)) 'post_id': postId,
+    });
   }
 
   /// Saves my note (shown above the inbox for 24 hours). Empty text deletes it.
   Future<void> saveNote(String text) async {
-    await Future.delayed(const Duration(milliseconds: 150));
-    // Example: await supabase.from('notes').upsert({'user_id': uid, 'text': text});
+    final me = _requireMe();
+    final t = text.trim();
+    if (t.isEmpty) {
+      await _db.from('notes').delete().eq('user_id', me);
+      return;
+    }
+    await _db.from('notes').upsert(
+      {'user_id': me, 'text': t, 'created_at': DateTime.now().toUtc().toIso8601String()},
+      onConflict: 'user_id',
+    );
+  }
+
+  /// Marks one notification read or unread. Local-only ids are skipped.
+  Future<void> setNotificationRead(String id, bool read) async {
+    if (!isUuid(id)) return;
+    await _db.from('notifications').update({'read': read}).eq('id', id).eq('user_id', _requireMe());
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    await _db.from('notifications').update({'read': true}).eq('user_id', _requireMe()).eq('read', false);
+  }
+
+  Future<void> deleteNotification(String id) async {
+    if (!isUuid(id)) return;
+    await _db.from('notifications').delete().eq('id', id).eq('user_id', _requireMe());
   }
 
   // ---------------------------------------------------------------------------
-  // READ METHODS. These are the only functions you fill in to go live.
-  // Each returns plain rows (Map). app_bootstrap.dart + db_mappers.dart turn the
-  // rows into the objects the screens already use, so the design never changes.
-  // Table and column names match supabase/schema.sql.
-  // Return an empty list / null while a table is not connected yet.
+  // READ METHODS
   // ---------------------------------------------------------------------------
 
-  /// {'display_name': 'Your Name', 'username': 'you'} for the signed-in user, or null.
+  /// {'name': 'Your Name', 'display_name': ..., 'username': 'you', 'handle': '@you'} or null.
   Future<Map<String, dynamic>?> fetchMe() async {
-    // Example: final r = await supabase.from('profiles').select('display_name,username').eq('id', uid).single();
-    return null;
+    final me = myId;
+    if (me == null) return null;
+    final who = await _who(me);
+    return {
+      'name': who.name,
+      'display_name': who.name,
+      'username': who.username,
+      'handle': who.handle,
+    };
   }
 
-  /// Rows: {username, display_name, followers_count, following_count} (handle/name also work)
+  /// Rows: {name, handle, followers_count, following_count}, biggest first.
   Future<List<Map<String, dynamic>>> fetchPeople() async {
-    // Example: return List<Map<String, dynamic>>.from(await supabase.from('profiles').select('username,display_name,followers_count,following_count'));
-    return <Map<String, dynamic>>[];
+    final rows = await _db
+        .from('profiles')
+        .select('username,display_name,followers_count,following_count')
+        .order('followers_count', ascending: false)
+        .limit(500);
+    return [
+      for (final r in rows)
+        {
+          'name': _Who.fromRow(Map<String, dynamic>.from(r)).name,
+          'handle': _Who.fromRow(Map<String, dynamic>.from(r)).handle,
+          'followers_count': r['followers_count'] ?? 0,
+          'following_count': r['following_count'] ?? 0,
+        },
+    ];
   }
 
   /// Hashtag names without the #, most popular first.
   Future<List<String>> fetchTrendingTags() async {
-    // Example: final rows = await supabase.from('trending_tags').select('tag').limit(12);
-    return <String>[];
+    final rows = await _db.from('trending_tags').select('tag').order('uses', ascending: false).limit(12);
+    return [for (final r in rows) '${r['tag']}'];
   }
 
-  /// Rows: {id, author_name, author_handle, text, audience, tagged_handles (list),
-  /// created_at, likes, saves, shares, liked, saved,
-  /// comments: [{id, name, text, created_at, replies: [same shape]}]}
+  /// Posts you are allowed to see (the database decides), newest first, with
+  /// comments, replies, and whether you liked or saved each one.
   Future<List<Map<String, dynamic>>> fetchPosts() async {
-    // Example: await supabase.from('posts_feed').select().order('created_at', ascending: false);
-    return <Map<String, dynamic>>[];
+    final me = _requireMe();
+    final postRows = await _db
+        .from('posts')
+        .select('id,text,audience,tagged_handles,likes,saves,shares,created_at,author:profiles!author_id(username,display_name)')
+        .order('created_at', ascending: false)
+        .limit(100);
+    if (postRows.isEmpty) return <Map<String, dynamic>>[];
+
+    final ids = [for (final r in postRows) '${r['id']}'];
+
+    final commentRows = await _db
+        .from('comments')
+        .select('id,post_id,parent_id,text,created_at,author:profiles!author_id(username,display_name)')
+        .inFilter('post_id', ids)
+        .order('created_at', ascending: true);
+    final likedRows = await _db.from('post_likes').select('post_id').eq('user_id', me).inFilter('post_id', ids);
+    final savedRows = await _db.from('post_saves').select('post_id').eq('user_id', me).inFilter('post_id', ids);
+
+    final liked = {for (final r in likedRows) '${r['post_id']}'};
+    final saved = {for (final r in savedRows) '${r['post_id']}'};
+
+    // Build every comment first, then attach replies to their parent.
+    final byId = <String, Map<String, dynamic>>{};
+    for (final r in commentRows) {
+      final author = _Who.fromRow(_embedded(r['author']));
+      byId['${r['id']}'] = <String, dynamic>{
+        'id': '${r['id']}',
+        'name': author.name,
+        'text': '${r['text']}',
+        'created_at': '${r['created_at']}',
+        'replies': <Map<String, dynamic>>[],
+      };
+    }
+    final topLevel = <String, List<Map<String, dynamic>>>{};
+    for (final r in commentRows) {
+      final node = byId['${r['id']}']!;
+      final parent = r['parent_id'];
+      if (parent == null) {
+        topLevel.putIfAbsent('${r['post_id']}', () => <Map<String, dynamic>>[]).add(node);
+      } else {
+        final p = byId['$parent'];
+        if (p != null) (p['replies'] as List<Map<String, dynamic>>).add(node);
+      }
+    }
+
+    return [
+      for (final r in postRows)
+        _postMap(
+          r,
+          liked: liked.contains('${r['id']}'),
+          saved: saved.contains('${r['id']}'),
+          comments: topLevel['${r['id']}'] ?? <Map<String, dynamic>>[],
+        ),
+    ];
+  }
+
+  Map<String, dynamic> _postMap(
+    Map<String, dynamic> r, {
+    required bool liked,
+    required bool saved,
+    required List<Map<String, dynamic>> comments,
+  }) {
+    final author = _Who.fromRow(_embedded(r['author']));
+    return <String, dynamic>{
+      'id': '${r['id']}',
+      'author_name': author.name,
+      'author_handle': author.handle,
+      'text': '${r['text']}',
+      'audience': '${r['audience']}',
+      'tagged_handles': r['tagged_handles'] ?? <String>[],
+      'created_at': '${r['created_at']}',
+      'likes': r['likes'] ?? 0,
+      'saves': r['saves'] ?? 0,
+      'shares': r['shares'] ?? 0,
+      'liked': liked,
+      'saved': saved,
+      'comments': comments,
+    };
   }
 
   /// {'following': ['@a', ...], 'followers': ['@b', ...]}
   Future<Map<String, List<String>>> fetchFollows() async {
-    // Example: read the follows table where follower = me / followee = me.
-    return <String, List<String>>{'following': <String>[], 'followers': <String>[]};
+    final me = _requireMe();
+    final outRows = await _db.from('follows').select('followee,target:profiles!followee(username)').eq('follower', me);
+    final inRows = await _db.from('follows').select('follower,source:profiles!follower(username)').eq('followee', me);
+    return {
+      'following': [for (final r in outRows) _handleOf(r['target'])],
+      'followers': [for (final r in inRows) _handleOf(r['source'])],
+    };
   }
 
   /// Rows: {id, type, actor_name, actor_handle, post_id, comment_id, emoji, preview, created_at, read}
-  /// type is one of: like, comment, reply, save, follow, message, storyReact, tag, storyReply.
   Future<List<Map<String, dynamic>>> fetchNotifications() async {
-    return <Map<String, dynamic>>[];
+    final rows = await _db
+        .from('notifications')
+        .select('*')
+        .eq('user_id', _requireMe())
+        .order('created_at', ascending: false)
+        .limit(100);
+    return [for (final r in rows) Map<String, dynamic>.from(r)];
   }
 
-  /// Rows: {id, peer_handle, text, from_me, created_at}
+  /// Rows: {id, peer_handle, text, from_me, created_at}, oldest first.
   Future<List<Map<String, dynamic>>> fetchMessages() async {
-    return <Map<String, dynamic>>[];
+    final me = _requireMe();
+    final rows = await _db
+        .from('messages')
+        .select('id,sender,recipient,text,created_at')
+        .or('sender.eq.$me,recipient.eq.$me')
+        .order('created_at', ascending: true)
+        .limit(1000);
+
+    final out = <Map<String, dynamic>>[];
+    for (final r in rows) {
+      final fromMe = '${r['sender']}' == me;
+      final peerId = fromMe ? '${r['recipient']}' : '${r['sender']}';
+      final peer = await _who(peerId);
+      out.add({
+        'id': '${r['id']}',
+        'peer_handle': peer.handle,
+        'text': '${r['text']}',
+        'from_me': fromMe,
+        'created_at': '${r['created_at']}',
+      });
+    }
+    return out;
   }
 
-  /// Rows: {handle, text, created_at} (notes of people you follow).
+  /// Rows: {handle, text, created_at} for notes from the last 24 hours.
   Future<List<Map<String, dynamic>>> fetchNotes() async {
-    return <Map<String, dynamic>>[];
+    final since = DateTime.now().toUtc().subtract(const Duration(hours: 24)).toIso8601String();
+    final rows = await _db
+        .from('notes')
+        .select('user_id,text,created_at')
+        .gt('created_at', since);
+    final out = <Map<String, dynamic>>[];
+    for (final r in rows) {
+      final who = await _who('${r['user_id']}');
+      out.add({'handle': who.handle, 'text': '${r['text']}', 'created_at': '${r['created_at']}'});
+    }
+    return out;
   }
+
+  /// Rows: {'key': 'work', 'value': 'Dev at Google', 'audience': 'everyone'}
+  Future<List<Map<String, String>>> fetchProfileFields() async {
+    final rows = await _db.from('profile_fields').select('key,value,audience').eq('user_id', _requireMe());
+    return [
+      for (final r in rows)
+        {'key': '${r['key']}', 'value': '${r['value']}', 'audience': '${r['audience']}'},
+    ];
+  }
+
+  // ---------------------------------------------------------------------------
+  // helpers
+  // ---------------------------------------------------------------------------
+
+  static Map<String, dynamic> _embedded(dynamic v) =>
+      v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+
+  static String _handleOf(dynamic embeddedProfile) {
+    final username = _embedded(embeddedProfile)['username'];
+    return username == null ? '' : '@$username';
+  }
+}
+
+/// A profile as the app needs it: id, username, shown name.
+class _Who {
+  final String id;
+  final String username;
+  final String name;
+
+  const _Who({required this.id, required this.username, required this.name});
+
+  factory _Who.fromRow(Map<String, dynamic> r) {
+    final username = '${r['username'] ?? ''}';
+    final display = '${r['display_name'] ?? ''}'.trim();
+    return _Who(
+      id: '${r['id'] ?? ''}',
+      username: username,
+      name: display.isEmpty ? username : display,
+    );
+  }
+
+  String get handle => '@$username';
 }

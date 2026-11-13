@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'typing_store.dart';
 
-/// "Liam Park is commenting" with three bouncing dots. Takes no space when nobody is typing.
+/// "Someone is commenting" with three bouncing dots. Takes no space when nobody is typing.
 class TypingIndicator extends StatefulWidget {
   final String postId;
   const TypingIndicator({super.key, required this.postId});
@@ -86,5 +86,6 @@ class _TypingIndicatorState extends State<TypingIndicator>
     );
   }
 }
+
 
 

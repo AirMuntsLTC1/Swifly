@@ -150,8 +150,26 @@ jobs:
             fi
           done
 
+      - name: Check Supabase secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::error title=Supabase secrets missing::Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "Supabase secrets found"
+
       - name: Build release APK (arm64, obfuscated)
-        run: flutter build apk --release --target-platform android-arm64 --obfuscate --split-debug-info=build/symbols
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: >-
+          flutter build apk --release --target-platform android-arm64 --obfuscate
+          --split-debug-info=build/symbols
+          --dart-define=SUPABASE_URL=$SUPABASE_URL
+          --dart-define=SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -159,3 +177,4 @@ jobs:
           name: swifly-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
+

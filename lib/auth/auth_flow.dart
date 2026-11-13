@@ -31,3 +31,4 @@ Future<void> logOut(BuildContext context) async {
 
 /// First screen after the splash.
 Widget startScreen() => AuthService.instance.needsLogin ? const SignInScreen() : const HomeScreen();
+

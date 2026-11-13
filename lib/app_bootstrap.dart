@@ -1,38 +1,30 @@
-import 'dart:async';
-
-import 'app_config.dart';
 import 'database_service.dart';
 import 'db_mappers.dart';
 import 'follow_store.dart';
 import 'inbox_store.dart';
-import 'mock/mock_data.dart';
-import 'mock/mock_realtime.dart';
 import 'people_directory.dart';
 import 'post_model.dart';
 import 'profile_store.dart';
+import 'supabase_config.dart';
+import 'supabase_realtime.dart';
 
-/// The single place where the app gets its starting data.
-///
-///  kUseMockData = true  -> sample users, posts, chats (lib/mock/)
-///  kUseMockData = false -> everything below comes from DatabaseService
-///
-/// Screens never know which one is running, so the design stays identical.
+/// The single place where the app gets its starting data. Everything comes from
+/// Supabase (through DatabaseService). Screens never need to know where it came from.
 Future<void> loadAppData() async {
-  if (kUseMockData) {
-    loadMockData();
-    return;
-  }
+  if (!kAuthEnabled) return;
   await _loadFromDatabase();
 }
 
-/// Starts simulated live activity (mock) or, later, your Supabase realtime listener.
+/// Starts the live listener (Supabase Realtime). Safe to call more than once.
 void startLiveActivity() {
-  if (kUseMockData) {
-    MockRealtime.start();
-    return;
-  }
-  // TODO(supabase): subscribe to realtime changes here and call
-  // Realtime.instance.publish(...) with the same events MockRealtime sends.
+  if (!kAuthEnabled) return;
+  SupabaseRealtime.start();
+}
+
+/// Reloads the feed from the database. Used when someone else publishes a post.
+Future<void> refreshPosts() async {
+  final rows = await DatabaseService.instance.fetchPosts();
+  PostStore.instance.load(posts: [for (final r in rows) postFromRow(r)]);
 }
 
 Future<void> _loadFromDatabase() async {
@@ -64,10 +56,7 @@ Future<void> _loadFromDatabase() async {
         trending: tags,
       );
     }),
-    safe(() async {
-      final rows = await db.fetchPosts();
-      PostStore.instance.load(posts: [for (final r in rows) postFromRow(r)]);
-    }),
+    safe(() => refreshPosts()),
     safe(() async {
       final f = await db.fetchFollows();
       FollowStore.instance.load(
@@ -91,8 +80,12 @@ Future<void> _loadFromDatabase() async {
   ]);
 }
 
-/// Empties every store. Used on log out so the next person never sees old data.
+/// Empties every store and stops the live listener. Used on log out so the
+/// next person never sees old data.
 Future<void> clearAppData() async {
+  try {
+    await SupabaseRealtime.stop();
+  } catch (_) {}
   CurrentUser.name = 'Your Name';
   CurrentUser.handle = '@yourhandle';
   PeopleDirectory.instance.load();

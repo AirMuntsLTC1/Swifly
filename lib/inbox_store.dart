@@ -113,17 +113,20 @@ class NotificationStore extends ChangeNotifier {
     if (n.read) return;
     n.read = true;
     notifyListeners();
+    DatabaseService.instance.setNotificationRead(n.id, true).catchError((_) {});
   }
 
   void markUnread(AppNotification n) {
     if (!n.read) return;
     n.read = false;
     notifyListeners();
+    DatabaseService.instance.setNotificationRead(n.id, false).catchError((_) {});
   }
 
   void remove(AppNotification n) {
     _items.remove(n);
     notifyListeners();
+    DatabaseService.instance.deleteNotification(n.id).catchError((_) {});
   }
 
   void markAllRead() {
@@ -131,6 +134,7 @@ class NotificationStore extends ChangeNotifier {
       n.read = true;
     }
     notifyListeners();
+    DatabaseService.instance.markAllNotificationsRead().catchError((_) {});
   }
 }
 
@@ -499,16 +503,22 @@ class NoteStore extends ChangeNotifier {
     DatabaseService.instance.saveNote('');
   }
 
-  void load(Map<String, DmNote> others) {
+  void load(Map<String, DmNote> all) {
     _others
       ..clear()
-      ..addAll(others);
+      ..addAll(all);
+    _mine = _others.remove(kMeHandle);
     notifyListeners();
   }
 
-  /// Someone posted a new note (from realtime).
+  /// Someone posted (or cleared) a note (from realtime).
   void applyIncoming(String handle, String text) {
-    _others[handle] = DmNote(handle: handle, text: text, time: DateTime.now());
+    if (handle == kMeHandle) return;
+    if (text.trim().isEmpty) {
+      _others.remove(handle);
+    } else {
+      _others[handle] = DmNote(handle: handle, text: text, time: DateTime.now());
+    }
     notifyListeners();
   }
 }
@@ -642,5 +652,6 @@ class StoryStore extends ChangeNotifier {
     notifyListeners();
   }
 }
+
 
 

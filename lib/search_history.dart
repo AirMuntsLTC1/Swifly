@@ -31,3 +31,4 @@ class SearchHistory extends ChangeNotifier {
 }
 
 
+
