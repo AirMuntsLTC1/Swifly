@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'feed_widgets.dart';
+import 'dm_theme.dart';
 import 'nav_guard.dart';
 import 'hashtag_text.dart';
 import 'post_model.dart';
@@ -119,10 +120,10 @@ class _PostDetailScreenState extends State<PostDetailScreen>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: r,
-          backgroundColor: Colors.black,
-          child: Icon(LucideIcons.user, color: Colors.white, size: r),
+        DmAvatar(
+          handle: c.authorHandle,
+          name: c.name,
+          size: r * 2,
         ),
         const SizedBox(width: 10),
         Expanded(

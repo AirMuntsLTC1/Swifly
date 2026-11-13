@@ -102,7 +102,7 @@ class _BannerCardState extends State<_BannerCard> with SingleTickerProviderState
               ),
               child: Row(
                 children: [
-                  NotifAvatar(type: n.type, size: 46),
+                  NotifAvatar(type: n.type, handle: n.actorHandle, size: 46),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(

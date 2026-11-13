@@ -226,7 +226,8 @@ class ProfileStore extends ChangeNotifier {
       if (me != null) {
         final remoteAvatar = me['avatar_url'] as String?;
         if (remoteAvatar != null && remoteAvatar.isNotEmpty) {
-          avatarPath = remoteAvatar;
+          final localPath = await DatabaseService.instance.cacheAvatarImage(remoteAvatar);
+          avatarPath = localPath ?? remoteAvatar;
           notifyListeners();
         }
       }
@@ -283,7 +284,8 @@ class ProfileStore extends ChangeNotifier {
     _saveToDevice();
     try {
       final remoteUrl = await DatabaseService.instance.uploadAvatar(path);
-      avatarPath = remoteUrl;
+      final local = await DatabaseService.instance.cacheAvatarImage(remoteUrl);
+      avatarPath = local ?? path;
       notifyListeners();
       _saveToDevice();
     } catch (e) {

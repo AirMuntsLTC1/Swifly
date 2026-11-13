@@ -20,11 +20,12 @@ String _nameOf(Map<String, dynamic> r) => _s(r['name'] ?? r['display_name'] ?? r
 String _handleOf(Map<String, dynamic> r) =>
     r['handle'] != null ? _s(r['handle']) : (r['username'] != null ? '@${_s(r['username'])}' : '');
 
-Person personFromRow(Map<String, dynamic> r) => Person(_nameOf(r), _handleOf(r));
+Person personFromRow(Map<String, dynamic> r) => Person(_nameOf(r), _handleOf(r), avatarUrl: _s(r['avatar_url']));
 
 CommentItem commentFromRow(Map<String, dynamic> r) => CommentItem(
       id: _s(r['id']).isEmpty ? null : _s(r['id']),
       name: _s(r['name']),
+      authorHandle: _s(r['author_handle']),
       text: _s(r['text']),
       created: _t(r['created_at']),
       replies: [

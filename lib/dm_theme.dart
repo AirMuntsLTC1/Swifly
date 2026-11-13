@@ -90,33 +90,43 @@ class DmAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DmTheme.instance.c;
     final isMe = handle == kMeHandle;
-    final path = isMe ? ProfileStore.instance.avatarPath : null;
+    String? path = isMe ? ProfileStore.instance.avatarPath : null;
+    if (path == null || path.isEmpty) {
+      for (final p in kPeople) {
+        if (p.handle == handle && p.avatarUrl.isNotEmpty) {
+          path = p.avatarUrl;
+          break;
+        }
+      }
+    }
     final displayName = this.name ?? (isMe ? kMeName : nameForHandle(handle));
     final hasImage = path != null && path.isNotEmpty;
-    final letter = displayName.replaceAll('@', '').trim().isEmpty
-        ? '?'
-        : displayName.replaceAll('@', '').trim().characters.first.toUpperCase();
     final inner = ring ? size - 8 : size;
+    
+    Widget fallback() {
+      final letter = displayName.replaceAll('@', '').trim().isEmpty
+          ? '?'
+          : displayName.replaceAll('@', '').trim().characters.first.toUpperCase();
+      return Center(
+        child: Text(letter,
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700, fontSize: inner * 0.42)),
+      );
+    }
+
     final face = Container(
       width: inner,
       height: inner,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: _tint(handle),
-        image: hasImage
-            ? DecorationImage(
-                image: path.startsWith('http') 
-                    ? NetworkImage(path) 
-                    : FileImage(File(path)) as ImageProvider, 
-                fit: BoxFit.cover)
-            : null,
       ),
-      alignment: Alignment.center,
-      child: !hasImage
-          ? Text(letter,
-              style: TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w700, fontSize: inner * 0.42))
-          : null,
+      clipBehavior: Clip.antiAlias,
+      child: hasImage
+          ? (path!.startsWith('http')
+              ? Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback())
+              : Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback()))
+          : fallback(),
     );
     if (!ring) return face;
     return Container(

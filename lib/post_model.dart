@@ -22,12 +22,14 @@ int _commentSeq = 0;
 class CommentItem {
   String id;
   final String name;
+  final String authorHandle;
   final String text;
   final DateTime created;
   final List<CommentItem> replies;
 
   CommentItem({
     required this.name,
+    this.authorHandle = '',
     required this.text,
     required this.created,
     String? id,
@@ -285,7 +287,7 @@ class PostStore extends ChangeNotifier {
     for (final c in p.comments) { if (c.id == commentId) { parent = c; break; } }
     if (parent == null) return;
 
-    final newReply = CommentItem(name: kMeName, text: text, created: DateTime.now());
+    final newReply = CommentItem(name: kMeName, authorHandle: kMeHandle, text: text, created: DateTime.now());
     parent.replies.add(newReply);
     notifyListeners();
 
@@ -301,7 +303,7 @@ class PostStore extends ChangeNotifier {
   Future<void> addComment(String id, String text) async {
     final p = byId(id);
     if (p == null) return;
-    final newComment = CommentItem(name: kMeName, text: text, created: DateTime.now());
+    final newComment = CommentItem(name: kMeName, authorHandle: kMeHandle, text: text, created: DateTime.now());
     p.comments.add(newComment);
     notifyListeners();
 

@@ -442,12 +442,7 @@ class _ProfileTabState extends State<ProfileTab> {
     final path = ProfileStore.instance.avatarPath;
     final hasStory = StoryStore.instance.hasStory;
     final radius = r.s(44);
-    final avatar = CircleAvatar(
-      radius: radius,
-      backgroundColor: Colors.black,
-      backgroundImage: path == null ? null : FileImage(File(path)),
-      child: path == null ? Icon(LucideIcons.user, color: Colors.white, size: r.s(40)) : null,
-    );
+    final avatar = DmAvatar(handle: kMeHandle, size: r.s(88));
     return GestureDetector(
       onTap: () {
         if (hasStory) {

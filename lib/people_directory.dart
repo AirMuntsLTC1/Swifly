@@ -3,7 +3,8 @@ import 'package:flutter/foundation.dart';
 class Person {
   final String name;
   final String handle;
-  const Person(this.name, this.handle);
+  final String avatarUrl;
+  const Person(this.name, this.handle, {this.avatarUrl = ''});
 }
 
 /// The signed-in user. Filled after login (see app_bootstrap.dart).

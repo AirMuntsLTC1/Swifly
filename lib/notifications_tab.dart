@@ -200,7 +200,7 @@ class _NotificationRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              NotifAvatar(type: n.type),
+              NotifAvatar(type: n.type, handle: n.actorHandle),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -254,8 +254,9 @@ class _NotificationRow extends StatelessWidget {
 /// Used by the Notifications tab and by the popup banner, so both look the same.
 class NotifAvatar extends StatelessWidget {
   final NotifType type;
+  final String handle;
   final double size;
-  const NotifAvatar({super.key, required this.type, this.size = 56});
+  const NotifAvatar({super.key, required this.type, required this.handle, this.size = 56});
 
   @override
   Widget build(BuildContext context) {
@@ -267,11 +268,7 @@ class NotifAvatar extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          CircleAvatar(
-            radius: size / 2,
-            backgroundColor: Colors.black,
-            child: Icon(LucideIcons.user, color: Colors.white, size: size * 0.46),
-          ),
+          DmAvatar(handle: handle, size: size),
           Positioned(
             right: -2,
             bottom: -2,

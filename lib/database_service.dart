@@ -326,7 +326,7 @@ class DatabaseService {
   Future<List<Map<String, dynamic>>> fetchPeople() async {
     final rows = await _db
         .from('profiles')
-        .select('username,display_name,followers_count,following_count')
+        .select('username,display_name,followers_count,following_count,avatar_url')
         .order('followers_count', ascending: false)
         .limit(500);
     return [
@@ -334,6 +334,7 @@ class DatabaseService {
         {
           'name': _Who.fromRow(Map<String, dynamic>.from(r)).name,
           'handle': _Who.fromRow(Map<String, dynamic>.from(r)).handle,
+          'avatar_url': r['avatar_url'] ?? '',
           'followers_count': r['followers_count'] ?? 0,
           'following_count': r['following_count'] ?? 0,
         },
@@ -377,6 +378,7 @@ class DatabaseService {
       byId['${r['id']}'] = <String, dynamic>{
         'id': '${r['id']}',
         'name': author.name,
+        'author_handle': author.handle,
         'text': '${r['text']}',
         'created_at': '${r['created_at']}',
         'replies': <Map<String, dynamic>>[],
@@ -757,7 +759,33 @@ class DatabaseService {
     });
   }
 
-    Future<void> clearLocalMediaCache() async {
+    Future<String?> cacheAvatarImage(String url) async {
+    if (url.isEmpty) return null;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final safeName = url.split('/').last.split('?').first;
+      final hash = url.hashCode.toRadixString(16);
+      final file = File('${dir.path}/avatars/${hash}_$safeName');
+      if (await file.exists()) return file.path;
+      await file.parent.create(recursive: true);
+      
+      final client = HttpClient();
+      try {
+        final req = await client.getUrl(Uri.parse(url));
+        final res = await req.close();
+        if (res.statusCode == 200) {
+          final bytes = await res.fold<List<int>>([], (p, e) => p..addAll(e));
+          await file.writeAsBytes(bytes);
+          return file.path;
+        }
+      } finally {
+        client.close(force: true);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> clearLocalMediaCache() async {
     try {
       final dir = await getApplicationSupportDirectory();
       final mediaDir = Directory('${dir.path}/media_cache');
