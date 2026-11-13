@@ -83,7 +83,8 @@ class DmAvatar extends StatelessWidget {
   final bool ring;
   final Color? gap;
 
-  const DmAvatar({super.key, required this.handle, this.size = 56, this.ring = false, this.gap});
+  const DmAvatar({super.key, required this.handle, this.name, this.size = 56, this.ring = false, this.gap});
+  final String? name;
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +115,8 @@ class DmAvatar extends StatelessWidget {
       child: !hasImage
           ? Text(letter,
               style: TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w700, fontSize: inner * 0.42)),
+                  color: Colors.white, fontWeight: FontWeight.w700, fontSize: inner * 0.42))
+          : null,
     );
     if (!ring) return face;
     return Container(

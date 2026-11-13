@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'media/media_item.dart';
 import 'native_bridge.dart';
 import 'database_service.dart';
+import 'db_mappers.dart';
 import 'people_directory.dart';
 
 String nameForHandle(String handle) {
@@ -123,6 +124,25 @@ class PostStore extends ChangeNotifier {
 
   final List<Post> _posts = [];
   int _nextId = 1;
+  bool _isLoadingMore = false;
+  bool get isLoadingMore => _isLoadingMore;
+
+  Future<void> loadMorePosts() async {
+    if (_isLoadingMore) return;
+    _isLoadingMore = true;
+    notifyListeners();
+    try {
+      final saved = await DatabaseService.instance.fetchPosts(limit: 4, offset: _posts.length);
+      if (saved.isNotEmpty) {
+        for (final r in saved) { _posts.add(postFromRow(r)); }
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Pagination error: $e');
+    }
+    _isLoadingMore = false;
+    notifyListeners();
+  }
 
   /// Replaces all posts. Called with mock data now, database results later.
   void load({required List<Post> posts}) {

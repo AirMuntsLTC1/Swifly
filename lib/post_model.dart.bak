@@ -160,6 +160,31 @@ class PostStore extends ChangeNotifier {
   /// Call when the PHP pipeline finishes a photo or video that a post already shows.
   void mediaUpdated() => notifyListeners();
 
+  Future<void> saveCache() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/feed_cache.json');
+      final data = _posts.take(20).map((p) => p.toJson()).toList(); // Cache top 20 posts
+      await file.writeAsString(jsonEncode(data));
+    } catch (_) {}
+  }
+
+  Future<void> loadCache() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/feed_cache.json');
+      if (await file.exists()) {
+        final data = jsonDecode(await file.readAsString()) as List;
+        final cachedPosts = data.map((item) => Post.fromJson(item)).toList();
+        // Only load cache if memory is empty (don't overwrite fresh data)
+        if (_posts.isEmpty) {
+          _posts.addAll(cachedPosts);
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
 
   List<Post> postsWithHashtag(String tag) {
     final list = _posts.where((p) => p.hasHashtag(tag)).toList()
