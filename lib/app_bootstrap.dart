@@ -43,6 +43,7 @@ Future<void> refreshPosts() async {
     ...pending,
     for (final r in filteredSaved) postFromRow(r),
   ]);
+  PostStore.instance.saveCache();
 }
 
 /// Loads active stories: my own (with its reactions and replies) and the

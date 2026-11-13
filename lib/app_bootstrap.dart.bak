@@ -99,7 +99,7 @@ Future<void> _loadFromDatabase() async {
   // and the reason is shown on screen instead of being hidden.
   Future<void> step(String what, Future<void> Function() job) async {
     try {
-      await job().timeout(const Duration(seconds: 12));
+      await job().timeout(const Duration(seconds: 30));
     } catch (e) {
       reportError("Couldn't load $what", e);
     }

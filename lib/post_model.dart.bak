@@ -1,5 +1,8 @@
 import 'app_feedback.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'media/media_item.dart';
 import 'native_bridge.dart';
@@ -30,6 +33,18 @@ class CommentItem {
     List<CommentItem>? replies,
   })  : id = id ?? 'c${++_commentSeq}',
         replies = replies ?? <CommentItem>[];
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'name': name, 'text': text,
+    'created': created.toIso8601String(),
+    'replies': replies.map((r) => r.toJson()).toList(),
+  };
+
+  factory CommentItem.fromJson(Map<String, dynamic> json) => CommentItem(
+    id: json['id'], name: json['name'], text: json['text'],
+    created: DateTime.parse(json['created']),
+    replies: (json['replies'] as List? ?? []).map((r) => CommentItem.fromJson(r)).toList(),
+  );
 }
 
 class Post {
@@ -79,6 +94,26 @@ class Post {
     if (d.inHours < 24) return '${d.inHours}h';
     return '${d.inDays}d';
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'authorName': authorName, 'authorHandle': authorHandle,
+    'text': text, 'audience': audience, 'taggedHandles': taggedHandles,
+    'created': created.toIso8601String(), 'likes': likes, 'liked': liked,
+    'saves': saves, 'saved': saved, 'shares': shares,
+    'media': media.map((m) => m.toJson()).toList(),
+    'comments': comments.map((c) => c.toJson()).toList(),
+  };
+
+  factory Post.fromJson(Map<String, dynamic> json) => Post(
+    id: json['id'], authorName: json['authorName'], authorHandle: json['authorHandle'],
+    text: json['text'], audience: json['audience'],
+    taggedHandles: List<String>.from(json['taggedHandles'] ?? []),
+    created: DateTime.parse(json['created']),
+    likes: json['likes'] ?? 0, liked: json['liked'] ?? false,
+    saves: json['saves'] ?? 0, saved: json['saved'] ?? false, shares: json['shares'] ?? 0,
+    media: (json['media'] as List? ?? []).map((m) => MediaItem.fromJson(m)).toList(),
+    comments: (json['comments'] as List? ?? []).map((c) => CommentItem.fromJson(c)).toList(),
+  );
 }
 
 class PostStore extends ChangeNotifier {
@@ -99,9 +134,10 @@ class PostStore extends ChangeNotifier {
 
   /// Your own new posts first (newest), then everyone else ranked by the C++ core.
   List<Post> get ranked {
-    final mine = _posts.where((p) => p.authorHandle == kMeHandle).toList()
+    final validPosts = _posts.where((p) => p.text.trim().isNotEmpty || p.media.isNotEmpty).toList();
+    final mine = validPosts.where((p) => p.authorHandle == kMeHandle).toList()
       ..sort((a, b) => b.created.compareTo(a.created));
-    final others = _posts.where((p) => p.authorHandle != kMeHandle).toList();
+    final others = validPosts.where((p) => p.authorHandle != kMeHandle).toList();
     final order = NativeCore.rankOrder(
       others.map((p) => p.likes).toList(),
       others.map((p) => p.totalComments).toList(),

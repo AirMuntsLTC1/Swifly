@@ -1,5 +1,8 @@
 import 'app_feedback.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'media/media_item.dart';
 import 'native_bridge.dart';
@@ -30,6 +33,18 @@ class CommentItem {
     List<CommentItem>? replies,
   })  : id = id ?? 'c${++_commentSeq}',
         replies = replies ?? <CommentItem>[];
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'name': name, 'text': text,
+    'created': created.toIso8601String(),
+    'replies': replies.map((r) => r.toJson()).toList(),
+  };
+
+  factory CommentItem.fromJson(Map<String, dynamic> json) => CommentItem(
+    id: json['id'], name: json['name'], text: json['text'],
+    created: DateTime.parse(json['created']),
+    replies: (json['replies'] as List? ?? []).map((r) => CommentItem.fromJson(r)).toList(),
+  );
 }
 
 class Post {
@@ -79,6 +94,26 @@ class Post {
     if (d.inHours < 24) return '${d.inHours}h';
     return '${d.inDays}d';
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'authorName': authorName, 'authorHandle': authorHandle,
+    'text': text, 'audience': audience, 'taggedHandles': taggedHandles,
+    'created': created.toIso8601String(), 'likes': likes, 'liked': liked,
+    'saves': saves, 'saved': saved, 'shares': shares,
+    'media': media.map((m) => m.toJson()).toList(),
+    'comments': comments.map((c) => c.toJson()).toList(),
+  };
+
+  factory Post.fromJson(Map<String, dynamic> json) => Post(
+    id: json['id'], authorName: json['authorName'], authorHandle: json['authorHandle'],
+    text: json['text'], audience: json['audience'],
+    taggedHandles: List<String>.from(json['taggedHandles'] ?? []),
+    created: DateTime.parse(json['created']),
+    likes: json['likes'] ?? 0, liked: json['liked'] ?? false,
+    saves: json['saves'] ?? 0, saved: json['saved'] ?? false, shares: json['shares'] ?? 0,
+    media: (json['media'] as List? ?? []).map((m) => MediaItem.fromJson(m)).toList(),
+    comments: (json['comments'] as List? ?? []).map((c) => CommentItem.fromJson(c)).toList(),
+  );
 }
 
 class PostStore extends ChangeNotifier {
@@ -124,6 +159,31 @@ class PostStore extends ChangeNotifier {
 
   /// Call when the PHP pipeline finishes a photo or video that a post already shows.
   void mediaUpdated() => notifyListeners();
+
+  Future<void> saveCache() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/feed_cache.json');
+      final data = _posts.take(20).map((p) => p.toJson()).toList(); // Cache top 20 posts
+      await file.writeAsString(jsonEncode(data));
+    } catch (_) {}
+  }
+
+  Future<void> loadCache() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/feed_cache.json');
+      if (await file.exists()) {
+        final data = jsonDecode(await file.readAsString()) as List;
+        final cachedPosts = data.map((item) => Post.fromJson(item)).toList();
+        // Only load cache if memory is empty (don't overwrite fresh data)
+        if (_posts.isEmpty) {
+          _posts.addAll(cachedPosts);
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
 
 
   List<Post> postsWithHashtag(String tag) {

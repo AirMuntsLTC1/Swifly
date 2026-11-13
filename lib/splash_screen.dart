@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'auth/auth_flow.dart';
 import 'app_bootstrap.dart';
 import 'auth_service.dart';
+import 'post_model.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -29,6 +30,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       if (!AuthService.instance.needsLogin) {
         AuthService.instance.applyUser();
         setState(() => _status = 'Loading your feed...');
+        await PostStore.instance.loadCache(); // Load offline cache instantly
         await loadAppData();
       }
     } catch (e) {

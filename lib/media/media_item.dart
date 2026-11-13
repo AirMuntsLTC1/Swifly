@@ -76,6 +76,23 @@ class MediaItem {
     final s = total % 60;
     return '$m:${s.toString().padLeft(2, '0')}';
   }
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind.name, 'path': path, 'thumbPath': thumbPath,
+    'width': width, 'height': height, 'durationMs': durationMs,
+    'processing': processing, 'engine': engine,
+  };
+
+  factory MediaItem.fromJson(Map<String, dynamic> json) => MediaItem(
+    kind: json['kind'] == 'video' ? MediaKind.video : MediaKind.photo,
+    path: json['path'],
+    thumbPath: json['thumbPath'],
+    width: json['width'] ?? 0,
+    height: json['height'] ?? 0,
+    durationMs: json['durationMs'] ?? 0,
+    processing: json['processing'] ?? false,
+    engine: json['engine'] ?? '',
+  );
 }
 
 
