@@ -35,7 +35,11 @@ class FeedTab extends StatelessWidget {
 
 class PostCard extends StatefulWidget {
   final Post post;
-  const PostCard({super.key, required this.post});
+
+  /// When set, the Comment button calls this instead of opening the post page.
+  /// The post page itself uses it so Comment never stacks another copy of it.
+  final VoidCallback? onComment;
+  const PostCard({super.key, required this.post, this.onComment});
 
   @override
   State<PostCard> createState() => _PostCardState();
@@ -279,7 +283,8 @@ class _PostCardState extends State<PostCard> {
           _actionCell(
             icon: const Icon(LucideIcons.messageCircle, color: Colors.black, size: 22),
             label: 'Comment',
-            onTap: () => Navigator.push(context, postDetailRoute(p.id)),
+            onTap: widget.onComment ??
+                () => Navigator.push(context, postDetailRoute(p.id)),
           ),
           _actionCell(
             icon: _iconStack(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'feed_widgets.dart';
+import 'hashtag_text.dart';
 import 'post_model.dart';
 import 'typing_indicator.dart';
 
@@ -133,7 +134,7 @@ class _PostDetailScreenState extends State<PostDetailScreen>
                       fontSize: isReply ? 13 : 14,
                       color: Colors.black)),
               const SizedBox(height: 2),
-              Text(c.text,
+              HashtagText(c.text,
                   style: TextStyle(fontSize: isReply ? 13 : 14, color: Colors.black)),
               if (!isReply)
                 GestureDetector(
@@ -295,7 +296,10 @@ class _PostDetailScreenState extends State<PostDetailScreen>
                     children: [
                       _flashable(
                         active: widget.highlightId == null && widget.flashPost,
-                        child: PostCard(post: post),
+                        child: PostCard(
+                          post: post,
+                          onComment: () => _focus.requestFocus(),
+                        ),
                       ),
                       _commentsSection(post),
                     ],

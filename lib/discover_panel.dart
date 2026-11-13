@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'hashtag_screen.dart';
+import 'hashtag_text.dart';
 import 'native_bridge.dart';
 import 'post_model.dart';
 import 'follow_button.dart';
@@ -373,7 +374,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
       title: Text(p.authorName,
           style: const TextStyle(
               fontWeight: FontWeight.w700, color: Colors.black)),
-      subtitle: Text(p.text,
+      subtitle: HashtagText(p.text,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: Color(0xFF6E6E6E))),

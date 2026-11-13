@@ -96,7 +96,7 @@ class HashtagScreen extends StatelessWidget {
                                     fontSize: 34,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: -0.5,
-                                    color: Colors.black,
+                                    color: Color(0xFF1D6FDC),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
