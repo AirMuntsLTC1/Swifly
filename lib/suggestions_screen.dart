@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'nav_guard.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'follow_button.dart';
@@ -32,7 +33,7 @@ class SuggestionsScreen extends StatelessWidget {
         itemBuilder: (context, i) {
           final p = kPeople[i];
           return ListTile(
-            onTap: () => Navigator.push(context, UserProfileScreen.route(p)),
+            onTap: () => pushOnce(context, UserProfileScreen.route(p)),
             contentPadding: EdgeInsets.zero,
             leading: const CircleAvatar(
               backgroundColor: Colors.black,

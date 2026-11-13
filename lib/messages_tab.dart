@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'nav_guard.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'add_story_screen.dart';
@@ -493,7 +494,7 @@ class _MessagesTabState extends State<MessagesTab> {
               title: Text('View profile', style: TextStyle(color: c.text)),
               onTap: () {
                 Navigator.pop(sheetContext);
-                Navigator.push(context, UserProfileScreen.route(personFor(handle)));
+                pushOnce(context, UserProfileScreen.route(personFor(handle)));
               },
             ),
             ListTile(

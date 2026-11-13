@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'nav_guard.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -125,7 +126,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _openProfile() {
-    Navigator.push(context, UserProfileScreen.route(personFor(_handle)));
+    pushOnce(context, UserProfileScreen.route(personFor(_handle)));
   }
 
   void _openTheirStory() {
@@ -276,7 +277,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final width = (MediaQuery.of(context).size.width * 0.62).clamp(190.0, 280.0).toDouble();
     final title = post.title.isEmpty ? 'Photo or video post' : post.title;
     return GestureDetector(
-      onTap: () => Navigator.push(context, postDetailRoute(post.postId)),
+      onTap: () => pushOnce(context, postDetailRoute(post.postId)),
       child: Container(
         width: width,
         clipBehavior: Clip.antiAlias,

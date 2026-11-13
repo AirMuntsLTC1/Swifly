@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'nav_guard.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'chat_screen.dart';
@@ -98,7 +99,7 @@ class DmPersonRow extends StatelessWidget {
     final followsMe = FollowStore.instance.isFollower(person.handle);
     return InkWell(
       onTap: onTap ??
-          () => Navigator.push(context, UserProfileScreen.route(person)),
+          () => pushOnce(context, UserProfileScreen.route(person)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(

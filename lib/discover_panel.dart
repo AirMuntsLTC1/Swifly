@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'nav_guard.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'hashtag_screen.dart';
@@ -329,7 +330,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     final followers = _followers[f.handle] ?? 0;
     final following = _following[f.handle] ?? 0;
     return ListTile(
-      onTap: () => Navigator.push(context, UserProfileScreen.route(f)),
+      onTap: () => pushOnce(context, UserProfileScreen.route(f)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       leading: const CircleAvatar(
         backgroundColor: Colors.black,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'feed_widgets.dart';
+import 'nav_guard.dart';
 import 'hashtag_text.dart';
 import 'post_model.dart';
 import 'typing_indicator.dart';
@@ -317,21 +318,7 @@ class _PostDetailScreenState extends State<PostDetailScreen>
 
 /// Opens the post page from the feed. The page slides in from the right with a
 /// short fade, and slides back out the same way.
-Route<void> postDetailRoute(String postId) {
-  return PageRouteBuilder<void>(
-    transitionDuration: const Duration(milliseconds: 320),
-    reverseTransitionDuration: const Duration(milliseconds: 260),
-    pageBuilder: (_, __, ___) => PostDetailScreen(postId: postId),
-    transitionsBuilder: (_, animation, __, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return SlideTransition(
-        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(curved),
-        child: FadeTransition(opacity: curved, child: child),
-      );
-    },
-  );
-}
+Route<void> postDetailRoute(String postId) => fastRoute<void>(
+      name: 'post:$postId',
+      child: PostDetailScreen(postId: postId),
+    );

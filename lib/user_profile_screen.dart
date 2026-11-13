@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'chat_screen.dart';
+import 'nav_guard.dart';
 import 'connections_screen.dart';
 import 'native_bridge.dart';
 import 'discover_panel.dart';
@@ -15,24 +16,10 @@ class UserProfileScreen extends StatefulWidget {
   final Person user;
   const UserProfileScreen({super.key, required this.user});
 
-  static Route<void> route(Person user) {
-    return PageRouteBuilder(
-      transitionDuration: const Duration(milliseconds: 350),
-      reverseTransitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, __, ___) => UserProfileScreen(user: user),
-      transitionsBuilder: (_, animation, __, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        );
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
-        );
-      },
-    );
-  }
+  static Route<void> route(Person user) => fastRoute<void>(
+        name: 'profile:${user.handle}',
+        child: UserProfileScreen(user: user),
+      );
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
@@ -117,10 +104,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 const _Stat(label: 'Posts', value: '12'),
                 const SizedBox(width: 32),
                 GestureDetector(
-                  onTap: () => Navigator.push(
+                  onTap: () => pushOnce(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => ConnectionsScreen(
+                    fastRoute(
+                        name: 'connections:${f.handle}:followers',
+                        child: ConnectionsScreen(
                             initialFollowers: true,
                             userHandle: f.handle,
                             userName: f.name)),
@@ -131,10 +119,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 ),
                 const SizedBox(width: 32),
                 GestureDetector(
-                  onTap: () => Navigator.push(
+                  onTap: () => pushOnce(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => ConnectionsScreen(
+                    fastRoute(
+                        name: 'connections:${f.handle}:following',
+                        child: ConnectionsScreen(
                             initialFollowers: false,
                             userHandle: f.handle,
                             userName: f.name)),
@@ -152,10 +141,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => Navigator.push(
+                    onPressed: () => pushOnce(
                       context,
-                      MaterialPageRoute(
-                          builder: (_) => ChatScreen(handle: f.handle)),
+                      fastRoute(
+                          name: 'chat:${f.handle}',
+                          child: ChatScreen(handle: f.handle)),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1D6FDC),
@@ -212,7 +202,7 @@ class _SuggestionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = R.of(context);
     return GestureDetector(
-      onTap: () => Navigator.push(context, UserProfileScreen.route(friend)),
+      onTap: () => pushOnce(context, UserProfileScreen.route(friend)),
       child: Container(
         width: r.w(130),
         margin: const EdgeInsets.only(right: 12),

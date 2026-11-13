@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'nav_guard.dart';
 import 'package:flutter/gestures.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'hashtag_screen.dart';
@@ -146,7 +147,7 @@ class _PostCardState extends State<PostCard> {
 
     return InkWell(
       onTap: author != null
-          ? () => Navigator.push(context, UserProfileScreen.route(author!))
+          ? () => pushOnce(context, UserProfileScreen.route(author!))
           : null,
       child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,7 +285,7 @@ class _PostCardState extends State<PostCard> {
             icon: const Icon(LucideIcons.messageCircle, color: Colors.black, size: 22),
             label: 'Comment',
             onTap: widget.onComment ??
-                () => Navigator.push(context, postDetailRoute(p.id)),
+                () => pushOnce(context, postDetailRoute(p.id)),
           ),
           _actionCell(
             icon: _iconStack(

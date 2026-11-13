@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'count_badge.dart';
+import 'nav_guard.dart';
 import 'create_sheet.dart';
 import 'discover_panel.dart';
 import 'feed_widgets.dart';
@@ -469,7 +470,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Widget _suggestionCard(R r, Person f) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, UserProfileScreen.route(f)),
+      onTap: () => pushOnce(context, UserProfileScreen.route(f)),
       child: Container(
         width: r.w(130),
         margin: const EdgeInsets.only(right: 12),
@@ -558,19 +559,21 @@ class _ProfileTabState extends State<ProfileTab> {
                   children: [
                     const _Stat(label: 'Posts', value: '24'),
                     GestureDetector(
-                      onTap: () => Navigator.push(
+                      onTap: () => pushOnce(
                           context,
-                          MaterialPageRoute(
-                              builder: (_) => const ConnectionsScreen(initialFollowers: true))),
+                          fastRoute(
+                              name: 'connections:me:followers',
+                              child: const ConnectionsScreen(initialFollowers: true))),
                       child: _Stat(
                           label: 'Followers',
                           value: '${FollowStore.instance.followerHandles.length}'),
                     ),
                     GestureDetector(
-                      onTap: () => Navigator.push(
+                      onTap: () => pushOnce(
                           context,
-                          MaterialPageRoute(
-                              builder: (_) => const ConnectionsScreen(initialFollowers: false))),
+                          fastRoute(
+                              name: 'connections:me:following',
+                              child: const ConnectionsScreen(initialFollowers: false))),
                       child: _Stat(
                           label: 'Following',
                           value: '${FollowStore.instance.followingHandles.length}'),
