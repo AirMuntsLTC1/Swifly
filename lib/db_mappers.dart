@@ -91,9 +91,22 @@ Map<String, List<ChatMessage>> threadsFromRows(List<Map<String, dynamic>> rows) 
     final text = _s(r['text']);
     final postId = r['post_id'];
     final replyToId = r['reply_to_id'];
-    String displayText = text;
+    final postData = r['post_data'];
     
-    if (displayText.isEmpty) {
+    String displayText = text;
+    PostRef? postRef;
+    
+    if (postData != null && postData is Map) {
+      postRef = PostRef(
+        postId: _s(postData['post_id']),
+        authorName: _s(postData['author_name']),
+        authorHandle: _s(postData['author_handle']),
+        title: _s(postData['title']),
+        thumbPath: postData['thumb'] == null ? null : _s(postData['thumb']),
+        isVideo: _b(postData['is_video']),
+        mediaCount: _i(postData['media_count']),
+      );
+    } else if (displayText.isEmpty) {
       if (postId != null) displayText = "Shared a post";
       else if (replyToId != null) displayText = "Replied to a message";
       else displayText = "Story reply";
@@ -104,6 +117,7 @@ Map<String, List<ChatMessage>> threadsFromRows(List<Map<String, dynamic>> rows) 
           text: displayText,
           fromMe: _b(r['from_me']),
           time: _t(r['created_at']),
+          post: postRef,
         ));
   }
   for (final list in out.values) {

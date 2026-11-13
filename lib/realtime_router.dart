@@ -24,9 +24,24 @@ class RealtimeRouter {
       NotificationStore.instance.insertFromRow(e.row);
     } else if (e is MessageReceivedEvent) {
       final senderId = e.row['sender'];
-      // Simplified: router relies on ChatStore to fetch peer handle
-      DatabaseService.instance.personById('$senderId').then((who) {
-        ChatStore.instance.receive(who['handle']!, '${e.row['text']}', post: null, story: null, replyTo: null);
+      final postId = e.row['post_id'];
+      DatabaseService.instance.personById('\$senderId').then((who) async {
+        PostRef? postRef;
+        if (postId != null) {
+          final p = await DatabaseService.instance.fetchPostById('\$postId');
+          if (p != null) {
+            postRef = PostRef(
+              postId: p['id'],
+              authorName: p['author_name'],
+              authorHandle: p['author_handle'],
+              title: p['text'],
+              thumbPath: p['thumb'],
+              isVideo: p['is_video'],
+              mediaCount: p['media_count'],
+            );
+          }
+        }
+        ChatStore.instance.receive(who['handle']!, '\${e.row['text']}', post: postRef, story: null, replyTo: null);
       });
     } else if (e is ChatTypingEvent) {
       ChatTypingStore.instance.setTyping(e.handle, e.isTyping);

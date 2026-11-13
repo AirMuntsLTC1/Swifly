@@ -481,7 +481,14 @@ class DatabaseService {
     final me = _requireMe();
     final rows = await _db
         .from('messages')
-        .select('id,sender,recipient,text,reply_to_id,post_id,created_at')
+        .select('''
+          id, sender, recipient, text, reply_to_id, post_id, created_at,
+          post:posts!post_id(
+            id, text,
+            author:profiles!author_id(username, display_name),
+            media:post_media!post_id(kind, thumb_path, storage_path)
+          )
+        ''')
         .or('sender.eq.$me,recipient.eq.$me')
         .order('created_at', ascending: true)
         .limit(1000);
@@ -491,6 +498,33 @@ class DatabaseService {
       final fromMe = '${r['sender']}' == me;
       final peerId = fromMe ? '${r['recipient']}' : '${r['sender']}';
       final peer = await _who(peerId);
+      
+      Map<String, dynamic>? postData;
+      final p = r['post'];
+      if (p != null && p is Map) {
+        final author = _Who.fromRow(_embedded(p['author']));
+        final mediaList = p['media'] as List?;
+        String? thumb;
+        bool isVideo = false;
+        if (mediaList != null && mediaList.isNotEmpty) {
+          final first = mediaList.first;
+          if (first['kind'] == 'video') isVideo = true;
+          final thumbPath = first['thumb_path'];
+          if (thumbPath != null) {
+            thumb = await _cachedFile('post-media', '$thumbPath');
+          }
+        }
+        postData = {
+          'post_id': '${p['id']}',
+          'author_name': author.name,
+          'author_handle': author.handle,
+          'title': '${p['text'] ?? ''}',
+          'thumb': thumb,
+          'is_video': isVideo,
+          'media_count': mediaList?.length ?? 0,
+        };
+      }
+
       out.add({
         'id': '${r['id']}',
         'peer_handle': peer.handle,
@@ -499,9 +533,48 @@ class DatabaseService {
         'created_at': '${r['created_at']}',
         'post_id': r['post_id'],
         'reply_to_id': r['reply_to_id'],
+        'post_data': postData,
       });
     }
     return out;
+  }
+
+  Future<Map<String, dynamic>?> fetchPostById(String id) async {
+    try {
+      final rows = await _db
+          .from('posts')
+          .select('''
+            id, text,
+            author:profiles!author_id(username, display_name),
+            media:post_media!post_id(kind, thumb_path, storage_path)
+          ''')
+          .eq('id', id)
+          .maybeSingle();
+      if (rows == null) return null;
+      final author = _Who.fromRow(_embedded(rows['author']));
+      final mediaList = rows['media'] as List?;
+      String? thumb;
+      bool isVideo = false;
+      if (mediaList != null && mediaList.isNotEmpty) {
+        final first = mediaList.first;
+        if (first['kind'] == 'video') isVideo = true;
+        final thumbPath = first['thumb_path'];
+        if (thumbPath != null) {
+          thumb = await _cachedFile('post-media', '$thumbPath');
+        }
+      }
+      return {
+        'id': '${rows['id']}',
+        'author_name': author.name,
+        'author_handle': author.handle,
+        'text': '${rows['text'] ?? ''}',
+        'thumb': thumb,
+        'is_video': isVideo,
+        'media_count': mediaList?.length ?? 0,
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Rows: {handle, text, created_at} for notes from the last 24 hours.
