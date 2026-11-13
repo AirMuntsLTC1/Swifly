@@ -59,8 +59,11 @@ class FollowButton extends StatelessWidget {
         final following =
             state == FollowState.following || state == FollowState.mutual;
         final label = followLabel(state);
-        final height = compact ? 30.0 : 36.0;
-        final fontSize = compact ? 13.0 : 14.0;
+        // Full-width buttons (profile pages) match the 48 px Message button.
+        final large = expand && !compact;
+        final height = compact ? 30.0 : (large ? 48.0 : 36.0);
+        final fontSize = compact ? 13.0 : (large ? 15.0 : 14.0);
+        final radius = large ? 24.0 : (compact ? 15.0 : 18.0);
 
         return GestureDetector(
           onTap: () => _onTap(context, state),
@@ -68,32 +71,27 @@ class FollowButton extends StatelessWidget {
             duration: const Duration(milliseconds: 200),
             height: height,
             width: expand ? double.infinity : null,
-            constraints: BoxConstraints(minWidth: compact ? 0 : 110),
-            padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 18),
+            // Same minimum width for every label so Follow / Follow back / Following never resize.
+            constraints: BoxConstraints(minWidth: compact ? 92 : 110),
+            alignment: Alignment.center,
+            padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 18),
             decoration: BoxDecoration(
               color: following ? Colors.white : _brandBlue,
-              borderRadius: BorderRadius.circular(compact ? 15 : 18),
+              borderRadius: BorderRadius.circular(radius),
               border: Border.all(
                 color: following ? const Color(0xFFCCCCCC) : _brandBlue,
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: fontSize,
-                      fontWeight: FontWeight.w700,
-                      color: following ? Colors.black : Colors.white,
-                    ),
-                  ),
-                ),
-              ],
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.w700,
+                color: following ? Colors.black : Colors.white,
+              ),
             ),
           ),
         );

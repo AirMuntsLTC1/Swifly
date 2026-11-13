@@ -52,7 +52,8 @@ class DmFollowButton extends StatelessWidget {
           },
           child: Container(
             height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            constraints: const BoxConstraints(minWidth: 96),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: following ? c.chipFill : const Color(0xFF3E7BFA),

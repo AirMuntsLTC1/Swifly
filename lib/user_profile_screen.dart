@@ -151,7 +151,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       backgroundColor: const Color(0xFF1D6FDC),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      minimumSize: const Size(0, 48),
+                      maximumSize: const Size(double.infinity, 48),
+                      padding: EdgeInsets.zero,
+                      elevation: 0,
                     ),
                     child: const Text('Message',
                         style: TextStyle(
