@@ -314,6 +314,18 @@ class ProfileStore extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Forgets the profile saved on this phone (used on log out).
+  Future<void> clearDevice() async {
+    _deviceTimer?.cancel();
+    _fields.clear();
+    avatarPath = null;
+    notifyListeners();
+    try {
+      final f = await _deviceFile();
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+  }
+
   void _saveToDevice() {
     _deviceTimer?.cancel();
     _deviceTimer = Timer(const Duration(milliseconds: 400), () async {

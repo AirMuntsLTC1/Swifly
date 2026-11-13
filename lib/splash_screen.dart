@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'home_screen.dart';
+import 'auth/auth_flow.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -34,7 +34,7 @@ class _SplashScreenState extends State<SplashScreen>
         PageRouteBuilder(
           transitionDuration: const Duration(milliseconds: 450),
           pageBuilder: (context, animation, secondaryAnimation) =>
-              const HomeScreen(),
+              startScreen(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) =>
               FadeTransition(opacity: animation, child: child),
         ),

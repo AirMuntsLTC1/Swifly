@@ -11,7 +11,12 @@ bool _b(dynamic v) => v == true || v == 1 || v == 'true';
 DateTime _t(dynamic v) => DateTime.tryParse(_s(v))?.toLocal() ?? DateTime.now();
 List<String> _list(dynamic v) => v is List ? [for (final e in v) e.toString()] : <String>[];
 
-Person personFromRow(Map<String, dynamic> r) => Person(_s(r['name']), _s(r['handle']));
+/// Accepts name/handle or display_name/username columns.
+String _nameOf(Map<String, dynamic> r) => _s(r['name'] ?? r['display_name'] ?? r['username']);
+String _handleOf(Map<String, dynamic> r) =>
+    r['handle'] != null ? _s(r['handle']) : (r['username'] != null ? '@${_s(r['username'])}' : '');
+
+Person personFromRow(Map<String, dynamic> r) => Person(_nameOf(r), _handleOf(r));
 
 CommentItem commentFromRow(Map<String, dynamic> r) => CommentItem(
       id: _s(r['id']).isEmpty ? null : _s(r['id']),
@@ -82,5 +87,5 @@ Map<String, DmNote> notesFromRows(List<Map<String, dynamic>> rows) => {
     };
 
 Map<String, (int, int)> statsFromRows(List<Map<String, dynamic>> rows) => {
-      for (final r in rows) _s(r['handle']): (_i(r['followers_count']), _i(r['following_count'])),
+      for (final r in rows) _handleOf(r): (_i(r['followers_count']), _i(r['following_count'])),
     };

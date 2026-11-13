@@ -1,12 +1,14 @@
 -- Swifly tables. Column names match DatabaseService read methods exactly.
--- Run in Supabase SQL editor. Add Row Level Security policies before launch.
+-- Run this FIRST in the Supabase SQL editor, then supabase/auth_setup.sql.
+-- Add Row Level Security policies for each table before launch.
 
 create table if not exists profiles (
   id uuid primary key references auth.users on delete cascade,
-  handle text unique not null,            -- '@yourhandle'
-  name text not null,
+  username text unique not null,          -- 'wilme_olid'  (the app shows it as @wilme_olid)
+  display_name text not null default '',
   followers_count int not null default 0,
-  following_count int not null default 0
+  following_count int not null default 0,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists posts (

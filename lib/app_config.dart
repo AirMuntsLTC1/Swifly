@@ -6,3 +6,7 @@
 const bool kUseMockData = true;
 
 
+
+/// true  -> the app starts on Sign in / Register (once lib/supabase_config.dart is filled in).
+/// false -> the app opens straight to Home.
+const bool kRequireLogin = true;

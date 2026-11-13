@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'auth/logout_button.dart';
 import 'count_badge.dart';
 import 'nav_guard.dart';
 import 'create_sheet.dart';
@@ -620,6 +621,8 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
               SizedBox(height: r.h(24)),
               const ProfileDetailsSection(),
+              SizedBox(height: r.h(16)),
+              const LogoutButton(),
               SizedBox(height: r.h(30)),
               Row(
                 children: [

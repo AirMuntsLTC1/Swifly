@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'app_bootstrap.dart';
+import 'auth_service.dart';
 import 'media/media_pipeline.dart';
 import 'logo_service.dart';
 import 'notification_banner.dart';
@@ -14,8 +15,15 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Check how much of a video is on screen about 8 times a second.
   VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 120);
-  // Mock data or the real database, depending on kUseMockData (app_config.dart).
-  await loadAppData();
+  // Sign in: starts Supabase and restores a saved login. Does nothing until
+  // lib/supabase_config.dart is filled in.
+  await AuthService.init();
+  final inApp = !AuthService.instance.needsLogin;
+  if (inApp) {
+    AuthService.instance.applyUser();
+    // Mock data or the real database, depending on kUseMockData (app_config.dart).
+    await loadAppData();
+  }
   // Bring back the profile saved on this phone and the saved company/school logos.
   ProfileStore.instance.loadFromDevice();
   LogoService.instance.load();
@@ -24,7 +32,7 @@ Future<void> main() async {
   runApp(const SocialApp());
   // Unpack the PHP media scripts and trim the local media cache in the background.
   MediaPipeline.instance.ensureReady().then((_) => MediaPipeline.instance.trimCache());
-  startLiveActivity();
+  if (inApp) startLiveActivity();
 }
 
 class SocialApp extends StatelessWidget {

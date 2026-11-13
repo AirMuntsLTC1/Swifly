@@ -49,8 +49,10 @@ Future<void> _loadFromDatabase() async {
     safe(() async {
       final me = await db.fetchMe();
       if (me != null) {
-        CurrentUser.name = (me['name'] ?? CurrentUser.name).toString();
-        CurrentUser.handle = (me['handle'] ?? CurrentUser.handle).toString();
+        final name = me['name'] ?? me['display_name'];
+        final handle = me['handle'] ?? (me['username'] == null ? null : '@${me['username']}');
+        if (name != null) CurrentUser.name = name.toString();
+        if (handle != null) CurrentUser.handle = handle.toString();
       }
     }),
     safe(() async {
@@ -87,4 +89,17 @@ Future<void> _loadFromDatabase() async {
     }),
     safe(() => ProfileStore.instance.loadFromDatabase()),
   ]);
+}
+
+/// Empties every store. Used on log out so the next person never sees old data.
+Future<void> clearAppData() async {
+  CurrentUser.name = 'Your Name';
+  CurrentUser.handle = '@yourhandle';
+  PeopleDirectory.instance.load();
+  PostStore.instance.load(posts: <Post>[]);
+  FollowStore.instance.load();
+  NotificationStore.instance.load(<AppNotification>[]);
+  ChatStore.instance.load(<String, List<ChatMessage>>{});
+  NoteStore.instance.load(<String, DmNote>{});
+  await ProfileStore.instance.clearDevice();
 }

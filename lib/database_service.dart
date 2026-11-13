@@ -90,15 +90,15 @@ class DatabaseService {
   // Return an empty list / null while a table is not connected yet.
   // ---------------------------------------------------------------------------
 
-  /// {'name': 'Your Name', 'handle': '@you'} for the signed-in user, or null.
+  /// {'display_name': 'Your Name', 'username': 'you'} for the signed-in user, or null.
   Future<Map<String, dynamic>?> fetchMe() async {
-    // Example: final r = await supabase.from('profiles').select('name,handle').eq('id', uid).single();
+    // Example: final r = await supabase.from('profiles').select('display_name,username').eq('id', uid).single();
     return null;
   }
 
-  /// Rows: {handle, name, followers_count, following_count}
+  /// Rows: {username, display_name, followers_count, following_count} (handle/name also work)
   Future<List<Map<String, dynamic>>> fetchPeople() async {
-    // Example: return List<Map<String, dynamic>>.from(await supabase.from('profiles').select('handle,name,followers_count,following_count'));
+    // Example: return List<Map<String, dynamic>>.from(await supabase.from('profiles').select('username,display_name,followers_count,following_count'));
     return <Map<String, dynamic>>[];
   }
 
