@@ -26,6 +26,7 @@ Future<void> logOut(BuildContext context) async {
   final nav = Navigator.of(context);
   await AuthService.instance.signOut();
   await clearAppData();
+  await PostStore.instance.clearCache();
   nav.pushAndRemoveUntil(_fade(const SignInScreen()), (_) => false);
 }
 

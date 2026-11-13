@@ -91,11 +91,11 @@ class DmAvatar extends StatelessWidget {
     final c = DmTheme.instance.c;
     final isMe = handle == kMeHandle;
     final path = isMe ? ProfileStore.instance.avatarPath : null;
-    final name = isMe ? kMeName : nameForHandle(handle);
+    final displayName = this.name ?? (isMe ? kMeName : nameForHandle(handle));
     final hasImage = path != null && path.isNotEmpty;
-    final letter = name.replaceAll('@', '').trim().isEmpty
+    final letter = displayName.replaceAll('@', '').trim().isEmpty
         ? '?'
-        : name.replaceAll('@', '').trim().characters.first.toUpperCase();
+        : displayName.replaceAll('@', '').trim().characters.first.toUpperCase();
     final inner = ring ? size - 8 : size;
     final face = Container(
       width: inner,

@@ -1,6 +1,6 @@
 import 'app_feedback.dart';
 import 'dart:async';
-
+import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_bootstrap.dart';
@@ -8,278 +8,121 @@ import 'database_service.dart';
 import 'realtime.dart';
 import 'supabase_config.dart';
 
-/// Listens to the Supabase tables and turns every change made by OTHER people
-/// into the app's RealtimeEvent (realtime.dart). The screens then update by
-/// themselves, exactly as they did with the old simulated activity.
-///
-/// Things you do yourself are skipped here, because the screens already show
-/// them instantly.
-class SupabaseRealtime {
-  static RealtimeChannel? _channel;
-  static Timer? _postRefresh;
-  static Timer? _storyRefresh;
+class SupabaseRealtime with WidgetsBindingObserver {
+  static final SupabaseRealtime instance = SupabaseRealtime._();
+  SupabaseRealtime._();
 
-  static String? get _me =>
-      kAuthEnabled ? Supabase.instance.client.auth.currentUser?.id : null;
+  RealtimeChannel? _channel;
+  Timer? _reconnectTimer;
+  int _retryCount = 0;
+  bool _isConnected = false;
 
-  static void start() {
-    final me = _me;
-    if (me == null || _channel != null) return;
+  String? get _me => kAuthEnabled ? Supabase.instance.client.auth.currentUser?.id : null;
 
-    _channel = Supabase.instance.client
-        .channel('swifly-live-$me')
-        // Likes and saves on posts
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'post_likes',
-          callback: (p) => _onLike(p.newRecord),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'post_saves',
-          callback: (p) => _onSave(p.newRecord),
-        )
-        // Comments and replies
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'comments',
-          callback: (p) => _onComment(p.newRecord),
-        )
-        // Follows: someone followed me / unfollowed me
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'follows',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'followee',
-            value: me,
-          ),
-          callback: (p) => _onFollow(p.newRecord),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.delete,
-          schema: 'public',
-          table: 'follows',
-          callback: (p) => _onUnfollow(p.oldRecord),
-        )
-        // Direct messages sent to me
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'messages',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'recipient',
-            value: me,
-          ),
-          callback: (p) => _onMessage(p.newRecord),
-        )
-        // Tags: someone tagged me in a post
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'notifications',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'user_id',
-            value: me,
-          ),
-          callback: (p) => _onNotification(p.newRecord),
-        )
-        // Notes (only notes of people I follow reach me)
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'notes',
-          callback: (p) => _onNote(p.newRecord),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'notes',
-          callback: (p) => _onNote(p.newRecord),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.delete,
-          schema: 'public',
-          table: 'notes',
-          callback: (p) => _onNote(p.oldRecord, deleted: true),
-        )
-        // New posts from people I can see: reload the feed (after a short pause)
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'posts',
-          callback: (p) => _onPost(p.newRecord),
-        )
-        // Stories: someone posted or removed one (refresh the list)
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'stories',
-          callback: (p) => _onStoryChanged(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.delete,
-          schema: 'public',
-          table: 'stories',
-          callback: (p) => _onStoryChanged(),
-        )
-        // Reactions and replies that people sent to my story
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'story_reactions',
-          callback: (p) => _onStoryReaction(p.newRecord),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'story_replies',
-          callback: (p) => _onStoryReply(p.newRecord),
-        )
-        .subscribe();
+  void initLifecycle() {
+    WidgetsBinding.instance.addObserver(this);
   }
 
-  /// Stops listening. Called on log out.
-  static Future<void> stop() async {
-    _postRefresh?.cancel();
-    _postRefresh = null;
-    _storyRefresh?.cancel();
-    _storyRefresh = null;
-    final channel = _channel;
-    _channel = null;
-    if (channel != null) {
-      await Supabase.instance.client.removeChannel(channel);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isConnected) {
+      _connect();
     }
   }
 
-  static Future<void> _onLike(Map<String, dynamic> r) async {
-    if ('${r['user_id']}' == _me) return;
-    final who = await DatabaseService.instance.personById('${r['user_id']}');
-    Realtime.instance.publish(PostLikedEvent(
-      postId: '${r['post_id']}',
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-    ));
+  static void start() {
+    instance._connect();
   }
 
-  static Future<void> _onSave(Map<String, dynamic> r) async {
-    if ('${r['user_id']}' == _me) return;
-    final who = await DatabaseService.instance.personById('${r['user_id']}');
-    Realtime.instance.publish(PostSavedEvent(
-      postId: '${r['post_id']}',
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-    ));
-  }
+  void _connect() {
+    final me = _me;
+    if (me == null || _isConnected) return;
 
-  static Future<void> _onComment(Map<String, dynamic> r) async {
-    if ('${r['author_id']}' == _me) return;
-    final who = await DatabaseService.instance.personById('${r['author_id']}');
-    final parent = r['parent_id'];
-    Realtime.instance.publish(CommentAddedEvent(
-      postId: '${r['post_id']}',
-      id: '${r['id']}',
-      parentId: parent == null ? null : '$parent',
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-      text: '${r['text']}',
-    ));
-  }
+    _channel?.unsubscribe();
+    _channel = Supabase.instance.client.channel('swifly-live-$me');
 
-  static Future<void> _onFollow(Map<String, dynamic> r) async {
-    if ('${r['follower']}' == _me) return;
-    final who = await DatabaseService.instance.personById('${r['follower']}');
-    Realtime.instance.publish(FollowedEvent(
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-    ));
-  }
+    _channel!
+      .onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'posts',
+        callback: (p) => _onPostUpdate(p.newRecord),
+      )
+      .onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'notifications',
+        callback: (p) => _onNotification(p.newRecord),
+      )
+      .onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'messages',
+        filter: PostgresChangeFilter(column: 'recipient', value: me, type: PostgresChangeFilterType.eq),
+        callback: (p) => _onMessage(p.newRecord),
+      )
+      .onBroadcast(
+        event: 'chat_typing',
+        callback: (payload) {
+          final handle = payload['handle'] as String?;
+          final isTyping = payload['isTyping'] as bool? ?? false;
+          if (handle != null && handle != '@$me') {
+            Realtime.instance.publish(ChatTypingEvent(handle: handle, isTyping: isTyping));
+          }
+        },
+      );
 
-  static Future<void> _onUnfollow(Map<String, dynamic> r) async {
-    if ('${r['followee']}' != _me) return;
-    final who = await DatabaseService.instance.personById('${r['follower']}');
-    Realtime.instance.publish(UnfollowedEvent(
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-    ));
-  }
-
-  static Future<void> _onMessage(Map<String, dynamic> r) async {
-    final sender = '${r['sender']}';
-    if (sender == _me) return;
-    final who = await DatabaseService.instance.personById(sender);
-    final replyId = r['reply_to_id'] == null ? null : '${r['reply_to_id']}';
-    final replyText = replyId == null ? null : await DatabaseService.instance.messageText(replyId);
-    Realtime.instance.publish(MessageEvent(
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-      text: '${r['text']}',
-      replyToId: replyId,
-      replyToText: replyText,
-    ));
-  }
-
-  /// Only tags come through here. Likes, comments, follows and messages are
-  /// already handled by their own tables above.
-  static Future<void> _onNotification(Map<String, dynamic> r) async {
-    if ('${r['type']}' != 'tag') return;
-    Realtime.instance.publish(TagEvent(
-      postId: '${r['post_id']}',
-      actorName: '${r['actor_name']}',
-      actorHandle: '${r['actor_handle']}',
-    ));
-  }
-
-  static Future<void> _onNote(Map<String, dynamic> r, {bool deleted = false}) async {
-    final userId = '${r['user_id']}';
-    if (userId == _me) return;
-    final who = await DatabaseService.instance.personById(userId);
-    Realtime.instance.publish(NoteEvent(
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-      text: deleted ? '' : '${r['text']}',
-    ));
-  }
-
-  static void _onStoryChanged() {
-    _storyRefresh?.cancel();
-    _storyRefresh = Timer(const Duration(milliseconds: 800), () {
-      refreshStories().catchError((Object e) => reportError('Could not refresh stories', e));
+    _channel!.subscribe((status, error) {
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        _isConnected = true;
+        _retryCount = 0;
+        _reconnectTimer?.cancel();
+      } else if (status == RealtimeSubscribeStatus.closed || status == RealtimeSubscribeStatus.channelError) {
+        _isConnected = false;
+        _scheduleReconnect();
+      }
     });
   }
 
-  static Future<void> _onStoryReaction(Map<String, dynamic> r) async {
-    if ('${r['user_id']}' == _me) return;
-    final who = await DatabaseService.instance.personById('${r['user_id']}');
-    Realtime.instance.publish(StoryReactionEvent(
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-      emoji: '${r['emoji']}',
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    final delay = Duration(seconds: (2 << _retryCount).clamp(2, 60));
+    _retryCount++;
+    _reconnectTimer = Timer(delay, _connect);
+  }
+
+  static void sendTyping(String handle, bool isTyping) {
+    final channel = instance._channel;
+    if (channel != null && instance._isConnected) {
+      channel.sendBroadcastMessage(
+        event: 'chat_typing',
+        payload: {'handle': handle, 'isTyping': isTyping},
+      );
+    }
+  }
+
+  static Future<void> stop() async {
+    instance._reconnectTimer?.cancel();
+    instance._isConnected = false;
+    await instance._channel?.unsubscribe();
+    instance._channel = null;
+  }
+
+  void _onPostUpdate(Map<String, dynamic> r) {
+    Realtime.instance.publish(PostChangedEvent(
+      postId: '${r['id']}', likes: r['likes'] ?? 0, saves: r['saves'] ?? 0, shares: r['shares'] ?? 0,
     ));
   }
 
-  static Future<void> _onStoryReply(Map<String, dynamic> r) async {
-    if ('${r['user_id']}' == _me) return;
-    final who = await DatabaseService.instance.personById('${r['user_id']}');
-    Realtime.instance.publish(StoryReplyEvent(
-      actorName: who['name'] ?? '',
-      actorHandle: who['handle'] ?? '',
-      text: '${r['text']}',
-    ));
+  void _onNotification(Map<String, dynamic> r) {
+    if ('${r['user_id']}' == _me) {
+      Realtime.instance.publish(NotificationAddedEvent(r));
+    }
   }
 
-  /// A new post from someone else. Wait a moment in case several arrive together.
-  static void _onPost(Map<String, dynamic> r) {
-    if ('${r['author_id']}' == _me) return;
-    _postRefresh?.cancel();
-    _postRefresh = Timer(const Duration(milliseconds: 800), () {
-      refreshPosts().catchError((Object e) => reportError('Could not refresh posts', e));
-    });
+  void _onMessage(Map<String, dynamic> r) {
+    if ('${r['sender']}' != _me) {
+      Realtime.instance.publish(MessageReceivedEvent(r));
+    }
   }
 }

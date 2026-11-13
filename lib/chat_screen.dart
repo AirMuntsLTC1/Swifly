@@ -9,6 +9,7 @@ import 'dm_people_screens.dart';
 import 'dm_theme.dart';
 import 'follow_store.dart';
 import 'inbox_store.dart';
+import 'supabase_realtime.dart';
 import 'media/preview_image.dart';
 import 'post_detail_screen.dart';
 import 'post_model.dart';
@@ -75,12 +76,17 @@ class _ChatScreenState extends State<ChatScreen> {
     _focus.requestFocus();
   }
 
+  void _onTyping(String text) {
+    SupabaseRealtime.sendTyping(_handle, text.isNotEmpty);
+  }
+
   void _send() {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     final reply = _replying;
     ChatStore.instance.send(_handle, text, replyTo: reply == null ? null : _refFor(reply));
     _controller.clear();
+    _onTyping('');
     setState(() => _replying = null);
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }

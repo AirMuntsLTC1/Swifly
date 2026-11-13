@@ -284,6 +284,19 @@ class ChatStore extends ChangeNotifier {
 
   /// The chat that is open on screen right now (new messages there are read).
   String? openHandle;
+  final Set<String> _readThreads = {};
+
+  void markRead(String handle) {
+    _unread[handle] = 0;
+    _readThreads.add(handle);
+    notifyListeners();
+  }
+
+  bool isThreadRead(String handle) => _readThreads.contains(handle) || (_unread[handle] ?? 0) == 0;
+
+  void reset() {
+    _threads.clear(); _unread.clear(); _readThreads.clear(); _accepted.clear(); notifyListeners();
+  }
 
   DateTime _lastTime(String handle) => _threads[handle]!.last.time;
 
@@ -322,11 +335,7 @@ class ChatStore extends ChangeNotifier {
       .where((h) => bucketOf(h) == InboxTab.requests && unread(h) > 0)
       .length;
 
-  void markRead(String handle) {
-    if ((_unread[handle] ?? 0) == 0) return;
-    _unread[handle] = 0;
-    notifyListeners();
-  }
+
 
   void markUnread(String handle) {
     if (!_threads.containsKey(handle)) return;
@@ -698,12 +707,15 @@ class ChatTypingStore extends ChangeNotifier {
   ChatTypingStore._();
   static final ChatTypingStore instance = ChatTypingStore._();
   final Set<String> _typingHandles = {};
+  final Map<String, Timer> _timers = {};
 
   bool isTyping(String handle) => _typingHandles.contains(handle);
 
   void setTyping(String handle, bool typing) {
+    _timers[handle]?.cancel();
     if (typing) {
       if (_typingHandles.add(handle)) notifyListeners();
+      _timers[handle] = Timer(const Duration(seconds: 6), () => setTyping(handle, false));
     } else {
       if (_typingHandles.remove(handle)) notifyListeners();
     }

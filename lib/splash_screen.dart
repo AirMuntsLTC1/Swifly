@@ -4,6 +4,7 @@ import 'auth/auth_flow.dart';
 import 'app_bootstrap.dart';
 import 'auth_service.dart';
 import 'post_model.dart';
+import 'startup_timer.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -18,6 +19,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
+    StartupTimer.log('Splash screen mounted');
     _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000));
     _scale = Tween<double>(begin: 0.6, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
     _controller.forward();
@@ -31,7 +33,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         AuthService.instance.applyUser();
         setState(() => _status = 'Loading your feed...');
         await PostStore.instance.loadCache(); // Load offline cache instantly
-        await loadAppData();
+        
+        // Load network data in the background
+        loadAppData();
+        startLiveActivity();
       }
     } catch (e) {
       debugPrint('Init Error: $e');
@@ -60,14 +65,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               scale: _scale,
               child: Container(
                 width: 112, height: 112,
-                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 24, offset: const Offset(0, 10))]),
+                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(30)),
                 child: const Icon(LucideIcons.flaskConical, color: Colors.white, size: 56),
               ),
             ),
             const SizedBox(height: 24),
-            const Text('Swifly', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: Colors.black)),
-            const SizedBox(height: 6),
-            Text('Connect. Share. Inspire.', style: TextStyle(fontSize: 14, color: Colors.black.withValues(alpha: 0.5))),
+            const Text('Swifly', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800)),
             const SizedBox(height: 48),
             const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.black)),
             const SizedBox(height: 16),

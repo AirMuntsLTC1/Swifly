@@ -472,7 +472,7 @@ class DatabaseService {
         .select('*')
         .eq('user_id', _requireMe())
         .order('created_at', ascending: false)
-        .range(offset, offset + limit - 1);
+        .limit(100);
     return [for (final r in rows) Map<String, dynamic>.from(r)];
   }
 
@@ -682,6 +682,20 @@ class DatabaseService {
       'user_id': _requireMe(),
       'text': text,
     });
+  }
+
+    Future<void> clearLocalMediaCache() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final mediaDir = Directory('${dir.path}/media_cache');
+      if (await mediaDir.exists()) await mediaDir.delete(recursive: true);
+      final files = dir.listSync();
+      for (final f in files) {
+        if (f.path.contains('feed_cache_') && f.path.endsWith('.json')) {
+          await f.delete();
+        }
+      }
+    } catch (_) {}
   }
 
   // ---------------------------------------------------------------------------
