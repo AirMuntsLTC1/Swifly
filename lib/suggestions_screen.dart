@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'follow_button.dart';
 import 'user_profile_screen.dart';
 import 'people_directory.dart';
+import 'dm_theme.dart';
 
 class SuggestionsScreen extends StatelessWidget {
   const SuggestionsScreen({super.key});
@@ -38,10 +39,7 @@ class SuggestionsScreen extends StatelessWidget {
           return ListTile(
             onTap: () => pushOnce(context, UserProfileScreen.route(p)),
             contentPadding: EdgeInsets.zero,
-            leading: const CircleAvatar(
-              backgroundColor: Colors.black,
-              child: Icon(LucideIcons.user, color: Colors.white),
-            ),
+            leading: DmAvatar(handle: p.handle, name: p.name, size: 40),
             title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(p.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
             trailing: FollowButton(handle: p.handle, compact: true),

@@ -10,6 +10,7 @@ import 'follow_button.dart';
 import 'search_history.dart';
 import 'user_profile_screen.dart';
 import 'people_directory.dart';
+import 'dm_theme.dart';
 
 class DiscoverPanel extends StatefulWidget {
   final String query;
@@ -307,39 +308,57 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
   Widget _personTile(Person f) {
     final followers = _followers[f.handle] ?? 0;
     final following = _following[f.handle] ?? 0;
-    return ListTile(
+    return InkWell(
       onTap: () => pushOnce(context, UserProfileScreen.route(f)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      leading: const CircleAvatar(
-        backgroundColor: Colors.black,
-        child: Icon(LucideIcons.user, color: Colors.white, size: 20),
-      ),
-      title: Text(f.name,
-          style: const TextStyle(
-              fontWeight: FontWeight.w700, color: Colors.black)),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
-          const SizedBox(height: 3),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            transitionBuilder: (child, anim) =>
-                FadeTransition(opacity: anim, child: child),
-            child: Text(
-              '${NativeCore.formatCount(followers)} followers · '
-              '${NativeCore.formatCount(following)} following',
-              key: ValueKey('$followers-$following'),
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              backgroundColor: Colors.black,
+              child: Icon(LucideIcons.user, color: Colors.white, size: 20),
             ),
-          ),
-        ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(f.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, color: Colors.black)),
+                  const SizedBox(height: 2),
+                  Text(f.handle, 
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Color(0xFF8E8E8E))),
+                  const SizedBox(height: 3),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    transitionBuilder: (child, anim) =>
+                        FadeTransition(opacity: anim, child: child),
+                    child: Text(
+                      '${NativeCore.formatCount(followers)} followers · '
+                      '${NativeCore.formatCount(following)} following',
+                      key: ValueKey('$followers-$following'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            FollowButton(handle: f.handle, compact: true),
+          ],
+        ),
       ),
-      trailing: FollowButton(handle: f.handle, compact: true),
     );
   }
 

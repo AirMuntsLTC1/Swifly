@@ -15,6 +15,7 @@ import 'post_detail_screen.dart';
 import 'media/post_media_view.dart';
 import 'share_sheet.dart';
 import 'people_directory.dart';
+import 'dm_theme.dart';
 
 class FeedTab extends StatelessWidget {
   const FeedTab({super.key});
@@ -171,11 +172,7 @@ class _PostCardState extends State<PostCard> {
       child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const CircleAvatar(
-          radius: 20,
-          backgroundColor: Colors.black,
-          child: Icon(LucideIcons.user, color: Colors.white, size: 20),
-        ),
+        DmAvatar(handle: p.authorHandle, name: p.authorName, size: 40),
         const SizedBox(width: 10),
         Expanded(
           child: Column(

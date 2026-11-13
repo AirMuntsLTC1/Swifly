@@ -222,6 +222,14 @@ class ProfileStore extends ChangeNotifier {
   Future<void> loadFromDatabase() async {
     await loadFromDevice();
     try {
+      final me = await DatabaseService.instance.fetchMe();
+      if (me != null) {
+        final remoteAvatar = me['avatar_url'] as String?;
+        if (remoteAvatar != null && remoteAvatar.isNotEmpty) {
+          avatarPath = remoteAvatar;
+          notifyListeners();
+        }
+      }
       final rows = await DatabaseService.instance.fetchProfileFields();
       if (rows.isEmpty) return;
       final known = {for (final s in kProfileSections) for (final d in s.fields) d.key};
@@ -274,8 +282,13 @@ class ProfileStore extends ChangeNotifier {
     notifyListeners();
     _saveToDevice();
     try {
-      await DatabaseService.instance.uploadAvatar(path);
-    } catch (_) {}
+      final remoteUrl = await DatabaseService.instance.uploadAvatar(path);
+      avatarPath = remoteUrl;
+      notifyListeners();
+      _saveToDevice();
+    } catch (e) {
+      reportError('Avatar upload failed', e);
+    }
   }
 
   // ---- saved on the phone, so the profile is still there after you close the app ----

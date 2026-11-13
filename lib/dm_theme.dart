@@ -91,6 +91,7 @@ class DmAvatar extends StatelessWidget {
     final isMe = handle == kMeHandle;
     final path = isMe ? ProfileStore.instance.avatarPath : null;
     final name = isMe ? kMeName : nameForHandle(handle);
+    final hasImage = path != null && path.isNotEmpty;
     final letter = name.replaceAll('@', '').trim().isEmpty
         ? '?'
         : name.replaceAll('@', '').trim().characters.first.toUpperCase();
@@ -101,14 +102,17 @@ class DmAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: _tint(handle),
-        image: (path != null && File(path).existsSync())
-            ? DecorationImage(image: FileImage(File(path)), fit: BoxFit.cover)
+        image: hasImage
+            ? DecorationImage(
+                image: path.startsWith('http') 
+                    ? NetworkImage(path) 
+                    : FileImage(File(path)) as ImageProvider, 
+                fit: BoxFit.cover)
             : null,
       ),
       alignment: Alignment.center,
-      child: (path != null && File(path).existsSync())
-          ? null
-          : Text(letter,
+      child: !hasImage
+          ? Text(letter,
               style: TextStyle(
                   color: Colors.white, fontWeight: FontWeight.w700, fontSize: inner * 0.42)),
     );

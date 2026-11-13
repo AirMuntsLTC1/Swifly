@@ -461,7 +461,7 @@ class _ProfileTabState extends State<ProfileTab> {
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF1D6FDC), width: 3),
+                gradient: kStoryRing,
               ),
               child: avatar,
             )
@@ -483,11 +483,7 @@ class _ProfileTabState extends State<ProfileTab> {
         child: Column(
           children: [
             SizedBox(height: r.h(12)),
-            CircleAvatar(
-              radius: r.s(30),
-              backgroundColor: Colors.black,
-              child: Icon(LucideIcons.user, color: Colors.white, size: r.s(30)),
-            ),
+            DmAvatar(handle: f.handle, name: f.name, size: r.s(60)),
             SizedBox(height: r.h(8)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),

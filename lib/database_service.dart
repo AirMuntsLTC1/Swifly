@@ -44,7 +44,7 @@ class DatabaseService {
     if (cached != null) return cached;
     final row = await _db
         .from('profiles')
-        .select('id,username,display_name')
+        .select('id,username,display_name,avatar_url')
         .eq('id', id)
         .maybeSingle();
     if (row == null) return _Who(id: id, username: '', name: '');
@@ -228,7 +228,7 @@ class DatabaseService {
   }
 
   /// Uploads a new profile picture to the "avatars" bucket and saves its link.
-  Future<void> uploadAvatar(String localPath) async {
+  Future<String> uploadAvatar(String localPath) async {
     final me = _requireMe();
     final dot = localPath.lastIndexOf('.');
     final ext = dot == -1 ? 'jpg' : localPath.substring(dot + 1).toLowerCase();
@@ -236,9 +236,11 @@ class DatabaseService {
     final storage = _db.storage.from('avatars');
     await storage.upload(path, File(localPath), fileOptions: const FileOptions(upsert: true));
     final url = storage.getPublicUrl(path);
+    final finalUrl = '$url?v=${DateTime.now().millisecondsSinceEpoch}';
     await _db.from('profiles').update({
-      'avatar_url': '$url?v=${DateTime.now().millisecondsSinceEpoch}',
+      'avatar_url': finalUrl,
     }).eq('id', me);
+    return finalUrl;
   }
 
   /// Values other people typed for a profile field that the built-in lists do
@@ -316,6 +318,7 @@ class DatabaseService {
       'display_name': who.name,
       'username': who.username,
       'handle': who.handle,
+      'avatar_url': who.avatarUrl,
     };
   }
 
@@ -700,7 +703,8 @@ class _Who {
   final String username;
   final String name;
 
-  const _Who({required this.id, required this.username, required this.name});
+  final String? avatarUrl;
+  const _Who({required this.id, required this.username, required this.name, this.avatarUrl});
 
   factory _Who.fromRow(Map<String, dynamic> r) {
     final username = '${r['username'] ?? ''}';
@@ -709,6 +713,7 @@ class _Who {
       id: '${r['id'] ?? ''}',
       username: username,
       name: display.isEmpty ? username : display,
+      avatarUrl: r['avatar_url'] as String?,
     );
   }
 

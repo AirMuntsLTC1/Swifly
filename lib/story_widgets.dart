@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:video_player/video_player.dart';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -155,12 +156,7 @@ class StoryCanvas extends StatelessWidget {
                 ..translate(data.photoDx * kStoryW, data.photoDy * kStoryH)
                 ..rotateZ(data.photoRotation)
                 ..scale(data.photoScale, data.photoScale, 1.0),
-              child: Image.file(
-                File(data.photoPath!),
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.medium,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              ),
+              child: StoryMedia(data: data),
             ),
           ),
         for (final l in data.layers) _layer(l),
@@ -501,3 +497,56 @@ class _FloatingHeartState extends State<_FloatingHeart>
 
 
 
+
+
+class StoryMedia extends StatefulWidget {
+  final StoryData data;
+  const StoryMedia({super.key, required this.data});
+  @override
+  State<StoryMedia> createState() => _StoryMediaState();
+}
+
+class _StoryMediaState extends State<StoryMedia> {
+  VideoPlayerController? _controller;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.data.isVideo && widget.data.photoPath != null) {
+      _controller = VideoPlayerController.file(File(widget.data.photoPath!))
+        ..initialize().then((_) {
+          if (mounted) {
+            _controller!.play();
+            _controller!.setLooping(true);
+            _controller!.setVolume(0);
+            setState(() {});
+          }
+        });
+    }
+  }
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    if (widget.data.photoPath == null) return const SizedBox.shrink();
+    if (widget.data.isVideo && _controller != null) {
+      if (!_controller!.value.isInitialized) return const SizedBox.shrink();
+      return FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: _controller!.value.size.width,
+          height: _controller!.value.size.height,
+          child: VideoPlayer(_controller!),
+        ),
+      );
+    }
+    return Image.file(
+      File(widget.data.photoPath!),
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+    );
+  }
+}

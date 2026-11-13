@@ -57,6 +57,7 @@ class StoryLayer {
 class StoryData {
   int bgColor;
   String? photoPath;
+  bool isVideo;
   double photoScale;
   double photoDx; // fraction of story width
   double photoDy; // fraction of story height
@@ -66,6 +67,7 @@ class StoryData {
   StoryData({
     this.bgColor = 0xFF1D6FDC,
     this.photoPath,
+    this.isVideo = false,
     this.photoScale = 1,
     this.photoDx = 0,
     this.photoDy = 0,
@@ -101,6 +103,7 @@ class StoryData {
   StoryData copy() => StoryData(
         bgColor: bgColor,
         photoPath: photoPath,
+        isVideo: isVideo,
         photoScale: photoScale,
         photoDx: photoDx,
         photoDy: photoDy,

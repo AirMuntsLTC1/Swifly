@@ -5,12 +5,16 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'follow_button.dart';
 import 'user_profile_screen.dart';
 import 'people_directory.dart';
+import 'dm_theme.dart';
 
 class SuggestionsScreen extends StatelessWidget {
   const SuggestionsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Filter out your own account
+    final others = kPeople.where((p) => p.handle != kMeHandle).toList();
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -26,15 +30,12 @@ class SuggestionsScreen extends StatelessWidget {
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
         ),
       ),
-      body: Builder(
-        builder: (context) {
-          final others = kPeople.where((p) => p.handle != kMeHandle).toList();
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: others.length,
-            separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
-            itemBuilder: (context, i) {
-              final p = others[i];
+      body: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: others.length,
+        separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
+        itemBuilder: (context, i) {
+          final p = others[i];
           return ListTile(
             onTap: () => pushOnce(context, UserProfileScreen.route(p)),
             contentPadding: EdgeInsets.zero,
@@ -51,6 +52,3 @@ class SuggestionsScreen extends StatelessWidget {
     );
   }
 }
-
-
-

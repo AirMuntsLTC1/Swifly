@@ -10,6 +10,7 @@ import 'follow_button.dart';
 import 'search_history.dart';
 import 'user_profile_screen.dart';
 import 'people_directory.dart';
+import 'dm_theme.dart';
 
 class DiscoverPanel extends StatefulWidget {
   final String query;
@@ -313,10 +314,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
-            const CircleAvatar(
-              backgroundColor: Colors.black,
-              child: Icon(LucideIcons.user, color: Colors.white, size: 20),
-            ),
+            DmAvatar(handle: f.handle, name: f.name, size: 40),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

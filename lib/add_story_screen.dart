@@ -273,15 +273,25 @@ class _AddStoryScreenState extends State<AddStoryScreen> {
       context,
       pickerConfig: AssetPickerConfig(
         maxAssets: 1,
-        requestType: RequestType.image,
+        requestType: RequestType.common,
         themeColor: _brandBlue,
       ),
     );
     if (result == null || result.isEmpty) return;
-    final file = await result.first.file;
+    final asset = result.first;
+    if (asset.type == AssetType.video && asset.duration > 50) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Video must be 50 seconds or less')),
+        );
+      }
+      return;
+    }
+    final file = await asset.file;
     if (file != null && mounted) {
       setState(() {
         _data.photoPath = file.path;
+        _data.isVideo = asset.type == AssetType.video;
         _data.resetPhotoTransform();
       });
     }

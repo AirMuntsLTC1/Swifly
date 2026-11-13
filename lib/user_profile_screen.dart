@@ -11,6 +11,7 @@ import 'responsive.dart';
 import 'inbox_store.dart';
 import 'story_player_screen.dart';
 import 'people_directory.dart';
+import 'dm_theme.dart';
 import 'post_model.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -29,11 +30,7 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   /// Profile picture. With a story it gets a blue ring and opens the story.
   Widget _storyAvatar(BuildContext context, Person f, R r) {
-    final avatar = CircleAvatar(
-      radius: r.s(44),
-      backgroundColor: Colors.black,
-      child: Icon(LucideIcons.user, color: Colors.white, size: r.s(40)),
-    );
+    final avatar = DmAvatar(handle: f.handle, name: f.name, size: r.s(88));
     final story = StoryStore.instance.otherStory(f.handle);
     if (story == null) return avatar;
     return GestureDetector(
