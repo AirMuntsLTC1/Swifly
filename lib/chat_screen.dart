@@ -8,6 +8,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'dm_people_screens.dart';
 import 'dm_theme.dart';
 import 'follow_store.dart';
+import 'new_connections.dart';
+import 'new_connections_widgets.dart';
 import 'follow_counts_line.dart';
 import 'inbox_store.dart';
 import 'supabase_realtime.dart';
@@ -567,12 +569,21 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  /// True only for a new follow back that has no messages yet.
+  bool get _showHiStrip =>
+      NewConnections.instance.contains(_handle) && !ChatStore.instance.hasThread(_handle);
+
+  void _sendSticker(String text) {
+    ChatStore.instance.send(_handle, text);
+  }
+
   Widget _composer(DmColors c) {
     return SafeArea(
       top: false,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (_showHiStrip) HiStickerStrip(onPick: _sendSticker),
           if (_replying != null) _replyBar(c),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 10, 8),

@@ -111,3 +111,11 @@
 - Likes, saves and comments on a profile post work. These posts are kept apart from the
   home feed, so visiting a profile does not add them there.
 - A profile loads up to 200 of that person's posts.
+
+## Round 7: new followers and hi stickers
+- When you follow back someone who already followed you, they are added to "New
+  followers" in Messages. The row slides and fades in, and the hand waves.
+- A new follower leaves the list as soon as you send the first message. Unfollowing them removes them too.
+- In a new conversation with a new follower, animated "hi" stickers appear above
+  the composer. Tap one to send it. The strip disappears after the first message.
+- The list is saved on the phone for each account.

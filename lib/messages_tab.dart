@@ -8,6 +8,8 @@ import 'count_badge.dart';
 import 'dm_people_screens.dart';
 import 'dm_sheets.dart';
 import 'dm_theme.dart';
+import 'new_connections.dart';
+import 'new_connections_widgets.dart';
 import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'native_bridge.dart';
@@ -559,6 +561,26 @@ class _MessagesTabState extends State<MessagesTab> {
     );
   }
 
+  /// People who just followed back and have no conversation yet.
+  Widget _newConnections(DmColors c) {
+    final handles = [
+      for (final h in NewConnections.instance.handles)
+        if (!ChatStore.instance.hasThread(h)) h,
+    ];
+    if (handles.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+          child: Text('New followers', style: TextStyle(color: c.text, fontSize: 17, fontWeight: FontWeight.w800)),
+        ),
+        for (final h in handles)
+          NewConnectionRow(key: ValueKey('new-$h'), handle: h, c: c, onTap: () => _openChat(h)),
+      ],
+    );
+  }
+
   Widget _suggestions(DmColors c) {
     final people = dmSuggestedPeople();
     if (people.isEmpty) return const SizedBox.shrink();
@@ -663,6 +685,7 @@ class _MessagesTabState extends State<MessagesTab> {
                           _notesRow(c),
                           _chips(c),
                           const SizedBox(height: 6),
+                          if (!searching) _newConnections(c),
                           if (_tab == InboxTab.requests && threads.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),

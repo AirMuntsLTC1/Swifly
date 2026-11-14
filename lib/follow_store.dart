@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'app_feedback.dart';
 import 'database_service.dart';
+import 'new_connections.dart';
 import 'people_directory.dart';
 
 /// How the signed-in user and another person follow each other.
@@ -84,10 +85,12 @@ class FollowStore extends ChangeNotifier {
 
   Future<void> follow(String handle) async {
     if (handle == kMeHandle || _following.contains(handle)) return;
+    final wasFollower = _followers.contains(handle);
     _following.add(handle);
     _pending[handle] = true;
     notifyListeners();
-    await _send(handle, follow: true);
+    // They already followed you, so this is a follow back: a new connection.
+    await _send(handle, follow: true, newBack: wasFollower);
   }
 
   Future<void> unfollow(String handle) async {
@@ -98,10 +101,12 @@ class FollowStore extends ChangeNotifier {
     await _send(handle, follow: false);
   }
 
-  Future<void> _send(String handle, {required bool follow}) async {
+  Future<void> _send(String handle, {required bool follow, bool newBack = false}) async {
     try {
       await DatabaseService.instance.toggleFollow(handle, follow);
       _pending.remove(handle);
+      if (follow && newBack) NewConnections.instance.add(handle);
+      if (!follow) NewConnections.instance.remove(handle);
       await refresh();
     } catch (e) {
       _pending.remove(handle);

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'avatar_cache.dart';
 import 'follow_store.dart';
+import 'new_connections.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
 import 'profile_store.dart';
@@ -160,4 +161,5 @@ Listenable dmListenable() => Listenable.merge([
       FollowStore.instance,
       StoryStore.instance,
       DmTheme.instance,
+      NewConnections.instance,
     ]);

@@ -1,7 +1,7 @@
 diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 --- original/FIX_NOTES.md	1970-01-01 00:00:00.000000000 +0000
-+++ swifly/FIX_NOTES.md	2026-11-14 03:57:14.257423142 +0000
-@@ -0,0 +1,113 @@
++++ swifly/FIX_NOTES.md	2026-11-14 04:32:15.843457649 +0000
+@@ -0,0 +1,121 @@
 +# Swifly fix round: what changed
 +
 +## Startup and login speed
@@ -115,10 +115,18 @@ diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 +- Likes, saves and comments on a profile post work. These posts are kept apart from the
 +  home feed, so visiting a profile does not add them there.
 +- A profile loads up to 200 of that person's posts.
++
++## Round 7: new followers and hi stickers
++- When you follow back someone who already followed you, they are added to "New
++  followers" in Messages. The row slides and fades in, and the hand waves.
++- A new follower leaves the list as soon as you send the first message. Unfollowing them removes them too.
++- In a new conversation with a new follower, animated "hi" stickers appear above
++  the composer. Tap one to send it. The strip disappears after the first message.
++- The list is saved on the phone for each account.
 diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
 --- original/lib/app_bootstrap.dart	2026-11-14 02:31:04.441524825 +0000
-+++ swifly/lib/app_bootstrap.dart	2026-11-14 02:31:20.767998793 +0000
-@@ -1,8 +1,12 @@
++++ swifly/lib/app_bootstrap.dart	2026-11-14 04:32:11.100766238 +0000
+@@ -1,8 +1,13 @@
 +import 'package:flutter/foundation.dart';
 +
  import 'app_feedback.dart';
@@ -128,10 +136,11 @@ diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
  import 'follow_store.dart';
  import 'inbox_store.dart';
 +import 'local_cache.dart';
++import 'new_connections.dart';
  import 'people_directory.dart';
  import 'post_model.dart';
  import 'profile_store.dart';
-@@ -13,9 +17,35 @@
+@@ -13,9 +18,36 @@
  bool _loading = false;
  bool _pendingReload = false;
  
@@ -140,6 +149,7 @@ diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
 +Future<void> loadLocalAppData() async {
 +  if (!kAuthEnabled) return;
 +  final uid = DatabaseService.instance.myId ?? 'anon';
++  await NewConnections.instance.load();
 +
 +  final people = await LocalCache.load('people');
 +  if (people is List && PeopleDirectory.instance.people.isEmpty) {
@@ -168,7 +178,7 @@ diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
    _loading = true;
    StartupTimer.log('loadAppData started');
  
-@@ -34,7 +64,7 @@
+@@ -34,7 +66,7 @@
  Future<void> refreshPosts() async {
    final saved = await DatabaseService.instance.fetchPosts(limit: 20, offset: 0);
    final pending = PostStore.instance.unsaved;
@@ -177,7 +187,7 @@ diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
    final filteredSaved = saved.where((savedRow) {
      final savedText = '${savedRow['text'] ?? ''}'.trim();
      final savedMediaLen = (savedRow['media'] as List?)?.length ?? 0;
-@@ -54,22 +84,66 @@
+@@ -54,22 +86,66 @@
    SupabaseRealtime.start();
  }
  
@@ -253,12 +263,13 @@ diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
    PeopleDirectory.instance.load();
    PostStore.instance.load(posts: []);
    await PostStore.instance.clearCache();
-@@ -78,4 +152,6 @@
+@@ -78,4 +154,7 @@
    ChatStore.instance.reset();
    await ProfileStore.instance.clearDevice();
    await DatabaseService.instance.clearLocalMediaCache();
 +  await LocalCache.clear();
 +  await AvatarCache.instance.clear();
++  NewConnections.instance.clear();
  }
 diff -ruN original/lib/auth/auth_flow.dart swifly/lib/auth/auth_flow.dart
 --- original/lib/auth/auth_flow.dart	2026-11-14 02:31:04.441567567 +0000
@@ -509,16 +520,40 @@ diff -ruN original/lib/avatar_cache.dart swifly/lib/avatar_cache.dart
 +}
 diff -ruN original/lib/chat_screen.dart swifly/lib/chat_screen.dart
 --- original/lib/chat_screen.dart	2026-11-14 02:31:04.441649018 +0000
-+++ swifly/lib/chat_screen.dart	2026-11-14 03:20:22.441490453 +0000
-@@ -8,6 +8,7 @@
++++ swifly/lib/chat_screen.dart	2026-11-14 04:32:11.105242060 +0000
+@@ -8,6 +8,9 @@
  import 'dm_people_screens.dart';
  import 'dm_theme.dart';
  import 'follow_store.dart';
++import 'new_connections.dart';
++import 'new_connections_widgets.dart';
 +import 'follow_counts_line.dart';
  import 'inbox_store.dart';
  import 'supabase_realtime.dart';
  import 'media/preview_image.dart';
-@@ -726,6 +727,7 @@
+@@ -566,12 +569,21 @@
+     );
+   }
+ 
++  /// True only for a new follow back that has no messages yet.
++  bool get _showHiStrip =>
++      NewConnections.instance.contains(_handle) && !ChatStore.instance.hasThread(_handle);
++
++  void _sendSticker(String text) {
++    ChatStore.instance.send(_handle, text);
++  }
++
+   Widget _composer(DmColors c) {
+     return SafeArea(
+       top: false,
+       child: Column(
+         mainAxisSize: MainAxisSize.min,
+         children: [
++          if (_showHiStrip) HiStickerStrip(onPick: _sendSticker),
+           if (_replying != null) _replyBar(c),
+           Padding(
+             padding: const EdgeInsets.fromLTRB(12, 6, 10, 8),
+@@ -726,6 +738,7 @@
                              maxLines: 1,
                              overflow: TextOverflow.ellipsis,
                              style: TextStyle(color: c.sub, fontSize: 12)),
@@ -526,7 +561,7 @@ diff -ruN original/lib/chat_screen.dart swifly/lib/chat_screen.dart
                        ],
                      ),
                    ),
-@@ -756,6 +758,8 @@
+@@ -756,6 +769,8 @@
                                      fontWeight: FontWeight.w800,
                                      fontSize: 18)),
                              Text(_handle, style: TextStyle(color: c.sub)),
@@ -1367,16 +1402,18 @@ diff -ruN original/lib/dm_people_screens.dart swifly/lib/dm_people_screens.dart
      [for (final p in list) hasUnseenStory(p.handle) ? 1 : 0],
 diff -ruN original/lib/dm_theme.dart swifly/lib/dm_theme.dart
 --- original/lib/dm_theme.dart	2026-11-14 02:31:04.441886524 +0000
-+++ swifly/lib/dm_theme.dart	2026-11-14 02:32:03.332154134 +0000
-@@ -2,6 +2,7 @@
++++ swifly/lib/dm_theme.dart	2026-11-14 04:32:11.101955304 +0000
+@@ -2,7 +2,9 @@
  
  import 'package:flutter/material.dart';
  
 +import 'avatar_cache.dart';
  import 'follow_store.dart';
++import 'new_connections.dart';
  import 'inbox_store.dart';
  import 'post_model.dart';
-@@ -124,7 +125,8 @@
+ import 'profile_store.dart';
+@@ -124,7 +126,8 @@
        clipBehavior: Clip.antiAlias,
        child: hasImage
            ? (path!.startsWith('http')
@@ -1386,6 +1423,12 @@ diff -ruN original/lib/dm_theme.dart swifly/lib/dm_theme.dart
                : Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback()))
            : fallback(),
      );
+@@ -158,4 +161,5 @@
+       FollowStore.instance,
+       StoryStore.instance,
+       DmTheme.instance,
++      NewConnections.instance,
+     ]);
 diff -ruN original/lib/edit_profile_screen.dart swifly/lib/edit_profile_screen.dart
 --- original/lib/edit_profile_screen.dart	2026-11-14 02:31:04.441913773 +0000
 +++ swifly/lib/edit_profile_screen.dart	2026-11-14 02:33:22.921469725 +0000
@@ -1919,15 +1962,17 @@ diff -ruN original/lib/follow_counts_line.dart swifly/lib/follow_counts_line.dar
 +}
 diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
 --- original/lib/follow_store.dart	2026-11-14 02:31:04.441965619 +0000
-+++ swifly/lib/follow_store.dart	2026-11-14 02:57:04.362806176 +0000
-@@ -1,5 +1,6 @@
++++ swifly/lib/follow_store.dart	2026-11-14 04:32:11.099129615 +0000
+@@ -1,6 +1,8 @@
  import 'package:flutter/foundation.dart';
  
 +import 'app_feedback.dart';
  import 'database_service.dart';
++import 'new_connections.dart';
  import 'people_directory.dart';
  
-@@ -15,13 +16,11 @@
+ /// How the signed-in user and another person follow each other.
+@@ -15,13 +17,11 @@
        FollowState.mutual => 'Following',
      };
  
@@ -1945,7 +1990,7 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
  class FollowStore extends ChangeNotifier {
    FollowStore._();
    static final FollowStore instance = FollowStore._();
-@@ -29,6 +28,10 @@
+@@ -29,6 +29,10 @@
    final Set<String> _following = <String>{};
    final Set<String> _followers = <String>{};
  
@@ -1956,7 +2001,7 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
    /// Handles you follow.
    Set<String> get followingHandles => Set.unmodifiable(_following);
  
-@@ -47,7 +50,7 @@
+@@ -47,7 +51,7 @@
      return FollowState.none;
    }
  
@@ -1965,7 +2010,7 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
    void load({
      Set<String> following = const <String>{},
      Set<String> followers = const <String>{},
-@@ -58,29 +61,57 @@
+@@ -58,29 +62,61 @@
      _followers
        ..clear()
        ..addAll(followers);
@@ -1994,6 +2039,7 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
    Future<void> follow(String handle) async {
 -    if (!_following.add(handle)) return;
 +    if (handle == kMeHandle || _following.contains(handle)) return;
++    final wasFollower = _followers.contains(handle);
 +    _following.add(handle);
 +    _pending[handle] = true;
      notifyListeners();
@@ -2003,7 +2049,8 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
 -      _following.remove(handle);
 -      notifyListeners();
 -    }
-+    await _send(handle, follow: true);
++    // They already followed you, so this is a follow back: a new connection.
++    await _send(handle, follow: true, newBack: wasFollower);
    }
  
    Future<void> unfollow(String handle) async {
@@ -2015,13 +2062,15 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
 +    await _send(handle, follow: false);
 +  }
 +
-+  Future<void> _send(String handle, {required bool follow}) async {
++  Future<void> _send(String handle, {required bool follow, bool newBack = false}) async {
      try {
 -      await DatabaseService.instance.toggleFollow(handle, false);
 -    } catch (_) {
 -      _following.add(handle);
 +      await DatabaseService.instance.toggleFollow(handle, follow);
 +      _pending.remove(handle);
++      if (follow && newBack) NewConnections.instance.add(handle);
++      if (!follow) NewConnections.instance.remove(handle);
 +      await refresh();
 +    } catch (e) {
 +      _pending.remove(handle);
@@ -2035,7 +2084,7 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
      }
    }
  
-@@ -93,6 +124,13 @@
+@@ -93,6 +129,13 @@
    void applyIncomingUnfollow(String handle) {
      if (_followers.remove(handle)) notifyListeners();
    }
@@ -2293,6 +2342,53 @@ diff -ruN original/lib/location_service.dart swifly/lib/location_service.dart
              const SizedBox(width: 12),
              Expanded(
                child: Text(
+diff -ruN original/lib/messages_tab.dart swifly/lib/messages_tab.dart
+--- original/lib/messages_tab.dart	2026-11-14 02:31:04.442181430 +0000
++++ swifly/lib/messages_tab.dart	2026-11-14 04:32:11.103451585 +0000
+@@ -8,6 +8,8 @@
+ import 'dm_people_screens.dart';
+ import 'dm_sheets.dart';
+ import 'dm_theme.dart';
++import 'new_connections.dart';
++import 'new_connections_widgets.dart';
+ import 'follow_store.dart';
+ import 'inbox_store.dart';
+ import 'native_bridge.dart';
+@@ -559,6 +561,26 @@
+     );
+   }
+ 
++  /// People who just followed back and have no conversation yet.
++  Widget _newConnections(DmColors c) {
++    final handles = [
++      for (final h in NewConnections.instance.handles)
++        if (!ChatStore.instance.hasThread(h)) h,
++    ];
++    if (handles.isEmpty) return const SizedBox.shrink();
++    return Column(
++      crossAxisAlignment: CrossAxisAlignment.start,
++      children: [
++        Padding(
++          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
++          child: Text('New followers', style: TextStyle(color: c.text, fontSize: 17, fontWeight: FontWeight.w800)),
++        ),
++        for (final h in handles)
++          NewConnectionRow(key: ValueKey('new-$h'), handle: h, c: c, onTap: () => _openChat(h)),
++      ],
++    );
++  }
++
+   Widget _suggestions(DmColors c) {
+     final people = dmSuggestedPeople();
+     if (people.isEmpty) return const SizedBox.shrink();
+@@ -663,6 +685,7 @@
+                           _notesRow(c),
+                           _chips(c),
+                           const SizedBox(height: 6),
++                          if (!searching) _newConnections(c),
+                           if (_tab == InboxTab.requests && threads.isNotEmpty)
+                             Padding(
+                               padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
 diff -ruN original/lib/nav_guard.dart swifly/lib/nav_guard.dart
 --- original/lib/nav_guard.dart	2026-11-14 02:31:04.442211694 +0000
 +++ swifly/lib/nav_guard.dart	2026-11-14 02:57:04.359110324 +0000
@@ -2323,6 +2419,227 @@ diff -ruN original/lib/nav_guard.dart swifly/lib/nav_guard.dart
 -  _lastPush = now;
    return nav.push<T>(route);
  }
+diff -ruN original/lib/new_connections.dart swifly/lib/new_connections.dart
+--- original/lib/new_connections.dart	1970-01-01 00:00:00.000000000 +0000
++++ swifly/lib/new_connections.dart	2026-11-14 04:32:11.054160810 +0000
+@@ -0,0 +1,51 @@
++import 'package:flutter/foundation.dart';
++
++import 'database_service.dart';
++import 'local_cache.dart';
++
++/// People you just followed back. They appear as "New followers" in Messages
++/// until you send the first message. Saved on the phone for each account.
++class NewConnections extends ChangeNotifier {
++  NewConnections._();
++  static final NewConnections instance = NewConnections._();
++
++  final Set<String> _handles = <String>{};
++
++  /// Newest first.
++  List<String> get handles => _handles.toList().reversed.toList();
++
++  bool contains(String handle) => _handles.contains(handle);
++
++  String get _key => 'new_connections_${DatabaseService.instance.myId ?? 'anon'}';
++
++  Future<void> load() async {
++    final saved = await LocalCache.load(_key);
++    if (saved is List) {
++      _handles
++        ..clear()
++        ..addAll([for (final h in saved) '$h']);
++      notifyListeners();
++    }
++  }
++
++  void add(String handle) {
++    if (_handles.add(handle)) {
++      _save();
++      notifyListeners();
++    }
++  }
++
++  void remove(String handle) {
++    if (_handles.remove(handle)) {
++      _save();
++      notifyListeners();
++    }
++  }
++
++  void clear() {
++    _handles.clear();
++    notifyListeners();
++  }
++
++  void _save() => LocalCache.save(_key, _handles.toList());
++}
+diff -ruN original/lib/new_connections_widgets.dart swifly/lib/new_connections_widgets.dart
+--- original/lib/new_connections_widgets.dart	1970-01-01 00:00:00.000000000 +0000
++++ swifly/lib/new_connections_widgets.dart	2026-11-14 04:32:11.055142118 +0000
+@@ -0,0 +1,162 @@
++import 'dart:math' as math;
++
++import 'package:flutter/material.dart';
++
++import 'dm_theme.dart';
++
++/// One "New followers" row in Messages. It slides and fades in when it appears,
++/// and the hand waves.
++class NewConnectionRow extends StatelessWidget {
++  final String handle;
++  final DmColors c;
++  final VoidCallback onTap;
++
++  const NewConnectionRow({super.key, required this.handle, required this.c, required this.onTap});
++
++  @override
++  Widget build(BuildContext context) {
++    return TweenAnimationBuilder<double>(
++      tween: Tween<double>(begin: 0, end: 1),
++      duration: const Duration(milliseconds: 550),
++      curve: Curves.easeOutCubic,
++      builder: (context, t, child) => Opacity(
++        opacity: t,
++        child: Transform.translate(offset: Offset(28 * (1 - t), 0), child: child),
++      ),
++      child: InkWell(
++        onTap: onTap,
++        child: Padding(
++          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
++          child: Row(
++            children: [
++              DmAvatar(handle: handle, name: dmName(handle), size: 50, ring: hasUnseenStory(handle)),
++              const SizedBox(width: 12),
++              Expanded(
++                child: Column(
++                  crossAxisAlignment: CrossAxisAlignment.start,
++                  children: [
++                    Text(dmName(handle),
++                        maxLines: 1,
++                        overflow: TextOverflow.ellipsis,
++                        style: TextStyle(color: c.text, fontWeight: FontWeight.w700, fontSize: 16)),
++                    Text('New follower · say hi', style: TextStyle(color: c.sub, fontSize: 13)),
++                  ],
++                ),
++              ),
++              const _WaveHand(),
++            ],
++          ),
++        ),
++      ),
++    );
++  }
++}
++
++class _WaveHand extends StatefulWidget {
++  const _WaveHand();
++
++  @override
++  State<_WaveHand> createState() => _WaveHandState();
++}
++
++class _WaveHandState extends State<_WaveHand> with SingleTickerProviderStateMixin {
++  late final AnimationController _c =
++      AnimationController(vsync: this, duration: const Duration(milliseconds: 700))..repeat(reverse: true);
++
++  @override
++  void dispose() {
++    _c.dispose();
++    super.dispose();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return AnimatedBuilder(
++      animation: _c,
++      builder: (context, child) => Transform.rotate(angle: 0.35 * math.sin(_c.value * math.pi * 2), child: child),
++      child: const Text('👋', style: TextStyle(fontSize: 22)),
++    );
++  }
++}
++
++/// Animated "hi" stickers above the composer. Shown only in a new conversation,
++/// until the first message is sent. Tapping one sends it.
++class HiStickerStrip extends StatefulWidget {
++  final ValueChanged<String> onPick;
++  const HiStickerStrip({super.key, required this.onPick});
++
++  @override
++  State<HiStickerStrip> createState() => _HiStickerStripState();
++}
++
++class _HiStickerStripState extends State<HiStickerStrip> with SingleTickerProviderStateMixin {
++  late final AnimationController _c =
++      AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat();
++
++  static const List<(String, String, Color)> _stickers = [
++    ('👋', 'Hi!', Color(0xFFFFE8CC)),
++    ('🙋', 'Hey there', Color(0xFFDDF4FF)),
++    ('😊', 'Nice to meet you', Color(0xFFE6F9E9)),
++    ('🤗', 'Hello!', Color(0xFFF3E8FF)),
++    ('✨', 'Hi friend', Color(0xFFFFF7D6)),
++    ('🌞', 'Good day!', Color(0xFFFFEFD6)),
++    ('🫶', 'Hi, how are you?', Color(0xFFFFE3EC)),
++    ('👋🏽', 'Hi 😄', Color(0xFFE4F1FF)),
++  ];
++
++  @override
++  void dispose() {
++    _c.dispose();
++    super.dispose();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return SizedBox(
++      height: 112,
++      child: ListView.separated(
++        scrollDirection: Axis.horizontal,
++        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
++        itemCount: _stickers.length,
++        separatorBuilder: (_, __) => const SizedBox(width: 10),
++        itemBuilder: (context, i) {
++          final (emoji, label, color) = _stickers[i];
++          return AnimatedBuilder(
++            animation: _c,
++            // Each sticker is a little out of step with the next, so the row looks alive.
++            builder: (context, child) {
++              final phase = (_c.value + i * 0.13) % 1.0;
++              final s = math.sin(phase * math.pi * 2);
++              return Transform.translate(
++                offset: Offset(0, -6 * s.abs()),
++                child: Transform.rotate(angle: 0.12 * s, child: child),
++              );
++            },
++            child: GestureDetector(
++              onTap: () => widget.onPick('$emoji $label'),
++              child: Container(
++                width: 98,
++                padding: const EdgeInsets.all(8),
++                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(18)),
++                child: Column(
++                  mainAxisAlignment: MainAxisAlignment.center,
++                  children: [
++                    Text(emoji, style: const TextStyle(fontSize: 30)),
++                    const SizedBox(height: 4),
++                    Text(
++                      label,
++                      maxLines: 2,
++                      textAlign: TextAlign.center,
++                      overflow: TextOverflow.ellipsis,
++                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black),
++                    ),
++                  ],
++                ),
++              ),
++            ),
++          );
++        },
++      ),
++    );
++  }
++}
 diff -ruN original/lib/people_directory.dart swifly/lib/people_directory.dart
 --- original/lib/people_directory.dart	2026-11-14 02:31:04.442245217 +0000
 +++ swifly/lib/people_directory.dart	2026-11-14 02:31:12.808672660 +0000

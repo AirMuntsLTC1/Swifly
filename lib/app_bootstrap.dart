@@ -7,6 +7,7 @@ import 'db_mappers.dart';
 import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'local_cache.dart';
+import 'new_connections.dart';
 import 'people_directory.dart';
 import 'post_model.dart';
 import 'profile_store.dart';
@@ -22,6 +23,7 @@ bool _pendingReload = false;
 Future<void> loadLocalAppData() async {
   if (!kAuthEnabled) return;
   final uid = DatabaseService.instance.myId ?? 'anon';
+  await NewConnections.instance.load();
 
   final people = await LocalCache.load('people');
   if (people is List && PeopleDirectory.instance.people.isEmpty) {
@@ -154,4 +156,5 @@ Future<void> clearAppData() async {
   await DatabaseService.instance.clearLocalMediaCache();
   await LocalCache.clear();
   await AvatarCache.instance.clear();
+  NewConnections.instance.clear();
 }
