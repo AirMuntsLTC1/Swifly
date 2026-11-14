@@ -14,7 +14,7 @@ import 'native_bridge.dart';
 import 'people_directory.dart';
 import 'post_model.dart';
 import 'profile_details_section.dart';
-import 'profile_post_card.dart';
+import 'feed_widgets.dart';
 import 'profile_store.dart';
 import 'responsive.dart';
 import 'story_player_screen.dart';
@@ -77,8 +77,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final id = _userId;
     if (id != null) {
       try {
-        final rows = await DatabaseService.instance.fetchPosts(limit: 50, offset: 0, authorId: id);
-        if (mounted) setState(() => _posts = [for (final r in rows) postFromRow(r)]);
+        final rows = await DatabaseService.instance.fetchPosts(limit: 200, offset: 0, authorId: id);
+        final loaded = [for (final r in rows) postFromRow(r)];
+        PostStore.instance.remember(loaded);
+        if (mounted) setState(() => _posts = loaded);
       } catch (_) {}
     }
     if (mounted) setState(() => _postsLoaded = true);
@@ -282,9 +284,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         child: Text('No posts yet', style: TextStyle(color: Color(0xFF8E8E8E))),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [for (final p in _posts) ProfilePostCard(post: p)],
+    // Rebuilds when a like or save changes on any of these posts.
+    return ListenableBuilder(
+      listenable: PostStore.instance,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [for (final p in _posts) PostCard(key: ValueKey(p.id), post: p)],
+      ),
     );
   }
 

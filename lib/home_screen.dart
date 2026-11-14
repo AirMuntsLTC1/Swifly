@@ -21,7 +21,6 @@ import 'story_viewer_screen.dart';
 import 'user_profile_screen.dart';
 import 'profile_details_section.dart';
 import 'profile_store.dart';
-import 'profile_post_card.dart';
 import 'connections_screen.dart';
 import 'suggestions_screen.dart';
 import 'search_history.dart';
@@ -691,7 +690,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     padding: EdgeInsets.symmetric(horizontal: r.pad),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [for (final p in mine) ProfilePostCard(post: p)],
+                      children: [for (final p in mine) PostCard(key: ValueKey(p.id), post: p)],
                     ),
                   );
                 },

@@ -104,3 +104,10 @@
 - The "Suggestions People" title, "See all" and the list are one block on your
   profile. When no one is left to suggest, the whole block is hidden, with no
   empty title or space.
+
+## Round 6: profile posts look like the home feed
+- Posts on your profile and on other people's profiles use the same card as the
+  home feed: author, audience, text, picture or video, counts, and the Like, Comment and Share bar.
+- Likes, saves and comments on a profile post work. These posts are kept apart from the
+  home feed, so visiting a profile does not add them there.
+- A profile loads up to 200 of that person's posts.

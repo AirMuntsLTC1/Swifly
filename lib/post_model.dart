@@ -203,7 +203,20 @@ class PostStore extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Post? byId(String id) { for (final p in _posts) { if (p.id == id) return p; } return null; }
+  /// Posts shown on a profile page. They are kept apart from the feed, but likes,
+  /// saves and comments still find them through [byId].
+  final Map<String, Post> _visiting = {};
+
+  void remember(List<Post> posts) {
+    for (final p in posts) {
+      _visiting[p.id] = p;
+    }
+  }
+
+  Post? byId(String id) {
+    for (final p in _posts) { if (p.id == id) return p; }
+    return _visiting[id];
+  }
 
   // Optimistic updates
   Future<void> addPost({required String text, required String audience, required List<String> taggedHandles, List<MediaItem> media = const []}) async {

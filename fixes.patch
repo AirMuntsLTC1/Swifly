@@ -1,7 +1,7 @@
 diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 --- original/FIX_NOTES.md	1970-01-01 00:00:00.000000000 +0000
-+++ swifly/FIX_NOTES.md	2026-11-14 03:54:35.155991821 +0000
-@@ -0,0 +1,106 @@
++++ swifly/FIX_NOTES.md	2026-11-14 03:57:14.257423142 +0000
+@@ -0,0 +1,113 @@
 +# Swifly fix round: what changed
 +
 +## Startup and login speed
@@ -108,6 +108,13 @@ diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 +- The "Suggestions People" title, "See all" and the list are one block on your
 +  profile. When no one is left to suggest, the whole block is hidden, with no
 +  empty title or space.
++
++## Round 6: profile posts look like the home feed
++- Posts on your profile and on other people's profiles use the same card as the
++  home feed: author, audience, text, picture or video, counts, and the Like, Comment and Share bar.
++- Likes, saves and comments on a profile post work. These posts are kept apart from the
++  home feed, so visiting a profile does not add them there.
++- A profile loads up to 200 of that person's posts.
 diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
 --- original/lib/app_bootstrap.dart	2026-11-14 02:31:04.441524825 +0000
 +++ swifly/lib/app_bootstrap.dart	2026-11-14 02:31:20.767998793 +0000
@@ -2044,16 +2051,8 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
  /// Name and handle for a handle, from the people directory.
 diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
 --- original/lib/home_screen.dart	2026-11-14 02:31:04.441989362 +0000
-+++ swifly/lib/home_screen.dart	2026-11-14 03:54:35.132334293 +0000
-@@ -21,6 +21,7 @@
- import 'user_profile_screen.dart';
- import 'profile_details_section.dart';
- import 'profile_store.dart';
-+import 'profile_post_card.dart';
- import 'connections_screen.dart';
- import 'suggestions_screen.dart';
- import 'search_history.dart';
-@@ -614,44 +615,55 @@
++++ swifly/lib/home_screen.dart	2026-11-14 03:57:10.809046230 +0000
+@@ -614,44 +614,55 @@
                const ProfileDetailsSection(),
                SizedBox(height: r.h(16)),
                const LogoutButton(),
@@ -2146,7 +2145,7 @@ diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
                ),
                    ],
                  ),
-@@ -674,34 +686,13 @@
+@@ -674,34 +685,13 @@
                            style: TextStyle(color: Color(0xFF8E8E8E))),
                      );
                    }
@@ -2183,7 +2182,7 @@ diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
 +                    padding: EdgeInsets.symmetric(horizontal: r.pad),
 +                    child: Column(
 +                      crossAxisAlignment: CrossAxisAlignment.stretch,
-+                      children: [for (final p in mine) ProfilePostCard(post: p)],
++                      children: [for (final p in mine) PostCard(key: ValueKey(p.id), post: p)],
 +                    ),
                    );
                  },
@@ -2431,6 +2430,31 @@ diff -ruN original/lib/place_style.dart swifly/lib/place_style.dart
 +
 +/// Every location icon in the app uses this red, so places are easy to spot.
 +const Color kPlaceRed = Color(0xFFE53935);
+diff -ruN original/lib/post_model.dart swifly/lib/post_model.dart
+--- original/lib/post_model.dart	2026-11-14 02:31:04.442261919 +0000
++++ swifly/lib/post_model.dart	2026-11-14 03:57:10.807199523 +0000
+@@ -203,7 +203,20 @@
+     } catch (_) {}
+   }
+ 
+-  Post? byId(String id) { for (final p in _posts) { if (p.id == id) return p; } return null; }
++  /// Posts shown on a profile page. They are kept apart from the feed, but likes,
++  /// saves and comments still find them through [byId].
++  final Map<String, Post> _visiting = {};
++
++  void remember(List<Post> posts) {
++    for (final p in posts) {
++      _visiting[p.id] = p;
++    }
++  }
++
++  Post? byId(String id) {
++    for (final p in _posts) { if (p.id == id) return p; }
++    return _visiting[id];
++  }
+ 
+   // Optimistic updates
+   Future<void> addPost({required String text, required String audience, required List<String> taggedHandles, List<MediaItem> media = const []}) async {
 diff -ruN original/lib/profile_details_section.dart swifly/lib/profile_details_section.dart
 --- original/lib/profile_details_section.dart	2026-11-14 02:31:04.442290952 +0000
 +++ swifly/lib/profile_details_section.dart	2026-11-14 03:07:02.226508463 +0000
@@ -2584,81 +2608,6 @@ diff -ruN original/lib/profile_details_section.dart swifly/lib/profile_details_s
                ],
              ),
              const SizedBox(height: 8),
-diff -ruN original/lib/profile_post_card.dart swifly/lib/profile_post_card.dart
---- original/lib/profile_post_card.dart	1970-01-01 00:00:00.000000000 +0000
-+++ swifly/lib/profile_post_card.dart	2026-11-14 02:57:15.986433999 +0000
-@@ -0,0 +1,71 @@
-+import 'dart:io';
-+
-+import 'package:flutter/material.dart';
-+import 'package:lucide_icons_flutter/lucide_icons.dart';
-+
-+import 'post_model.dart';
-+
-+/// One post on a profile, in the same style on your own profile and on other
-+/// people's: the picture (if any) on top, the text, then the like, comment and time row.
-+class ProfilePostCard extends StatelessWidget {
-+  final Post post;
-+  const ProfilePostCard({super.key, required this.post});
-+
-+  @override
-+  Widget build(BuildContext context) {
-+    final media = post.media.isNotEmpty ? post.media.first : null;
-+    final preview = media?.previewPath;
-+    return Container(
-+      margin: const EdgeInsets.only(bottom: 14),
-+      clipBehavior: Clip.antiAlias,
-+      decoration: BoxDecoration(
-+        color: Colors.white,
-+        borderRadius: BorderRadius.circular(16),
-+        border: Border.all(color: const Color(0xFFEAEAEA)),
-+      ),
-+      child: Column(
-+        crossAxisAlignment: CrossAxisAlignment.start,
-+        children: [
-+          if (preview != null)
-+            AspectRatio(
-+              aspectRatio: 4 / 3,
-+              child: Image.file(
-+                File(preview),
-+                fit: BoxFit.cover,
-+                errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFF2F2F2)),
-+              ),
-+            ),
-+          if (post.text.trim().isNotEmpty)
-+            Padding(
-+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-+              child: Text(
-+                post.text,
-+                maxLines: 4,
-+                overflow: TextOverflow.ellipsis,
-+                style: const TextStyle(color: Colors.black, fontSize: 15),
-+              ),
-+            ),
-+          Padding(
-+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-+            child: Row(
-+              children: [
-+                const Icon(LucideIcons.heart, size: 14, color: Color(0xFF8E8E8E)),
-+                const SizedBox(width: 4),
-+                Text('${post.likes}',
-+                    style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-+                const SizedBox(width: 14),
-+                const Icon(LucideIcons.messageCircle, size: 14, color: Color(0xFF8E8E8E)),
-+                const SizedBox(width: 4),
-+                Text('${post.totalComments}',
-+                    style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-+                const Spacer(),
-+                Text(post.timeLabel,
-+                    style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-+              ],
-+            ),
-+          ),
-+        ],
-+      ),
-+    );
-+  }
-+}
 diff -ruN original/lib/profile_store.dart swifly/lib/profile_store.dart
 --- original/lib/profile_store.dart	2026-11-14 02:31:04.442300054 +0000
 +++ swifly/lib/profile_store.dart	2026-11-14 03:06:55.327694706 +0000
@@ -2923,7 +2872,7 @@ diff -ruN original/lib/suggestions_screen.dart swifly/lib/suggestions_screen.dar
        ),
 diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.dart
 --- original/lib/user_profile_screen.dart	2026-11-14 02:31:04.442573108 +0000
-+++ swifly/lib/user_profile_screen.dart	2026-11-14 02:57:32.403747935 +0000
++++ swifly/lib/user_profile_screen.dart	2026-11-14 03:57:10.808496395 +0000
 @@ -2,17 +2,22 @@
  import 'package:lucide_icons_flutter/lucide_icons.dart';
  
@@ -2946,14 +2895,14 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 -import 'dm_theme.dart';
  import 'post_model.dart';
 +import 'profile_details_section.dart';
-+import 'profile_post_card.dart';
++import 'feed_widgets.dart';
 +import 'profile_store.dart';
 +import 'responsive.dart';
 +import 'story_player_screen.dart';
  
  class UserProfileScreen extends StatefulWidget {
    final Person user;
-@@ -28,6 +33,81 @@
+@@ -28,6 +33,83 @@
  }
  
  class _UserProfileScreenState extends State<UserProfileScreen> {
@@ -3001,8 +2950,10 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 +    final id = _userId;
 +    if (id != null) {
 +      try {
-+        final rows = await DatabaseService.instance.fetchPosts(limit: 50, offset: 0, authorId: id);
-+        if (mounted) setState(() => _posts = [for (final r in rows) postFromRow(r)]);
++        final rows = await DatabaseService.instance.fetchPosts(limit: 200, offset: 0, authorId: id);
++        final loaded = [for (final r in rows) postFromRow(r)];
++        PostStore.instance.remember(loaded);
++        if (mounted) setState(() => _posts = loaded);
 +      } catch (_) {}
 +    }
 +    if (mounted) setState(() => _postsLoaded = true);
@@ -3035,7 +2986,7 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
    /// Profile picture. With a story it gets a blue ring and opens the story.
    Widget _storyAvatar(BuildContext context, Person f, R r) {
      final avatar = DmAvatar(handle: f.handle, name: f.name, size: r.s(88));
-@@ -59,7 +139,6 @@
+@@ -59,7 +141,6 @@
    @override
    Widget build(BuildContext context) {
      final f = widget.user;
@@ -3043,7 +2994,7 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
      final r = R.of(context);
  
      return Scaffold(
-@@ -74,120 +153,170 @@
+@@ -74,120 +155,174 @@
          ),
          title: Text(
            f.handle,
@@ -3258,9 +3209,13 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 +        child: Text('No posts yet', style: TextStyle(color: Color(0xFF8E8E8E))),
 +      );
 +    }
-+    return Column(
-+      crossAxisAlignment: CrossAxisAlignment.stretch,
-+      children: [for (final p in _posts) ProfilePostCard(post: p)],
++    // Rebuilds when a like or save changes on any of these posts.
++    return ListenableBuilder(
++      listenable: PostStore.instance,
++      builder: (context, _) => Column(
++        crossAxisAlignment: CrossAxisAlignment.stretch,
++        children: [for (final p in _posts) PostCard(key: ValueKey(p.id), post: p)],
++      ),
 +    );
 +  }
 +
@@ -3306,7 +3261,7 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
      );
    }
  }
-@@ -212,23 +341,25 @@
+@@ -212,23 +347,25 @@
          child: Column(
            children: [
              const SizedBox(height: 12),
@@ -3347,7 +3302,7 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
              ),
              const Spacer(),
              Padding(
-@@ -251,9 +382,10 @@
+@@ -251,9 +388,10 @@
    Widget build(BuildContext context) {
      return Column(
        children: [
