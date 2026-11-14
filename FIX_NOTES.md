@@ -99,3 +99,8 @@
   suggestions. The Messages list used to hide only people you follow, so follow-backs still appeared.
 - The chat screen shows "N followers · N following" under the username, both in the
   empty conversation and in the header. The counts come from the database and refresh when you follow or unfollow.
+
+## Round 5: empty suggestions on your profile
+- The "Suggestions People" title, "See all" and the list are one block on your
+  profile. When no one is left to suggest, the whole block is hidden, with no
+  empty title or space.

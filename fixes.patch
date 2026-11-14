@@ -1,7 +1,7 @@
 diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 --- original/FIX_NOTES.md	1970-01-01 00:00:00.000000000 +0000
-+++ swifly/FIX_NOTES.md	2026-11-14 03:20:26.298183330 +0000
-@@ -0,0 +1,101 @@
++++ swifly/FIX_NOTES.md	2026-11-14 03:54:35.155991821 +0000
+@@ -0,0 +1,106 @@
 +# Swifly fix round: what changed
 +
 +## Startup and login speed
@@ -103,6 +103,11 @@ diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 +  suggestions. The Messages list used to hide only people you follow, so follow-backs still appeared.
 +- The chat screen shows "N followers · N following" under the username, both in the
 +  empty conversation and in the header. The counts come from the database and refresh when you follow or unfollow.
++
++## Round 5: empty suggestions on your profile
++- The "Suggestions People" title, "See all" and the list are one block on your
++  profile. When no one is left to suggest, the whole block is hidden, with no
++  empty title or space.
 diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
 --- original/lib/app_bootstrap.dart	2026-11-14 02:31:04.441524825 +0000
 +++ swifly/lib/app_bootstrap.dart	2026-11-14 02:31:20.767998793 +0000
@@ -2039,7 +2044,7 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
  /// Name and handle for a handle, from the people directory.
 diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
 --- original/lib/home_screen.dart	2026-11-14 02:31:04.441989362 +0000
-+++ swifly/lib/home_screen.dart	2026-11-14 02:57:40.842849716 +0000
++++ swifly/lib/home_screen.dart	2026-11-14 03:54:35.132334293 +0000
 @@ -21,6 +21,7 @@
  import 'user_profile_screen.dart';
  import 'profile_details_section.dart';
@@ -2048,9 +2053,38 @@ diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
  import 'connections_screen.dart';
  import 'suggestions_screen.dart';
  import 'search_history.dart';
-@@ -643,15 +644,19 @@
-               ),
-               SizedBox(height: r.h(12)),
+@@ -614,44 +615,55 @@
+               const ProfileDetailsSection(),
+               SizedBox(height: r.h(16)),
+               const LogoutButton(),
+-              SizedBox(height: r.h(30)),
+-              Row(
+-                children: [
+-                  const Expanded(
+-                    child: Text('Suggestions People',
+-                        maxLines: 1,
+-                        overflow: TextOverflow.ellipsis,
+-                        style: TextStyle(
+-                            fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
+-                  ),
+-                  GestureDetector(
+-                    onTap: () => Navigator.push(
+-                        context, MaterialPageRoute(builder: (_) => const SuggestionsScreen())),
+-                    child: const Text(
+-                      'See all',
+-                      style: TextStyle(
+-                        fontSize: 14,
+-                        fontWeight: FontWeight.w700,
+-                        color: Color(0xFF1D6FDC),
+-                        decoration: TextDecoration.underline,
+-                        decorationColor: Color(0xFF1D6FDC),
+-                        decorationThickness: 2,
+-                      ),
+-                    ),
+-                  ),
+-                ],
+-              ),
+-              SizedBox(height: r.h(12)),
                ListenableBuilder(
 -                listenable: PostStore.instance,
 -                builder: (context, _) => SizedBox(
@@ -2065,19 +2099,54 @@ diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
 +                builder: (context, _) {
 +                  // Only people you do not follow and who do not follow you.
 +                  final suggested = FollowStore.instance.suggestedPeople();
-+                  return SizedBox(
-+                    height: r.h(190),
-+                    child: ListView.builder(
-+                      scrollDirection: Axis.horizontal,
-+                      itemCount: suggested.length > 10 ? 10 : suggested.length,
-+                      itemBuilder: (context, i) => _suggestionCard(r, suggested[i]),
-+                    ),
++                  // Nothing to suggest: show no title and no empty space.
++                  if (suggested.isEmpty) return const SizedBox.shrink();
++                  return Column(
++                    crossAxisAlignment: CrossAxisAlignment.start,
++                    children: [
++                      SizedBox(height: r.h(30)),
++                      Row(
++                        children: [
++                          const Expanded(
++                            child: Text('Suggestions People',
++                                maxLines: 1,
++                                overflow: TextOverflow.ellipsis,
++                                style: TextStyle(
++                                    fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
++                          ),
++                          GestureDetector(
++                            onTap: () => Navigator.push(
++                                context, MaterialPageRoute(builder: (_) => const SuggestionsScreen())),
++                            child: const Text(
++                              'See all',
++                              style: TextStyle(
++                                fontSize: 14,
++                                fontWeight: FontWeight.w700,
++                                color: Color(0xFF1D6FDC),
++                                decoration: TextDecoration.underline,
++                                decorationColor: Color(0xFF1D6FDC),
++                                decorationThickness: 2,
++                              ),
++                            ),
++                          ),
++                        ],
++                      ),
++                      SizedBox(height: r.h(12)),
++                      SizedBox(
++                        height: r.h(190),
++                        child: ListView.builder(
++                          scrollDirection: Axis.horizontal,
++                          itemCount: suggested.length > 10 ? 10 : suggested.length,
++                          itemBuilder: (context, i) => _suggestionCard(r, suggested[i]),
++                        ),
++                      ),
++                    ],
 +                  );
 +                },
                ),
                    ],
                  ),
-@@ -674,34 +679,13 @@
+@@ -674,34 +686,13 @@
                            style: TextStyle(color: Color(0xFF8E8E8E))),
                      );
                    }

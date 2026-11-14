@@ -615,46 +615,53 @@ class _ProfileTabState extends State<ProfileTab> {
               const ProfileDetailsSection(),
               SizedBox(height: r.h(16)),
               const LogoutButton(),
-              SizedBox(height: r.h(30)),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Suggestions People',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.push(
-                        context, MaterialPageRoute(builder: (_) => const SuggestionsScreen())),
-                    child: const Text(
-                      'See all',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1D6FDC),
-                        decoration: TextDecoration.underline,
-                        decorationColor: Color(0xFF1D6FDC),
-                        decorationThickness: 2,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: r.h(12)),
               ListenableBuilder(
                 listenable: Listenable.merge([PostStore.instance, FollowStore.instance, PeopleDirectory.instance]),
                 builder: (context, _) {
                   // Only people you do not follow and who do not follow you.
                   final suggested = FollowStore.instance.suggestedPeople();
-                  return SizedBox(
-                    height: r.h(190),
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: suggested.length > 10 ? 10 : suggested.length,
-                      itemBuilder: (context, i) => _suggestionCard(r, suggested[i]),
-                    ),
+                  // Nothing to suggest: show no title and no empty space.
+                  if (suggested.isEmpty) return const SizedBox.shrink();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: r.h(30)),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text('Suggestions People',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.push(
+                                context, MaterialPageRoute(builder: (_) => const SuggestionsScreen())),
+                            child: const Text(
+                              'See all',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1D6FDC),
+                                decoration: TextDecoration.underline,
+                                decorationColor: Color(0xFF1D6FDC),
+                                decorationThickness: 2,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: r.h(12)),
+                      SizedBox(
+                        height: r.h(190),
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: suggested.length > 10 ? 10 : suggested.length,
+                          itemBuilder: (context, i) => _suggestionCard(r, suggested[i]),
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
