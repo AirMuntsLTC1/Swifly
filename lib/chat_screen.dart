@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'dm_people_screens.dart';
 import 'dm_theme.dart';
 import 'follow_store.dart';
+import 'follow_counts_line.dart';
 import 'inbox_store.dart';
 import 'supabase_realtime.dart';
 import 'media/preview_image.dart';
@@ -726,6 +727,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: c.sub, fontSize: 12)),
+                        FollowCountsLine(handle: _handle, style: TextStyle(color: c.sub, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -756,6 +758,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                     fontWeight: FontWeight.w800,
                                     fontSize: 18)),
                             Text(_handle, style: TextStyle(color: c.sub)),
+                            const SizedBox(height: 2),
+                            FollowCountsLine(handle: _handle, style: TextStyle(color: c.sub, fontSize: 13)),
                             const SizedBox(height: 6),
                             Text('Say hi 👋', style: TextStyle(color: c.sub)),
                           ],

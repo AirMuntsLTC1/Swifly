@@ -1,7 +1,7 @@
 diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 --- original/FIX_NOTES.md	1970-01-01 00:00:00.000000000 +0000
-+++ swifly/FIX_NOTES.md	2026-11-14 03:07:02.251609356 +0000
-@@ -0,0 +1,93 @@
++++ swifly/FIX_NOTES.md	2026-11-14 03:20:26.298183330 +0000
+@@ -0,0 +1,101 @@
 +# Swifly fix round: what changed
 +
 +## Startup and login speed
@@ -95,6 +95,14 @@ diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 +  finds Wikipedia matches, not every team or athlete.
 +- Hobby pictures come from Wikipedia and may be a generic image or none.
 +- School logos only appear for schools that have a logo on Wikidata.
++
++## Round 4: suggestions and chat counts
++
++- Every "Suggestions People" list now uses one rule: people you do not follow and
++  who do not follow you. This covers Home, Messages, Discover, See all, and profile
++  suggestions. The Messages list used to hide only people you follow, so follow-backs still appeared.
++- The chat screen shows "N followers · N following" under the username, both in the
++  empty conversation and in the header. The counts come from the database and refresh when you follow or unfollow.
 diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
 --- original/lib/app_bootstrap.dart	2026-11-14 02:31:04.441524825 +0000
 +++ swifly/lib/app_bootstrap.dart	2026-11-14 02:31:20.767998793 +0000
@@ -487,6 +495,34 @@ diff -ruN original/lib/avatar_cache.dart swifly/lib/avatar_cache.dart
 +    );
 +  }
 +}
+diff -ruN original/lib/chat_screen.dart swifly/lib/chat_screen.dart
+--- original/lib/chat_screen.dart	2026-11-14 02:31:04.441649018 +0000
++++ swifly/lib/chat_screen.dart	2026-11-14 03:20:22.441490453 +0000
+@@ -8,6 +8,7 @@
+ import 'dm_people_screens.dart';
+ import 'dm_theme.dart';
+ import 'follow_store.dart';
++import 'follow_counts_line.dart';
+ import 'inbox_store.dart';
+ import 'supabase_realtime.dart';
+ import 'media/preview_image.dart';
+@@ -726,6 +727,7 @@
+                             maxLines: 1,
+                             overflow: TextOverflow.ellipsis,
+                             style: TextStyle(color: c.sub, fontSize: 12)),
++                        FollowCountsLine(handle: _handle, style: TextStyle(color: c.sub, fontSize: 12)),
+                       ],
+                     ),
+                   ),
+@@ -756,6 +758,8 @@
+                                     fontWeight: FontWeight.w800,
+                                     fontSize: 18)),
+                             Text(_handle, style: TextStyle(color: c.sub)),
++                            const SizedBox(height: 2),
++                            FollowCountsLine(handle: _handle, style: TextStyle(color: c.sub, fontSize: 13)),
+                             const SizedBox(height: 6),
+                             Text('Say hi 👋', style: TextStyle(color: c.sub)),
+                           ],
 diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dart
 --- original/lib/connections_screen.dart	2026-11-14 02:31:04.441713264 +0000
 +++ swifly/lib/connections_screen.dart	2026-11-14 02:57:15.987844673 +0000
@@ -1301,6 +1337,22 @@ diff -ruN original/lib/discover_panel.dart swifly/lib/discover_panel.dart
      );
    }
  
+diff -ruN original/lib/dm_people_screens.dart swifly/lib/dm_people_screens.dart
+--- original/lib/dm_people_screens.dart	2026-11-14 02:31:04.441868050 +0000
++++ swifly/lib/dm_people_screens.dart	2026-11-14 03:20:22.440154732 +0000
+@@ -76,10 +76,8 @@
+ 
+ /// People I do not follow yet, people who follow me first (C++ ranking).
+ List<Person> dmSuggestedPeople() {
+-  final list = [
+-    for (final p in kPeople)
+-      if (p.handle != kMeHandle && !FollowStore.instance.isFollowing(p.handle)) p
+-  ];
++  // Only people you do not follow and who do not follow you (follow back).
++  final list = FollowStore.instance.suggestedPeople();
+   final order = NativeCore.dmRankPeople(
+     [for (final p in list) FollowStore.instance.isFollower(p.handle)],
+     [for (final p in list) hasUnseenStory(p.handle) ? 1 : 0],
 diff -ruN original/lib/dm_theme.dart swifly/lib/dm_theme.dart
 --- original/lib/dm_theme.dart	2026-11-14 02:31:04.441886524 +0000
 +++ swifly/lib/dm_theme.dart	2026-11-14 02:32:03.332154134 +0000
@@ -1783,6 +1835,76 @@ diff -ruN original/lib/follow_button.dart swifly/lib/follow_button.dart
      return ListenableBuilder(
        listenable: FollowStore.instance,
        builder: (context, _) {
+diff -ruN original/lib/follow_counts_line.dart swifly/lib/follow_counts_line.dart
+--- original/lib/follow_counts_line.dart	1970-01-01 00:00:00.000000000 +0000
++++ swifly/lib/follow_counts_line.dart	2026-11-14 03:20:22.402023486 +0000
+@@ -0,0 +1,66 @@
++import 'package:flutter/material.dart';
++
++import 'database_service.dart';
++import 'follow_store.dart';
++import 'native_bridge.dart';
++
++/// "12 followers · 3 following" for one person, read from their profile in the database.
++/// Refreshes when you follow or unfollow someone.
++class FollowCountsLine extends StatefulWidget {
++  final String handle;
++  final TextStyle style;
++  const FollowCountsLine({super.key, required this.handle, required this.style});
++
++  @override
++  State<FollowCountsLine> createState() => _FollowCountsLineState();
++}
++
++class _FollowCountsLineState extends State<FollowCountsLine> {
++  int? _followers;
++  int? _following;
++
++  @override
++  void initState() {
++    super.initState();
++    _load();
++    FollowStore.instance.addListener(_load);
++  }
++
++  @override
++  void didUpdateWidget(covariant FollowCountsLine oldWidget) {
++    super.didUpdateWidget(oldWidget);
++    if (oldWidget.handle != widget.handle) _load();
++  }
++
++  @override
++  void dispose() {
++    FollowStore.instance.removeListener(_load);
++    super.dispose();
++  }
++
++  Future<void> _load() async {
++    try {
++      final c = await DatabaseService.instance.fetchProfileCounts(widget.handle);
++      if (!mounted) return;
++      setState(() {
++        _followers = c['followers'] ?? 0;
++        _following = c['following'] ?? 0;
++      });
++    } catch (_) {}
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final f = _followers;
++    final g = _following;
++    if (f == null || g == null) {
++      return Text('… followers · … following', style: widget.style);
++    }
++    return Text(
++      '${NativeCore.formatCount(f)} followers · ${NativeCore.formatCount(g)} following',
++      maxLines: 1,
++      overflow: TextOverflow.ellipsis,
++      style: widget.style,
++    );
++  }
++}
 diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
 --- original/lib/follow_store.dart	2026-11-14 02:31:04.441965619 +0000
 +++ swifly/lib/follow_store.dart	2026-11-14 02:57:04.362806176 +0000

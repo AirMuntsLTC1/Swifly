@@ -76,10 +76,8 @@ class DmFollowButton extends StatelessWidget {
 
 /// People I do not follow yet, people who follow me first (C++ ranking).
 List<Person> dmSuggestedPeople() {
-  final list = [
-    for (final p in kPeople)
-      if (p.handle != kMeHandle && !FollowStore.instance.isFollowing(p.handle)) p
-  ];
+  // Only people you do not follow and who do not follow you (follow back).
+  final list = FollowStore.instance.suggestedPeople();
   final order = NativeCore.dmRankPeople(
     [for (final p in list) FollowStore.instance.isFollower(p.handle)],
     [for (final p in list) hasUnseenStory(p.handle) ? 1 : 0],

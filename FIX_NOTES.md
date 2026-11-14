@@ -91,3 +91,11 @@
   finds Wikipedia matches, not every team or athlete.
 - Hobby pictures come from Wikipedia and may be a generic image or none.
 - School logos only appear for schools that have a logo on Wikidata.
+
+## Round 4: suggestions and chat counts
+
+- Every "Suggestions People" list now uses one rule: people you do not follow and
+  who do not follow you. This covers Home, Messages, Discover, See all, and profile
+  suggestions. The Messages list used to hide only people you follow, so follow-backs still appeared.
+- The chat screen shows "N followers · N following" under the username, both in the
+  empty conversation and in the header. The counts come from the database and refresh when you follow or unfollow.
