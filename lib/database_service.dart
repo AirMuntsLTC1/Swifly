@@ -424,6 +424,19 @@ class DatabaseService {
     return [for (final r in rows) '${r['tag']}'];
   }
 
+  /// Text of posts and comments that mention a hashtag starting with [prefix].
+  /// The hashtag suggestions count how often each tag is used from these.
+  Future<({List<String> posts, List<String> comments})> hashtagTexts(String prefix) async {
+    final clean = prefix.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '');
+    final pattern = '%#$clean%';
+    final postRows = await _db.from('posts').select('text').ilike('text', pattern).limit(1000);
+    final commentRows = await _db.from('comments').select('text').ilike('text', pattern).limit(1000);
+    return (
+      posts: [for (final r in postRows) '${r['text']}'],
+      comments: [for (final r in commentRows) '${r['text']}'],
+    );
+  }
+
   /// Posts you are allowed to see (the database decides), newest first, with
   /// comments, replies, and whether you liked or saved each one.
   /// Pass [authorId] to get one person's posts (used on their profile).

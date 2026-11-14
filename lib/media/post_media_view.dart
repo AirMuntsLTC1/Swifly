@@ -36,7 +36,7 @@ class _PostMediaViewState extends State<PostMediaView> {
   Widget build(BuildContext context) {
     final count = widget.media.length;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: AspectRatio(
         aspectRatio: 1,
         child: count == 1

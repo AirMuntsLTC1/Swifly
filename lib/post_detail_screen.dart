@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'hashtag_suggest.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'feed_widgets.dart';
@@ -32,6 +33,7 @@ class PostDetailScreen extends StatefulWidget {
 class _PostDetailScreenState extends State<PostDetailScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
+  late final HashtagAssist _hashtags = HashtagAssist(_controller);
   final FocusNode _focus = FocusNode();
   final ScrollController _scroll = ScrollController();
   final Map<String, GlobalKey> _keys = {};
@@ -51,6 +53,7 @@ class _PostDetailScreenState extends State<PostDetailScreen>
   @override
   void dispose() {
     _flash.dispose();
+    _hashtags.dispose();
     _controller.dispose();
     _focus.dispose();
     _scroll.dispose();
@@ -228,6 +231,7 @@ class _PostDetailScreenState extends State<PostDetailScreen>
                   ),
                 ],
               ),
+            HashtagSuggestPanel(assist: _hashtags),
             Row(
               children: [
                 Expanded(

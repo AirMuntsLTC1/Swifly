@@ -20,6 +20,13 @@ class VideoAutoplay extends ChangeNotifier {
 
   bool isActive(String id) => _winner == id;
 
+  /// The user pressed play on this video: make it the one that plays now.
+  void claim(String id) {
+    if (_winner == id) return;
+    _winner = id;
+    notifyListeners();
+  }
+
   /// [fraction] is how much of the video (0 to 1) is on screen. 0 removes it.
   void report(String id, double fraction) {
     if (fraction <= 0) {

@@ -1,7 +1,7 @@
 diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 --- original/FIX_NOTES.md	1970-01-01 00:00:00.000000000 +0000
-+++ swifly/FIX_NOTES.md	2026-11-14 04:32:15.843457649 +0000
-@@ -0,0 +1,121 @@
++++ swifly/FIX_NOTES.md	2026-11-14 04:38:42.700774484 +0000
+@@ -0,0 +1,139 @@
 +# Swifly fix round: what changed
 +
 +## Startup and login speed
@@ -123,6 +123,24 @@ diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 +- In a new conversation with a new follower, animated "hi" stickers appear above
 +  the composer. Tap one to send it. The strip disappears after the first message.
 +- The list is saved on the phone for each account.
++
++## Round 8: video controls, edge-to-edge posts, hashtag suggestions
++
++### Videos
++- Tap a video to show play and pause in the middle. They hide 3 seconds after the last tap.
++- The speaker button in the bottom-right corner turns the sound on or off for all videos.
++- A video you paused by hand stays paused until you scroll away from it.
++- Pressing play on a video that is not playing makes it the one that plays.
++
++### Posts
++- Pictures and videos run edge to edge across the feed and profile posts, with 16 px rounded corners.
++
++### Hashtags
++- Typing # followed by letters opens a suggestion panel above the text box. It
++  appears in the post composer and in comments and replies.
++- Each suggestion shows how many posts and how many comments use that hashtag.
++- Tap a suggestion to put the full hashtag in place of the typed part.
++- The panel does not cover the text box, so you can keep typing. Offline, it counts from what is on the phone.
 diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
 --- original/lib/app_bootstrap.dart	2026-11-14 02:31:04.441524825 +0000
 +++ swifly/lib/app_bootstrap.dart	2026-11-14 04:32:11.100766238 +0000
@@ -570,6 +588,40 @@ diff -ruN original/lib/chat_screen.dart swifly/lib/chat_screen.dart
                              const SizedBox(height: 6),
                              Text('Say hi 👋', style: TextStyle(color: c.sub)),
                            ],
+diff -ruN original/lib/composer_screen.dart swifly/lib/composer_screen.dart
+--- original/lib/composer_screen.dart	2026-11-14 02:31:04.441701548 +0000
++++ swifly/lib/composer_screen.dart	2026-11-14 04:38:37.290119284 +0000
+@@ -1,5 +1,6 @@
+ import 'dart:io';
+ import 'package:flutter/material.dart';
++import 'hashtag_suggest.dart';
+ import 'package:wechat_assets_picker/wechat_assets_picker.dart';
+ import 'package:photo_manager/photo_manager.dart';
+ import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+@@ -54,6 +55,7 @@
+ 
+ class _ComposerScreenState extends State<ComposerScreen> {
+   final TextEditingController _textController = TextEditingController();
++  late final HashtagAssist _hashtags = HashtagAssist(_textController);
+   final FocusNode _focusNode = FocusNode();
+   String _audience = 'Everyone';
+   List<String> _tagged = [];
+@@ -69,6 +71,7 @@
+ 
+   @override
+   void dispose() {
++    _hashtags.dispose();
+     _textController.dispose();
+     _focusNode.dispose();
+     super.dispose();
+@@ -359,6 +362,7 @@
+                   },
+                 ),
+               ),
++            HashtagSuggestPanel(assist: _hashtags),
+             Expanded(
+               child: Padding(
+                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
 diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dart
 --- original/lib/connections_screen.dart	2026-11-14 02:31:04.441713264 +0000
 +++ swifly/lib/connections_screen.dart	2026-11-14 02:57:15.987844673 +0000
@@ -804,7 +856,7 @@ diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dar
        onTap: onTap,
 diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
 --- original/lib/database_service.dart	2026-11-14 02:31:04.441759693 +0000
-+++ swifly/lib/database_service.dart	2026-11-14 02:57:32.400405443 +0000
++++ swifly/lib/database_service.dart	2026-11-14 04:38:37.287677527 +0000
 @@ -7,6 +7,7 @@
  import 'package:supabase_flutter/supabase_flutter.dart';
  
@@ -844,7 +896,7 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
    /// '@wilme' -> the profile id of that account.
    Future<String> _idForHandle(String handle) async {
      final username = handle.replaceFirst('@', '').trim().toLowerCase();
-@@ -322,25 +347,77 @@
+@@ -322,106 +347,176 @@
      };
    }
  
@@ -931,8 +983,22 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
    /// Hashtag names without the #, most popular first.
    Future<List<String>> fetchTrendingTags() async {
      final rows = await _db.from('trending_tags').select('tag').order('uses', ascending: false).limit(12);
-@@ -349,79 +426,84 @@
+     return [for (final r in rows) '${r['tag']}'];
+   }
  
++  /// Text of posts and comments that mention a hashtag starting with [prefix].
++  /// The hashtag suggestions count how often each tag is used from these.
++  Future<({List<String> posts, List<String> comments})> hashtagTexts(String prefix) async {
++    final clean = prefix.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '');
++    final pattern = '%#$clean%';
++    final postRows = await _db.from('posts').select('text').ilike('text', pattern).limit(1000);
++    final commentRows = await _db.from('comments').select('text').ilike('text', pattern).limit(1000);
++    return (
++      posts: [for (final r in postRows) '${r['text']}'],
++      comments: [for (final r in commentRows) '${r['text']}'],
++    );
++  }
++
    /// Posts you are allowed to see (the database decides), newest first, with
    /// comments, replies, and whether you liked or saved each one.
 -  Future<List<Map<String, dynamic>>> fetchPosts({int limit = 4, int offset = 0}) async {
@@ -1056,7 +1122,7 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
            liked: liked.contains('${r['id']}'),
            saved: saved.contains('${r['id']}'),
            comments: topLevel['${r['id']}'] ?? <Map<String, dynamic>>[],
-@@ -430,6 +512,27 @@
+@@ -430,6 +525,27 @@
      ];
    }
  
@@ -1084,7 +1150,7 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
    Map<String, dynamic> _postMap(
      Map<String, dynamic> r, {
      required bool liked,
-@@ -495,6 +598,12 @@
+@@ -495,6 +611,12 @@
          .order('created_at', ascending: true)
          .limit(1000);
  
@@ -1097,7 +1163,7 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
      final out = <Map<String, dynamic>>[];
      for (final r in rows) {
        final fromMe = '${r['sender']}' == me;
-@@ -513,7 +622,7 @@
+@@ -513,7 +635,7 @@
            if (first['kind'] == 'video') isVideo = true;
            final thumbPath = first['thumb_path'];
            if (thumbPath != null) {
@@ -1106,7 +1172,7 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
            }
          }
          postData = {
-@@ -595,6 +704,18 @@
+@@ -595,6 +717,18 @@
    }
  
    /// Rows: {'key': 'work', 'value': 'Dev at Google', 'audience': 'everyone'}
@@ -1125,7 +1191,7 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
    Future<List<Map<String, String>>> fetchProfileFields() async {
      final rows = await _db.from('profile_fields').select('key,value,audience').eq('user_id', _requireMe());
      return [
-@@ -669,15 +790,20 @@
+@@ -669,15 +803,20 @@
      for (final r in rows) {
        newest.putIfAbsent('${r['author_id']}', () => Map<String, dynamic>.from(r));
      }
@@ -1149,7 +1215,7 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
        });
      }
      return out;
-@@ -759,31 +885,8 @@
+@@ -759,31 +898,8 @@
      });
    }
  
@@ -1870,6 +1936,27 @@ diff -ruN original/lib/external_media.dart swifly/lib/external_media.dart
 +    );
 +  }
 +}
+diff -ruN original/lib/feed_widgets.dart swifly/lib/feed_widgets.dart
+--- original/lib/feed_widgets.dart	2026-11-14 02:31:04.441939228 +0000
++++ swifly/lib/feed_widgets.dart	2026-11-14 04:38:37.293924177 +0000
+@@ -307,7 +307,7 @@
+ 
+   Widget _actions(Post p) {
+     return Padding(
+-      padding: const EdgeInsets.symmetric(horizontal: 6),
++      padding: EdgeInsets.zero,
+       child: Row(
+         children: [
+           _actionCell(
+@@ -379,7 +379,7 @@
+             ),
+           if (p.media.isNotEmpty)
+             Padding(
+-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
++              padding: const EdgeInsets.only(top: 10),
+               child: PostMediaView(postId: p.id, media: p.media),
+             ),
+           const SizedBox(height: 10),
 diff -ruN original/lib/follow_button.dart swifly/lib/follow_button.dart
 --- original/lib/follow_button.dart	2026-11-14 02:31:04.441959175 +0000
 +++ swifly/lib/follow_button.dart	2026-11-14 02:57:04.359780955 +0000
@@ -2098,6 +2185,256 @@ diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
  }
  
  /// Name and handle for a handle, from the people directory.
+diff -ruN original/lib/hashtag_suggest.dart swifly/lib/hashtag_suggest.dart
+--- original/lib/hashtag_suggest.dart	1970-01-01 00:00:00.000000000 +0000
++++ swifly/lib/hashtag_suggest.dart	2026-11-14 04:38:37.275731503 +0000
+@@ -0,0 +1,246 @@
++import 'dart:async';
++
++import 'package:flutter/material.dart';
++import 'package:lucide_icons_flutter/lucide_icons.dart';
++
++import 'database_service.dart';
++import 'hashtag_text.dart';
++import 'native_bridge.dart';
++import 'post_model.dart';
++
++/// One hashtag suggestion: how many posts and how many comments use it.
++class HashtagHit {
++  final String tag;
++  final int posts;
++  final int comments;
++  const HashtagHit(this.tag, this.posts, this.comments);
++
++  int get total => posts + comments;
++}
++
++/// Finds hashtags that start with what was typed, and counts how many posts
++/// and comments use each one. Reads the database, or the phone's copy when offline.
++class HashtagIndex {
++  static final RegExp _tag = RegExp(r'#([A-Za-z0-9_]+)');
++
++  static Future<List<HashtagHit>> suggest(String prefix) async {
++    final p = prefix.toLowerCase();
++    List<String> postTexts;
++    List<String> commentTexts;
++    try {
++      final t = await DatabaseService.instance.hashtagTexts(p);
++      postTexts = t.posts;
++      commentTexts = t.comments;
++    } catch (_) {
++      postTexts = [for (final post in PostStore.instance.ranked) post.text];
++      commentTexts = [for (final post in PostStore.instance.ranked) ..._commentTexts(post.comments)];
++    }
++
++    final postsCount = <String, int>{};
++    final commentsCount = <String, int>{};
++    _count(postTexts, p, postsCount);
++    _count(commentTexts, p, commentsCount);
++
++    final tags = {...postsCount.keys, ...commentsCount.keys};
++    final hits = [
++      for (final t in tags) HashtagHit(t, postsCount[t] ?? 0, commentsCount[t] ?? 0),
++    ];
++    hits.sort((a, b) => b.total != a.total ? b.total - a.total : a.tag.compareTo(b.tag));
++    return hits.take(8).toList();
++  }
++
++  /// Counts each matching tag once per text, so one post never counts twice.
++  static void _count(List<String> texts, String prefix, Map<String, int> into) {
++    for (final text in texts) {
++      final tags = <String>{};
++      for (final m in _tag.allMatches(text)) {
++        final t = m.group(1)!.toLowerCase();
++        if (t.startsWith(prefix)) tags.add(t);
++      }
++      for (final t in tags) {
++        into[t] = (into[t] ?? 0) + 1;
++      }
++    }
++  }
++
++  static Iterable<String> _commentTexts(Iterable<CommentItem> items) sync* {
++    for (final c in items) {
++      yield c.text;
++      yield* _commentTexts(c.replies);
++    }
++  }
++}
++
++/// Watches a text field. When the text before the cursor ends in #word, it looks up
++/// matching hashtags. Picking one replaces the #word with the full tag.
++class HashtagAssist extends ChangeNotifier {
++  final TextEditingController controller;
++  HashtagAssist(this.controller) {
++    controller.addListener(_onText);
++  }
++
++  static final RegExp _tail = RegExp(r'#([A-Za-z0-9_]*)$');
++
++  bool active = false;
++  bool loading = false;
++  List<HashtagHit> hits = const [];
++
++  String _query = '';
++  int _ticket = 0;
++  Timer? _debounce;
++
++  void _onText() {
++    final q = _tailQuery();
++    if (q == null) {
++      if (active) {
++        active = false;
++        hits = const [];
++        _debounce?.cancel();
++        notifyListeners();
++      }
++      return;
++    }
++    if (!active || q != _query) {
++      _query = q;
++      active = true;
++      notifyListeners();
++      _debounce?.cancel();
++      _debounce = Timer(const Duration(milliseconds: 250), () => _load(q));
++    }
++  }
++
++  String? _tailQuery() {
++    final text = controller.text;
++    final caret = controller.selection.baseOffset;
++    if (caret < 0 || caret > text.length) return null;
++    return _tail.firstMatch(text.substring(0, caret))?.group(1);
++  }
++
++  Future<void> _load(String q) async {
++    final ticket = ++_ticket;
++    loading = true;
++    notifyListeners();
++    final result = await HashtagIndex.suggest(q);
++    if (ticket != _ticket) return;
++    loading = false;
++    hits = result;
++    notifyListeners();
++  }
++
++  /// Replaces the #word before the cursor with the chosen hashtag and a space.
++  void pick(HashtagHit hit) {
++    final text = controller.text;
++    final caret = controller.selection.baseOffset;
++    if (caret < 0 || caret > text.length) return;
++    final m = _tail.firstMatch(text.substring(0, caret));
++    if (m == null) return;
++    final insert = '#${hit.tag} ';
++    controller.value = TextEditingValue(
++      text: text.substring(0, m.start) + insert + text.substring(caret),
++      selection: TextSelection.collapsed(offset: m.start + insert.length),
++    );
++  }
++
++  @override
++  void dispose() {
++    controller.removeListener(_onText);
++    _debounce?.cancel();
++    super.dispose();
++  }
++}
++
++/// The suggestion panel. It sits above the text field and does not cover the
++/// text, so typing carries on normally.
++class HashtagSuggestPanel extends StatelessWidget {
++  final HashtagAssist assist;
++  const HashtagSuggestPanel({super.key, required this.assist});
++
++  @override
++  Widget build(BuildContext context) {
++    return ListenableBuilder(
++      listenable: assist,
++      builder: (context, _) {
++        if (!assist.active) return const SizedBox.shrink();
++        final hits = assist.hits;
++        final listHeight = (hits.length * 56.0).clamp(0.0, 280.0);
++        return Container(
++          margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
++          decoration: BoxDecoration(
++            color: Colors.white,
++            borderRadius: BorderRadius.circular(16),
++            border: Border.all(color: const Color(0xFFEAEAEA)),
++            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 4))],
++          ),
++          child: Column(
++            mainAxisSize: MainAxisSize.min,
++            crossAxisAlignment: CrossAxisAlignment.start,
++            children: [
++              Padding(
++                padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
++                child: Row(
++                  children: [
++                    const Icon(LucideIcons.hash, size: 16, color: kHashtagBlue),
++                    const SizedBox(width: 6),
++                    const Text('Hashtags',
++                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Colors.black)),
++                    const Spacer(),
++                    if (assist.loading)
++                      const SizedBox(
++                        width: 12,
++                        height: 12,
++                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
++                      ),
++                  ],
++                ),
++              ),
++              if (hits.isEmpty)
++                Padding(
++                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
++                  child: Text(
++                    assist.loading ? 'Searching…' : 'No hashtags yet. Keep typing to make a new one.',
++                    style: const TextStyle(fontSize: 13, color: Color(0xFF8E8E8E)),
++                  ),
++                )
++              else
++                SizedBox(
++                  height: listHeight,
++                  child: ListView(
++                    padding: const EdgeInsets.only(bottom: 6),
++                    children: [
++                      for (final h in hits)
++                        InkWell(
++                          onTap: () => assist.pick(h),
++                          child: Padding(
++                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
++                            child: Row(
++                              children: [
++                                Expanded(
++                                  child: Column(
++                                    crossAxisAlignment: CrossAxisAlignment.start,
++                                    children: [
++                                      Text('#${h.tag}',
++                                          style: const TextStyle(
++                                              color: kHashtagBlue, fontWeight: FontWeight.w800, fontSize: 15)),
++                                      Text(
++                                        '${NativeCore.formatCount(h.posts)} posts · '
++                                        '${NativeCore.formatCount(h.comments)} comments',
++                                        style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E)),
++                                      ),
++                                    ],
++                                  ),
++                                ),
++                                const Icon(LucideIcons.plus, size: 16, color: Color(0xFF8E8E8E)),
++                              ],
++                            ),
++                          ),
++                        ),
++                    ],
++                  ),
++                ),
++            ],
++          ),
++        );
++      },
++    );
++  }
++}
 diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
 --- original/lib/home_screen.dart	2026-11-14 02:31:04.441989362 +0000
 +++ swifly/lib/home_screen.dart	2026-11-14 03:57:10.809046230 +0000
@@ -2342,6 +2679,253 @@ diff -ruN original/lib/location_service.dart swifly/lib/location_service.dart
              const SizedBox(width: 12),
              Expanded(
                child: Text(
+diff -ruN original/lib/media/post_media_view.dart swifly/lib/media/post_media_view.dart
+--- original/lib/media/post_media_view.dart	2026-11-14 02:31:04.442144741 +0000
++++ swifly/lib/media/post_media_view.dart	2026-11-14 04:38:37.292975219 +0000
+@@ -36,7 +36,7 @@
+   Widget build(BuildContext context) {
+     final count = widget.media.length;
+     return ClipRRect(
+-      borderRadius: BorderRadius.circular(12),
++      borderRadius: BorderRadius.circular(16),
+       child: AspectRatio(
+         aspectRatio: 1,
+         child: count == 1
+diff -ruN original/lib/media/video_autoplay.dart swifly/lib/media/video_autoplay.dart
+--- original/lib/media/video_autoplay.dart	2026-11-14 02:31:04.442158437 +0000
++++ swifly/lib/media/video_autoplay.dart	2026-11-14 04:38:08.407315513 +0000
+@@ -20,6 +20,13 @@
+ 
+   bool isActive(String id) => _winner == id;
+ 
++  /// The user pressed play on this video: make it the one that plays now.
++  void claim(String id) {
++    if (_winner == id) return;
++    _winner = id;
++    notifyListeners();
++  }
++
+   /// [fraction] is how much of the video (0 to 1) is on screen. 0 removes it.
+   void report(String id, double fraction) {
+     if (fraction <= 0) {
+diff -ruN original/lib/media/video_tile.dart swifly/lib/media/video_tile.dart
+--- original/lib/media/video_tile.dart	2026-11-14 02:31:04.442165315 +0000
++++ swifly/lib/media/video_tile.dart	2026-11-14 04:38:08.410949411 +0000
+@@ -18,9 +18,11 @@
+ /// A video in a post.
+ ///  - The cached thumbnail shows instantly; no player exists yet.
+ ///  - When the video is mostly on screen, the player starts (muted, looping).
++///  - Tap the video: play and pause controls appear and hide again after 3 seconds.
++///  - The speaker button in the bottom-right corner turns the sound on or off for all videos.
++///  - Pausing by hand keeps it paused until you scroll away from it.
+ ///  - When another page opens on top (Comment button), this video pauses, remembers
+ ///    its position, and the video on the new page continues from that position.
+-///    Going back does the same in reverse.
+ ///  - When it leaves the screen it pauses; 2 seconds later the player is released.
+ class VideoTile extends StatefulWidget {
+   final MediaItem item;
+@@ -43,10 +45,20 @@
+ }
+ 
+ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
++  /// How long the play and pause controls stay on screen after the last tap.
++  static const Duration _controlsTime = Duration(seconds: 3);
++
+   VideoPlayerController? _controller;
+   bool _starting = false;
+   double _fraction = 0;
+   Timer? _releaseTimer;
++  Timer? _hideTimer;
++
++  /// True while the play and pause controls are shown.
++  bool _controlsVisible = false;
++
++  /// True when the user paused this video by hand. It stays paused until it leaves the screen.
++  bool _userPaused = false;
+ 
+   /// False while another page is open on top of this one.
+   bool _routeActive = true;
+@@ -112,6 +124,7 @@
+     _auto.muted.removeListener(_applyMute);
+     _auto.remove(_uid);
+     _releaseTimer?.cancel();
++    _hideTimer?.cancel();
+     _controller?.removeListener(_onPlayerChanged);
+     _controller?.dispose();
+     _controller = null;
+@@ -164,8 +177,10 @@
+     if (!mounted) return;
+     if (_shouldPlay) {
+       _releaseTimer?.cancel();
+-      _play();
++      if (!_userPaused) _play();
+     } else {
++      // Scrolled away or covered by another page: the next time it is shown it may play again.
++      _userPaused = false;
+       _savePosition();
+       _controller?.pause();
+       _scheduleRelease();
+@@ -218,7 +233,7 @@
+ 
+     if (!mounted || _controller != c) return;
+     // The video may have scrolled away (or a page opened on top) while it was starting.
+-    if (_shouldPlay) {
++    if (_shouldPlay && !_userPaused) {
+       await c.play();
+     } else {
+       await c.pause();
+@@ -241,6 +256,41 @@
+     });
+   }
+ 
++  /// Shows the play and pause controls, and hides them 3 seconds after the last tap.
++  void _showControls() {
++    _hideTimer?.cancel();
++    _hideTimer = Timer(_controlsTime, () {
++      if (mounted) setState(() => _controlsVisible = false);
++    });
++    if (!_controlsVisible) setState(() => _controlsVisible = true);
++  }
++
++  /// Play or pause by hand. Pressing play makes this video the one that plays.
++  void _togglePlay() {
++    final c = _controller;
++    final playing = c != null && c.value.isInitialized && c.value.isPlaying;
++    if (playing) {
++      _userPaused = true;
++      c.pause();
++    } else {
++      _userPaused = false;
++      _auto.claim(_uid);
++      if (c == null || !c.value.isInitialized) {
++        _play();
++      } else {
++        c.play();
++      }
++    }
++    _showControls();
++    if (mounted) setState(() {});
++  }
++
++  /// Sound on or off for every video.
++  void _toggleMute() {
++    _auto.muted.value = !_auto.muted.value;
++    _showControls();
++  }
++
+   @override
+   Widget build(BuildContext context) {
+     final item = widget.item;
+@@ -250,6 +300,7 @@
+     // Keep the live picture once it has started (even when paused) so it never
+     // jumps back to the old thumbnail.
+     final shown = ready && (playing || c.value.position > Duration.zero);
++    final muted = _auto.muted.value;
+ 
+     return VisibilityDetector(
+       key: ValueKey('vis_$_uid'),
+@@ -259,7 +310,7 @@
+       },
+       child: GestureDetector(
+         behavior: HitTestBehavior.opaque,
+-        onTap: () => _auto.muted.value = !_auto.muted.value,
++        onTap: _showControls,
+         child: Stack(
+           fit: StackFit.expand,
+           children: [
+@@ -285,22 +336,32 @@
+                   ),
+                 ),
+               ),
+-            // 3. Small labels.
++            // 3. Play and pause, shown after a tap and gone 3 seconds later.
++            if (_controlsVisible)
++              Center(
++                child: GestureDetector(
++                  onTap: _togglePlay,
++                  child: Container(
++                    width: 64,
++                    height: 64,
++                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
++                    child: Icon(
++                      playing ? LucideIcons.pause : LucideIcons.play,
++                      color: Colors.white,
++                      size: 30,
++                    ),
++                  ),
++                ),
++              ),
++            // 4. Duration, bottom-left.
+             if (item.durationMs > 0)
+               Positioned(
+                 left: 10,
+                 bottom: 10,
+                 child: _Chip(text: item.durationLabel),
+               ),
+-            if (playing)
+-              Positioned(
+-                right: 10,
+-                bottom: 10,
+-                child: _Chip(
+-                  icon: _auto.muted.value ? LucideIcons.volumeX : LucideIcons.volume2,
+-                ),
+-              )
+-            else if (item.processing)
++            // 5. Sound on or off, bottom-right. Its own tap, separate from the controls.
++            if (item.processing)
+               const Positioned(
+                 right: 10,
+                 bottom: 10,
+@@ -309,6 +370,25 @@
+                   height: 16,
+                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                 ),
++              )
++            else
++              Positioned(
++                right: 10,
++                bottom: 10,
++                child: GestureDetector(
++                  onTap: _toggleMute,
++                  behavior: HitTestBehavior.opaque,
++                  child: Container(
++                    width: 36,
++                    height: 36,
++                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
++                    child: Icon(
++                      muted ? LucideIcons.volumeX : LucideIcons.volume2,
++                      size: 17,
++                      color: Colors.white,
++                    ),
++                  ),
++                ),
+               ),
+           ],
+         ),
+@@ -319,8 +399,7 @@
+ 
+ class _Chip extends StatelessWidget {
+   final String? text;
+-  final IconData? icon;
+-  const _Chip({this.text, this.icon});
++  const _Chip({this.text});
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -330,11 +409,8 @@
+         color: Colors.black54,
+         borderRadius: BorderRadius.circular(20),
+       ),
+-      child: icon != null
+-          ? Icon(icon, size: 14, color: Colors.white)
+-          : Text(text ?? '',
+-              style: const TextStyle(
+-                  color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
++      child: Text(text ?? '',
++          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+     );
+   }
+ }
 diff -ruN original/lib/messages_tab.dart swifly/lib/messages_tab.dart
 --- original/lib/messages_tab.dart	2026-11-14 02:31:04.442181430 +0000
 +++ swifly/lib/messages_tab.dart	2026-11-14 04:32:11.103451585 +0000
@@ -2747,6 +3331,39 @@ diff -ruN original/lib/place_style.dart swifly/lib/place_style.dart
 +
 +/// Every location icon in the app uses this red, so places are easy to spot.
 +const Color kPlaceRed = Color(0xFFE53935);
+diff -ruN original/lib/post_detail_screen.dart swifly/lib/post_detail_screen.dart
+--- original/lib/post_detail_screen.dart	2026-11-14 02:31:04.442251839 +0000
++++ swifly/lib/post_detail_screen.dart	2026-11-14 04:38:37.292497089 +0000
+@@ -1,4 +1,5 @@
+ import 'package:flutter/material.dart';
++import 'hashtag_suggest.dart';
+ import 'package:lucide_icons_flutter/lucide_icons.dart';
+ 
+ import 'feed_widgets.dart';
+@@ -32,6 +33,7 @@
+ class _PostDetailScreenState extends State<PostDetailScreen>
+     with SingleTickerProviderStateMixin {
+   final TextEditingController _controller = TextEditingController();
++  late final HashtagAssist _hashtags = HashtagAssist(_controller);
+   final FocusNode _focus = FocusNode();
+   final ScrollController _scroll = ScrollController();
+   final Map<String, GlobalKey> _keys = {};
+@@ -51,6 +53,7 @@
+   @override
+   void dispose() {
+     _flash.dispose();
++    _hashtags.dispose();
+     _controller.dispose();
+     _focus.dispose();
+     _scroll.dispose();
+@@ -228,6 +231,7 @@
+                   ),
+                 ],
+               ),
++            HashtagSuggestPanel(assist: _hashtags),
+             Row(
+               children: [
+                 Expanded(
 diff -ruN original/lib/post_model.dart swifly/lib/post_model.dart
 --- original/lib/post_model.dart	2026-11-14 02:31:04.442261919 +0000
 +++ swifly/lib/post_model.dart	2026-11-14 03:57:10.807199523 +0000

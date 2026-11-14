@@ -119,3 +119,21 @@
 - In a new conversation with a new follower, animated "hi" stickers appear above
   the composer. Tap one to send it. The strip disappears after the first message.
 - The list is saved on the phone for each account.
+
+## Round 8: video controls, edge-to-edge posts, hashtag suggestions
+
+### Videos
+- Tap a video to show play and pause in the middle. They hide 3 seconds after the last tap.
+- The speaker button in the bottom-right corner turns the sound on or off for all videos.
+- A video you paused by hand stays paused until you scroll away from it.
+- Pressing play on a video that is not playing makes it the one that plays.
+
+### Posts
+- Pictures and videos run edge to edge across the feed and profile posts, with 16 px rounded corners.
+
+### Hashtags
+- Typing # followed by letters opens a suggestion panel above the text box. It
+  appears in the post composer and in comments and replies.
+- Each suggestion shows how many posts and how many comments use that hashtag.
+- Tap a suggestion to put the full hashtag in place of the typed part.
+- The panel does not cover the text box, so you can keep typing. Offline, it counts from what is on the phone.

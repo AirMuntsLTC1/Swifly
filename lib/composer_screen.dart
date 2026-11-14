@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'hashtag_suggest.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
@@ -54,6 +55,7 @@ class ComposerScreen extends StatefulWidget {
 
 class _ComposerScreenState extends State<ComposerScreen> {
   final TextEditingController _textController = TextEditingController();
+  late final HashtagAssist _hashtags = HashtagAssist(_textController);
   final FocusNode _focusNode = FocusNode();
   String _audience = 'Everyone';
   List<String> _tagged = [];
@@ -69,6 +71,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
 
   @override
   void dispose() {
+    _hashtags.dispose();
     _textController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -359,6 +362,7 @@ class _ComposerScreenState extends State<ComposerScreen> {
                   },
                 ),
               ),
+            HashtagSuggestPanel(assist: _hashtags),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),

@@ -307,7 +307,7 @@ class _PostCardState extends State<PostCard> {
 
   Widget _actions(Post p) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: EdgeInsets.zero,
       child: Row(
         children: [
           _actionCell(
@@ -379,7 +379,7 @@ class _PostCardState extends State<PostCard> {
             ),
           if (p.media.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              padding: const EdgeInsets.only(top: 10),
               child: PostMediaView(postId: p.id, media: p.media),
             ),
           const SizedBox(height: 10),

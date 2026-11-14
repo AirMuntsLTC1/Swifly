@@ -18,9 +18,11 @@ final Map<String, Duration> _kResume = <String, Duration>{};
 /// A video in a post.
 ///  - The cached thumbnail shows instantly; no player exists yet.
 ///  - When the video is mostly on screen, the player starts (muted, looping).
+///  - Tap the video: play and pause controls appear and hide again after 3 seconds.
+///  - The speaker button in the bottom-right corner turns the sound on or off for all videos.
+///  - Pausing by hand keeps it paused until you scroll away from it.
 ///  - When another page opens on top (Comment button), this video pauses, remembers
 ///    its position, and the video on the new page continues from that position.
-///    Going back does the same in reverse.
 ///  - When it leaves the screen it pauses; 2 seconds later the player is released.
 class VideoTile extends StatefulWidget {
   final MediaItem item;
@@ -43,10 +45,20 @@ class VideoTile extends StatefulWidget {
 }
 
 class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
+  /// How long the play and pause controls stay on screen after the last tap.
+  static const Duration _controlsTime = Duration(seconds: 3);
+
   VideoPlayerController? _controller;
   bool _starting = false;
   double _fraction = 0;
   Timer? _releaseTimer;
+  Timer? _hideTimer;
+
+  /// True while the play and pause controls are shown.
+  bool _controlsVisible = false;
+
+  /// True when the user paused this video by hand. It stays paused until it leaves the screen.
+  bool _userPaused = false;
 
   /// False while another page is open on top of this one.
   bool _routeActive = true;
@@ -112,6 +124,7 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
     _auto.muted.removeListener(_applyMute);
     _auto.remove(_uid);
     _releaseTimer?.cancel();
+    _hideTimer?.cancel();
     _controller?.removeListener(_onPlayerChanged);
     _controller?.dispose();
     _controller = null;
@@ -164,8 +177,10 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
     if (!mounted) return;
     if (_shouldPlay) {
       _releaseTimer?.cancel();
-      _play();
+      if (!_userPaused) _play();
     } else {
+      // Scrolled away or covered by another page: the next time it is shown it may play again.
+      _userPaused = false;
       _savePosition();
       _controller?.pause();
       _scheduleRelease();
@@ -218,7 +233,7 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
 
     if (!mounted || _controller != c) return;
     // The video may have scrolled away (or a page opened on top) while it was starting.
-    if (_shouldPlay) {
+    if (_shouldPlay && !_userPaused) {
       await c.play();
     } else {
       await c.pause();
@@ -241,6 +256,41 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
     });
   }
 
+  /// Shows the play and pause controls, and hides them 3 seconds after the last tap.
+  void _showControls() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(_controlsTime, () {
+      if (mounted) setState(() => _controlsVisible = false);
+    });
+    if (!_controlsVisible) setState(() => _controlsVisible = true);
+  }
+
+  /// Play or pause by hand. Pressing play makes this video the one that plays.
+  void _togglePlay() {
+    final c = _controller;
+    final playing = c != null && c.value.isInitialized && c.value.isPlaying;
+    if (playing) {
+      _userPaused = true;
+      c.pause();
+    } else {
+      _userPaused = false;
+      _auto.claim(_uid);
+      if (c == null || !c.value.isInitialized) {
+        _play();
+      } else {
+        c.play();
+      }
+    }
+    _showControls();
+    if (mounted) setState(() {});
+  }
+
+  /// Sound on or off for every video.
+  void _toggleMute() {
+    _auto.muted.value = !_auto.muted.value;
+    _showControls();
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -250,6 +300,7 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
     // Keep the live picture once it has started (even when paused) so it never
     // jumps back to the old thumbnail.
     final shown = ready && (playing || c.value.position > Duration.zero);
+    final muted = _auto.muted.value;
 
     return VisibilityDetector(
       key: ValueKey('vis_$_uid'),
@@ -259,7 +310,7 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => _auto.muted.value = !_auto.muted.value,
+        onTap: _showControls,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -285,22 +336,32 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-            // 3. Small labels.
+            // 3. Play and pause, shown after a tap and gone 3 seconds later.
+            if (_controlsVisible)
+              Center(
+                child: GestureDetector(
+                  onTap: _togglePlay,
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                    child: Icon(
+                      playing ? LucideIcons.pause : LucideIcons.play,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                ),
+              ),
+            // 4. Duration, bottom-left.
             if (item.durationMs > 0)
               Positioned(
                 left: 10,
                 bottom: 10,
                 child: _Chip(text: item.durationLabel),
               ),
-            if (playing)
-              Positioned(
-                right: 10,
-                bottom: 10,
-                child: _Chip(
-                  icon: _auto.muted.value ? LucideIcons.volumeX : LucideIcons.volume2,
-                ),
-              )
-            else if (item.processing)
+            // 5. Sound on or off, bottom-right. Its own tap, separate from the controls.
+            if (item.processing)
               const Positioned(
                 right: 10,
                 bottom: 10,
@@ -308,6 +369,25 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+              )
+            else
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: GestureDetector(
+                  onTap: _toggleMute,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                    child: Icon(
+                      muted ? LucideIcons.volumeX : LucideIcons.volume2,
+                      size: 17,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -319,8 +399,7 @@ class _VideoTileState extends State<VideoTile> with WidgetsBindingObserver {
 
 class _Chip extends StatelessWidget {
   final String? text;
-  final IconData? icon;
-  const _Chip({this.text, this.icon});
+  const _Chip({this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -330,11 +409,8 @@ class _Chip extends StatelessWidget {
         color: Colors.black54,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: icon != null
-          ? Icon(icon, size: 14, color: Colors.white)
-          : Text(text ?? '',
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+      child: Text(text ?? '',
+          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 }
