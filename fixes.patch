@@ -1,7 +1,7 @@
 diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 --- original/FIX_NOTES.md	1970-01-01 00:00:00.000000000 +0000
-+++ swifly/FIX_NOTES.md	2026-11-14 02:33:37.027567237 +0000
-@@ -0,0 +1,41 @@
++++ swifly/FIX_NOTES.md	2026-11-14 02:57:57.490808076 +0000
+@@ -0,0 +1,68 @@
 +# Swifly fix round: what changed
 +
 +## Startup and login speed
@@ -43,6 +43,33 @@ diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
 +4. Suggestions and Discover list nobody you follow or who follows you.
 +5. Search finds others, never your own account.
 +6. Open someone's profile: posts, Followers and Following show real numbers.
++
++## Round 2
++
++### Personal details (audience rules)
++- Other people's details now load from the database (fetchProfileFieldsOf). The
++  database applies Only me / Followers / Everyone, and the app checks again on the device.
++- Their profile shows those details read-only, with the same layout as your own.
++- Your own profile shows the audience next to each field, e.g. "Current city · Only me".
++- Age is calculated from each field's own birthday, so it is right for other people too.
++
++### Followers and Following taps
++- pushOnce no longer drops taps made within 350 ms of an earlier push. It only blocks
++  opening the same screen twice. This is why several taps were needed.
++- Another person's lists are prefetched when their profile opens, and a list
++  opened again shows at once while it refreshes.
++
++### Follow back showing "Follow"
++- FollowStore keeps your pending change until the server confirms it, so a late
++  reload cannot undo it.
++- The follow lists are reloaded from the database whenever they open, so labels
++  match the server.
++- A failed follow or unfollow is undone and the reason is shown, instead of failing silently.
++- No follow button is shown on your own account.
++
++### Posts
++- Your own profile and other profiles use the same post card (picture on top,
++  text, then likes, comments and time), taken from the screenshot.
 diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
 --- original/lib/app_bootstrap.dart	2026-11-14 02:31:04.441524825 +0000
 +++ swifly/lib/app_bootstrap.dart	2026-11-14 02:31:20.767998793 +0000
@@ -435,9 +462,10 @@ diff -ruN original/lib/avatar_cache.dart swifly/lib/avatar_cache.dart
 +}
 diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dart
 --- original/lib/connections_screen.dart	2026-11-14 02:31:04.441713264 +0000
-+++ swifly/lib/connections_screen.dart	2026-11-14 02:32:49.631479984 +0000
-@@ -2,22 +2,23 @@
- import 'nav_guard.dart';
++++ swifly/lib/connections_screen.dart	2026-11-14 02:57:15.987844673 +0000
+@@ -1,23 +1,53 @@
+ import 'package:flutter/material.dart';
+-import 'nav_guard.dart';
  import 'package:lucide_icons_flutter/lucide_icons.dart';
  
 +import 'database_service.dart';
@@ -446,17 +474,47 @@ diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dar
  import 'follow_store.dart';
 -import 'post_model.dart';
 -import 'user_profile_screen.dart';
++import 'nav_guard.dart';
  import 'people_directory.dart';
 +import 'person_row.dart';
 +import 'user_profile_screen.dart';
++
++/// Lists loaded earlier this session. A list opened again shows at once,
++/// then refreshes in the background.
++final Map<String, List<Person>> _listMemo = <String, List<Person>>{};
++
++String _memoKey(String handle, bool followers) => '$handle|$followers';
++
++Future<List<Person>> _fetchRemote(String handle, bool followers) async {
++  final rows = await DatabaseService.instance.fetchConnections(handle, followers: followers);
++  final people = [for (final r in rows) personFromRow(r)];
++  final stats = <String, (int, int)>{
++    for (final r in rows)
++      '${r['handle']}': (
++        (r['followers_count'] as num?)?.toInt() ?? 0,
++        (r['following_count'] as num?)?.toInt() ?? 0,
++      ),
++  };
++  PeopleDirectory.instance.merge(people: people, stats: stats);
++  return people;
++}
  
 -/// Followers and Following lists. Both come from [FollowStore], so they update
 -/// live when someone follows or unfollows.
 -/// Currently shows the signed-in user's lists; [userHandle] is kept for when
 -/// other people's lists come from the database.
++/// Loads both tabs of another person's lists in the background. Called when
++/// their profile opens, so the lists are already there when tapped.
++Future<void> prefetchConnections(String handle) async {
++  for (final followers in [true, false]) {
++    try {
++      _listMemo[_memoKey(handle, followers)] = await _fetchRemote(handle, followers);
++    } catch (_) {}
++  }
++}
++
 +/// Followers and Following lists.
-+///
-+/// - Your own lists (no [userHandle], or your handle) come from [FollowStore] and update live.
++/// - Your own lists come from FollowStore, which is reloaded from the database when opened.
 +/// - Another person's lists come from the database, for that person.
  class ConnectionsScreen extends StatefulWidget {
    final bool initialFollowers;
@@ -468,11 +526,13 @@ diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dar
    const ConnectionsScreen({
      super.key,
      required this.initialFollowers,
-@@ -31,11 +32,44 @@
+@@ -31,11 +61,46 @@
  
  class _ConnectionsScreenState extends State<ConnectionsScreen> {
    late bool _showFollowers;
-+  Future<List<Person>>? _remote;
++  List<Person>? _remoteItems;
++  bool _remoteFailed = false;
++  int _loadId = 0;
 +
 +  bool get _isOtherPerson => widget.userHandle != null && widget.userHandle != kMeHandle;
  
@@ -480,59 +540,60 @@ diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dar
    void initState() {
      super.initState();
      _showFollowers = widget.initialFollowers;
-+    _reloadRemote();
++    if (_isOtherPerson) {
++      _startRemote();
++    } else {
++      FollowStore.instance.refresh();
++    }
 +  }
 +
-+  /// Loads the other person's list for the current tab. Also merges the people into the directory.
-+  void _reloadRemote() {
-+    if (!_isOtherPerson) {
-+      _remote = null;
-+      return;
-+    }
-+    _remote = DatabaseService.instance
-+        .fetchConnections(widget.userHandle!, followers: _showFollowers)
-+        .then((rows) {
-+      final people = [for (final r in rows) personFromRow(r)];
-+      final stats = <String, (int, int)>{
-+        for (final r in rows)
-+          '${r['handle']}': (
-+            (r['followers_count'] as num?)?.toInt() ?? 0,
-+            (r['following_count'] as num?)?.toInt() ?? 0,
-+          ),
-+      };
-+      PeopleDirectory.instance.merge(people: people, stats: stats);
-+      return people;
++  /// Shows the saved copy at once (if any) and fetches the current list.
++  /// Only the newest request is allowed to update the screen.
++  void _startRemote() {
++    final handle = widget.userHandle!;
++    final followers = _showFollowers;
++    final id = ++_loadId;
++    _remoteItems = _listMemo[_memoKey(handle, followers)];
++    _remoteFailed = false;
++    _fetchRemote(handle, followers).then((people) {
++      _listMemo[_memoKey(handle, followers)] = people;
++      if (!mounted || id != _loadId) return;
++      setState(() => _remoteItems = people);
++    }).catchError((_) {
++      if (!mounted || id != _loadId) return;
++      setState(() => _remoteFailed = _remoteItems == null);
 +    });
 +  }
 +
 +  void _setTab(bool followers) {
 +    setState(() {
 +      _showFollowers = followers;
-+      _reloadRemote();
++      if (_isOtherPerson) _startRemote();
 +    });
    }
  
    @override
-@@ -62,64 +96,78 @@
+@@ -61,65 +126,68 @@
+             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
              child: Row(
                children: [
-                 Expanded(
+-                Expanded(
 -                  child: _buildTabButton('Followers', _showFollowers, () {
 -                    setState(() => _showFollowers = true);
 -                  }),
-+                  child: _buildTabButton('Followers', _showFollowers, () => _setTab(true)),
-                 ),
+-                ),
++                Expanded(child: _buildTabButton('Followers', _showFollowers, () => _setTab(true))),
                  const SizedBox(width: 12),
-                 Expanded(
+-                Expanded(
 -                  child: _buildTabButton('Following', !_showFollowers, () {
 -                    setState(() => _showFollowers = false);
 -                  }),
-+                  child: _buildTabButton('Following', !_showFollowers, () => _setTab(false)),
-                 ),
+-                ),
++                Expanded(child: _buildTabButton('Following', !_showFollowers, () => _setTab(false))),
                ],
              ),
            ),
-           Expanded(
+-          Expanded(
 -            child: ListenableBuilder(
 -              listenable: FollowStore.instance,
 -              builder: (context, _) {
@@ -571,8 +632,8 @@ diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dar
 -                );
 -              },
 -            ),
-+            child: _isOtherPerson ? _remoteList() : _myList(),
-           ),
+-          ),
++          Expanded(child: _isOtherPerson ? _remoteBody() : _myList()),
          ],
        ),
      );
@@ -587,35 +648,30 @@ diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dar
 +                ? FollowStore.instance.followerHandles
 +                : FollowStore.instance.followingHandles)
 +            .toList();
-+        return _renderPeople([for (final h in handles) personFor(h)], _emptyText());
++        return _renderPeople([for (final h in handles) personFor(h)]);
 +      },
 +    );
 +  }
 +
-+  /// Another person's list, from the database.
-+  Widget _remoteList() {
-+    return FutureBuilder<List<Person>>(
-+      future: _remote,
-+      builder: (context, snap) {
-+        if (snap.hasData) return _renderPeople(snap.data!, _emptyText());
-+        if (snap.hasError) {
-+          return const Center(
-+            child: Text('Could not load this list. Check your connection.',
-+                textAlign: TextAlign.center,
-+                style: TextStyle(color: Color(0xFF8E8E8E))),
-+          );
-+        }
-+        return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black));
-+      },
-+    );
++  Widget _remoteBody() {
++    final items = _remoteItems;
++    if (items != null) return _renderPeople(items);
++    if (_remoteFailed) {
++      return const Center(
++        child: Text('Could not load this list. Check your connection.',
++            textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF8E8E8E))),
++      );
++    }
++    return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black));
 +  }
 +
-+  String _emptyText() => _showFollowers ? 'No followers yet' : 'Not following anyone yet';
-+
-+  Widget _renderPeople(List<Person> people, String emptyText) {
++  Widget _renderPeople(List<Person> people) {
 +    if (people.isEmpty) {
 +      return Center(
-+        child: Text(emptyText, style: const TextStyle(color: Color(0xFF8E8E8E))),
++        child: Text(
++          _showFollowers ? 'No followers yet' : 'Not following anyone yet',
++          style: const TextStyle(color: Color(0xFF8E8E8E)),
++        ),
 +      );
 +    }
 +    return ListView.separated(
@@ -638,7 +694,7 @@ diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dar
        onTap: onTap,
 diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
 --- original/lib/database_service.dart	2026-11-14 02:31:04.441759693 +0000
-+++ swifly/lib/database_service.dart	2026-11-14 02:31:48.731044554 +0000
++++ swifly/lib/database_service.dart	2026-11-14 02:57:32.400405443 +0000
 @@ -7,6 +7,7 @@
  import 'package:supabase_flutter/supabase_flutter.dart';
  
@@ -940,7 +996,26 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
            }
          }
          postData = {
-@@ -669,15 +778,20 @@
+@@ -595,6 +704,18 @@
+   }
+ 
+   /// Rows: {'key': 'work', 'value': 'Dev at Google', 'audience': 'everyone'}
++  /// Personal details of one person that you are allowed to see. The database
++  /// applies the audience rules (Only me / Followers / Everyone), so private
++  /// fields never come back for anyone else.
++  Future<List<Map<String, String>>> fetchProfileFieldsOf(String handle) async {
++    final userId = await _idForHandle(handle);
++    final rows = await _db.from('profile_fields').select('key,value,audience').eq('user_id', userId);
++    return [
++      for (final r in rows)
++        {'key': '${r['key']}', 'value': '${r['value']}', 'audience': '${r['audience']}'},
++    ];
++  }
++
+   Future<List<Map<String, String>>> fetchProfileFields() async {
+     final rows = await _db.from('profile_fields').select('key,value,audience').eq('user_id', _requireMe());
+     return [
+@@ -669,15 +790,20 @@
      for (final r in rows) {
        newest.putIfAbsent('${r['author_id']}', () => Map<String, dynamic>.from(r));
      }
@@ -964,7 +1039,7 @@ diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
        });
      }
      return out;
-@@ -759,31 +873,8 @@
+@@ -759,31 +885,8 @@
      });
    }
  
@@ -1240,29 +1315,170 @@ diff -ruN original/lib/edit_profile_screen.dart swifly/lib/edit_profile_screen.d
                    child: !hasImage ? const Icon(LucideIcons.user, color: Colors.white, size: 34) : null,
                  ),
                  Positioned(
+diff -ruN original/lib/follow_button.dart swifly/lib/follow_button.dart
+--- original/lib/follow_button.dart	2026-11-14 02:31:04.441959175 +0000
++++ swifly/lib/follow_button.dart	2026-11-14 02:57:04.359780955 +0000
+@@ -1,6 +1,7 @@
+ import 'package:flutter/material.dart';
+ 
+ import 'follow_store.dart';
++import 'people_directory.dart';
+ 
+ const Color _brandBlue = Color(0xFF1D6FDC);
+ 
+@@ -52,6 +53,8 @@
+ 
+   @override
+   Widget build(BuildContext context) {
++    // You cannot follow yourself, so no button is shown on your own row.
++    if (handle == kMeHandle) return const SizedBox.shrink();
+     return ListenableBuilder(
+       listenable: FollowStore.instance,
+       builder: (context, _) {
 diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
 --- original/lib/follow_store.dart	2026-11-14 02:31:04.441965619 +0000
-+++ swifly/lib/follow_store.dart	2026-11-14 02:31:12.809073427 +0000
-@@ -47,7 +47,14 @@
++++ swifly/lib/follow_store.dart	2026-11-14 02:57:04.362806176 +0000
+@@ -1,5 +1,6 @@
+ import 'package:flutter/foundation.dart';
+ 
++import 'app_feedback.dart';
+ import 'database_service.dart';
+ import 'people_directory.dart';
+ 
+@@ -15,13 +16,11 @@
+       FollowState.mutual => 'Following',
+     };
+ 
+-/// Follow relationships for the signed-in user.
++/// Follow relationships for the signed-in user. The only place follow state lives.
+ ///
+-/// This is the ONLY place follow state lives. Screens listen to it and call
+-/// [follow] / [unfollow]. When the real database is connected:
+-///   1. Load the lists in [load] from the database.
+-///   2. [follow] and [unfollow] already call DatabaseService.toggleFollow.
+-///   3. Realtime "someone followed you" events call [applyIncomingFollow].
++/// Changes show at once. The database is then asked again, so the labels always
++/// match the server. If the server refuses a change, it is undone and the
++/// reason is shown.
+ class FollowStore extends ChangeNotifier {
+   FollowStore._();
+   static final FollowStore instance = FollowStore._();
+@@ -29,6 +28,10 @@
+   final Set<String> _following = <String>{};
+   final Set<String> _followers = <String>{};
+ 
++  /// Changes the user just made (handle -> true follow, false unfollow), kept
++  /// until the server confirms them, so a late reload cannot undo them.
++  final Map<String, bool> _pending = <String, bool>{};
++
+   /// Handles you follow.
+   Set<String> get followingHandles => Set.unmodifiable(_following);
+ 
+@@ -47,7 +50,7 @@
      return FollowState.none;
    }
  
 -  /// Replaces both lists. Called with mock data now, database results later.
++  /// Replaces both lists. Pending changes are applied on top.
+   void load({
+     Set<String> following = const <String>{},
+     Set<String> followers = const <String>{},
+@@ -58,29 +61,57 @@
+     _followers
+       ..clear()
+       ..addAll(followers);
++    _pending.forEach((handle, wanted) {
++      if (wanted) {
++        _following.add(handle);
++      } else {
++        _following.remove(handle);
++      }
++    });
+     notifyListeners();
+   }
+ 
+-  /// Updates immediately, then rolls back if the database rejects it.
++  /// Reloads both lists from the database. Use this whenever a follow list opens.
++  Future<void> refresh() async {
++    try {
++      final f = await DatabaseService.instance.fetchFollows();
++      load(
++        following: (f['following'] ?? const <String>[]).toSet(),
++        followers: (f['followers'] ?? const <String>[]).toSet(),
++      );
++    } catch (_) {}
++  }
++
+   Future<void> follow(String handle) async {
+-    if (!_following.add(handle)) return;
++    if (handle == kMeHandle || _following.contains(handle)) return;
++    _following.add(handle);
++    _pending[handle] = true;
+     notifyListeners();
+-    try {
+-      await DatabaseService.instance.toggleFollow(handle, true);
+-    } catch (_) {
+-      _following.remove(handle);
+-      notifyListeners();
+-    }
++    await _send(handle, follow: true);
+   }
+ 
+   Future<void> unfollow(String handle) async {
+-    if (!_following.remove(handle)) return;
++    if (handle == kMeHandle || !_following.contains(handle)) return;
++    _following.remove(handle);
++    _pending[handle] = false;
+     notifyListeners();
++    await _send(handle, follow: false);
++  }
++
++  Future<void> _send(String handle, {required bool follow}) async {
+     try {
+-      await DatabaseService.instance.toggleFollow(handle, false);
+-    } catch (_) {
+-      _following.add(handle);
++      await DatabaseService.instance.toggleFollow(handle, follow);
++      _pending.remove(handle);
++      await refresh();
++    } catch (e) {
++      _pending.remove(handle);
++      if (follow) {
++        _following.remove(handle);
++      } else {
++        _following.add(handle);
++      }
+       notifyListeners();
++      reportError(follow ? "Couldn't follow" : "Couldn't unfollow", e);
+     }
+   }
+ 
+@@ -93,6 +124,13 @@
+   void applyIncomingUnfollow(String handle) {
+     if (_followers.remove(handle)) notifyListeners();
+   }
++
 +  /// People you can suggest: not you, not followed by you, and not following you.
 +  /// Anyone you follow or who follows you is left out of every suggestion list.
 +  List<Person> suggestedPeople() => [
 +        for (final p in kPeople)
 +          if (p.handle != kMeHandle && stateOf(p.handle) == FollowState.none) p,
 +      ];
-+
-+  /// Replaces both lists from the database (or from the local cache on startup).
-   void load({
-     Set<String> following = const <String>{},
-     Set<String> followers = const <String>{},
+ }
+ 
+ /// Name and handle for a handle, from the people directory.
 diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
 --- original/lib/home_screen.dart	2026-11-14 02:31:04.441989362 +0000
-+++ swifly/lib/home_screen.dart	2026-11-14 02:32:54.070995044 +0000
-@@ -643,15 +643,19 @@
++++ swifly/lib/home_screen.dart	2026-11-14 02:57:40.842849716 +0000
+@@ -21,6 +21,7 @@
+ import 'user_profile_screen.dart';
+ import 'profile_details_section.dart';
+ import 'profile_store.dart';
++import 'profile_post_card.dart';
+ import 'connections_screen.dart';
+ import 'suggestions_screen.dart';
+ import 'search_history.dart';
+@@ -643,15 +644,19 @@
                ),
                SizedBox(height: r.h(12)),
                ListenableBuilder(
@@ -1291,6 +1507,48 @@ diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
                ),
                    ],
                  ),
+@@ -674,34 +679,13 @@
+                           style: TextStyle(color: Color(0xFF8E8E8E))),
+                     );
+                   }
+-                  return Column(
+-                    crossAxisAlignment: CrossAxisAlignment.start,
+-                    children: [
+-                      for (final p in mine) ...[
+-                        Padding(
+-                          padding: EdgeInsets.fromLTRB(r.pad, 12, r.pad, 0),
+-                          child: Row(
+-                            children: [
+-                              const Icon(LucideIcons.calendar, size: 15, color: Color(0xFF65676B)),
+-                              const SizedBox(width: 6),
+-                              Expanded(
+-                                child: Text(
+-                                  'Posted ${_postStamp(p.created)}',
+-                                  maxLines: 1,
+-                                  overflow: TextOverflow.ellipsis,
+-                                  style: const TextStyle(
+-                                      fontSize: 13,
+-                                      fontWeight: FontWeight.w600,
+-                                      color: Color(0xFF65676B)),
+-                                ),
+-                              ),
+-                            ],
+-                          ),
+-                        ),
+-                        PostCard(key: ValueKey('mine-${p.id}'), post: p),
+-                        const Divider(height: 1, color: Color(0xFFEAEAEA)),
+-                      ],
+-                    ],
++                  // Same card style as other people's profiles.
++                  return Padding(
++                    padding: EdgeInsets.symmetric(horizontal: r.pad),
++                    child: Column(
++                      crossAxisAlignment: CrossAxisAlignment.stretch,
++                      children: [for (final p in mine) ProfilePostCard(post: p)],
++                    ),
+                   );
+                 },
+               ),
 diff -ruN original/lib/local_cache.dart swifly/lib/local_cache.dart
 --- original/lib/local_cache.dart	1970-01-01 00:00:00.000000000 +0000
 +++ swifly/lib/local_cache.dart	2026-11-14 02:31:04.444469365 +0000
@@ -1342,6 +1600,36 @@ diff -ruN original/lib/local_cache.dart swifly/lib/local_cache.dart
 +    } catch (_) {}
 +  }
 +}
+diff -ruN original/lib/nav_guard.dart swifly/lib/nav_guard.dart
+--- original/lib/nav_guard.dart	2026-11-14 02:31:04.442211694 +0000
++++ swifly/lib/nav_guard.dart	2026-11-14 02:57:04.359110324 +0000
+@@ -23,16 +23,10 @@
+   );
+ }
+ 
+-DateTime? _lastPush;
+-
+-/// Pushes [route] once. Ignores the tap when:
+-///  - another push happened less than 350 ms ago (fast double tap), or
+-///  - the screen on top already has the same route name (same screen twice).
++/// Pushes [route]. Ignores the tap only when the screen on top already has the
++/// same route name (the same screen opened twice). It used to also drop every
++/// tap made within 350 ms of an earlier push, which is why taps needed repeating.
+ Future<T?> pushOnce<T>(BuildContext context, Route<T> route) {
+-  final now = DateTime.now();
+-  if (_lastPush != null && now.difference(_lastPush!).inMilliseconds < 350) {
+-    return Future<T?>.value(null);
+-  }
+   final nav = Navigator.of(context);
+   final name = route.settings.name;
+   if (name != null) {
+@@ -43,6 +37,5 @@
+     });
+     if (top?.settings.name == name) return Future<T?>.value(null);
+   }
+-  _lastPush = now;
+   return nav.push<T>(route);
+ }
 diff -ruN original/lib/people_directory.dart swifly/lib/people_directory.dart
 --- original/lib/people_directory.dart	2026-11-14 02:31:04.442245217 +0000
 +++ swifly/lib/people_directory.dart	2026-11-14 02:31:12.808672660 +0000
@@ -1437,6 +1725,215 @@ diff -ruN original/lib/person_row.dart swifly/lib/person_row.dart
 +            ],
 +          ],
 +        ),
++      ),
++    );
++  }
++}
+diff -ruN original/lib/profile_details_section.dart swifly/lib/profile_details_section.dart
+--- original/lib/profile_details_section.dart	2026-11-14 02:31:04.442290952 +0000
++++ swifly/lib/profile_details_section.dart	2026-11-14 02:57:40.842464813 +0000
+@@ -3,6 +3,7 @@
+ 
+ import 'edit_profile_screen.dart';
+ import 'logo_service.dart';
++import 'native_bridge.dart';
+ import 'profile_store.dart';
+ import 'responsive.dart';
+ import 'suggest_engine.dart';
+@@ -15,12 +16,17 @@
+ /// logo, places show a pin, and only the fields you filled in appear.
+ /// Tap any row to change it.
+ class ProfileDetailsSection extends StatelessWidget {
+-  const ProfileDetailsSection({super.key});
++  /// null: your own details (editable, audience shown).
++  /// Given: another person's details, already filtered by the database. Read-only.
++  final Map<String, ProfileField>? fields;
++
++  const ProfileDetailsSection({super.key, this.fields});
+ 
+   static const Set<String> _skip = {'Intro'};
+ 
+   @override
+   Widget build(BuildContext context) {
++    final readOnly = fields != null;
+     return ListenableBuilder(
+       listenable: ProfileStore.instance,
+       builder: (context, _) {
+@@ -30,16 +36,18 @@
+           if (_skip.contains(section.title)) continue;
+           final rows = <Widget>[];
+           for (final d in section.fields) {
+-            final f = store.fieldFor(d.key);
+-            if (f.value.isEmpty) continue;
+-            rows.add(d.multi ? _chipsRow(context, d, f) : _row(context, d, f, store));
++            final f = readOnly ? fields![d.key] : store.fieldFor(d.key);
++            if (f == null || f.value.isEmpty) continue;
++            rows.add(d.multi
++                ? _chipsRow(context, d, f, readOnly)
++                : _row(context, d, f, store, readOnly));
+           }
+           if (rows.isEmpty) continue;
+           children.add(_heading(context, section.title));
+           children.addAll(rows);
+         }
+         if (children.isEmpty) {
+-          return _emptyHint(context);
++          return readOnly ? const SizedBox.shrink() : _emptyHint(context);
+         }
+         return Column(
+           crossAxisAlignment: CrossAxisAlignment.start,
+@@ -140,7 +148,13 @@
+       case 'hometown':
+         return (title: 'From ${f.value}', label: 'Hometown');
+       case 'birthday':
+-        final age = store.ageYears;
++        // Age comes from this field's own date, so it is right for other people too.
++        final bd = DateTime.tryParse(f.value);
++        final now = DateTime.now();
++        final raw = bd == null
++            ? -1
++            : NativeCore.ageYears(bd.year, bd.month, bd.day, now.year, now.month, now.day);
++        final age = raw < 0 ? null : raw;
+         return (
+           title: displayValue(d, f),
+           label: age == null ? 'Birthday' : 'Birthday - $age years old',
+@@ -150,11 +164,11 @@
+     }
+   }
+ 
+-  Widget _row(BuildContext context, ProfileFieldDef d, ProfileField f, ProfileStore store) {
++  Widget _row(BuildContext context, ProfileFieldDef d, ProfileField f, ProfileStore store, bool readOnly) {
+     final t = _text(d, f, store);
+     return InkWell(
+       borderRadius: BorderRadius.circular(12),
+-      onTap: () => Navigator.push(context, fieldEditorRoute(d)),
++      onTap: readOnly ? null : () => Navigator.push(context, fieldEditorRoute(d)),
+       child: Padding(
+         padding: const EdgeInsets.symmetric(vertical: 8),
+         child: Row(
+@@ -172,18 +186,21 @@
+                       style: const TextStyle(
+                           fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black)),
+                   const SizedBox(height: 2),
+-                  Text(t.label,
++                  // Your own rows say who can see them, e.g. "Current city · Only me".
++                  Text(readOnly ? t.label : '${t.label} · ${f.audience.label}',
+                       maxLines: 1,
+                       overflow: TextOverflow.ellipsis,
+                       style: const TextStyle(fontSize: 13, color: _grey)),
+                 ],
+               ),
+             ),
+-            const SizedBox(width: 8),
+-            Tooltip(
+-              message: f.audience.label,
+-              child: Icon(f.audience.icon, size: 16, color: _grey),
+-            ),
++            if (!readOnly) ...[
++              const SizedBox(width: 8),
++              Tooltip(
++                message: f.audience.label,
++                child: Icon(f.audience.icon, size: 16, color: _grey),
++              ),
++            ],
+           ],
+         ),
+       ),
+@@ -191,12 +208,12 @@
+   }
+ 
+   /// Hobbies, music, languages ... as tappable chips.
+-  Widget _chipsRow(BuildContext context, ProfileFieldDef d, ProfileField f) {
++  Widget _chipsRow(BuildContext context, ProfileFieldDef d, ProfileField f, bool readOnly) {
+     final items = splitMulti(f.value);
+     if (items.isEmpty) return const SizedBox.shrink();
+     return InkWell(
+       borderRadius: BorderRadius.circular(12),
+-      onTap: () => Navigator.push(context, fieldEditorRoute(d)),
++      onTap: readOnly ? null : () => Navigator.push(context, fieldEditorRoute(d)),
+       child: Padding(
+         padding: const EdgeInsets.symmetric(vertical: 8),
+         child: Column(
+@@ -213,7 +230,7 @@
+                       style: const TextStyle(
+                           fontSize: 14, fontWeight: FontWeight.w700, color: _grey)),
+                 ),
+-                Icon(f.audience.icon, size: 16, color: _grey),
++                if (!readOnly) Icon(f.audience.icon, size: 16, color: _grey),
+               ],
+             ),
+             const SizedBox(height: 8),
+diff -ruN original/lib/profile_post_card.dart swifly/lib/profile_post_card.dart
+--- original/lib/profile_post_card.dart	1970-01-01 00:00:00.000000000 +0000
++++ swifly/lib/profile_post_card.dart	2026-11-14 02:57:15.986433999 +0000
+@@ -0,0 +1,71 @@
++import 'dart:io';
++
++import 'package:flutter/material.dart';
++import 'package:lucide_icons_flutter/lucide_icons.dart';
++
++import 'post_model.dart';
++
++/// One post on a profile, in the same style on your own profile and on other
++/// people's: the picture (if any) on top, the text, then the like, comment and time row.
++class ProfilePostCard extends StatelessWidget {
++  final Post post;
++  const ProfilePostCard({super.key, required this.post});
++
++  @override
++  Widget build(BuildContext context) {
++    final media = post.media.isNotEmpty ? post.media.first : null;
++    final preview = media?.previewPath;
++    return Container(
++      margin: const EdgeInsets.only(bottom: 14),
++      clipBehavior: Clip.antiAlias,
++      decoration: BoxDecoration(
++        color: Colors.white,
++        borderRadius: BorderRadius.circular(16),
++        border: Border.all(color: const Color(0xFFEAEAEA)),
++      ),
++      child: Column(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          if (preview != null)
++            AspectRatio(
++              aspectRatio: 4 / 3,
++              child: Image.file(
++                File(preview),
++                fit: BoxFit.cover,
++                errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFF2F2F2)),
++              ),
++            ),
++          if (post.text.trim().isNotEmpty)
++            Padding(
++              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
++              child: Text(
++                post.text,
++                maxLines: 4,
++                overflow: TextOverflow.ellipsis,
++                style: const TextStyle(color: Colors.black, fontSize: 15),
++              ),
++            ),
++          Padding(
++            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
++            child: Row(
++              children: [
++                const Icon(LucideIcons.heart, size: 14, color: Color(0xFF8E8E8E)),
++                const SizedBox(width: 4),
++                Text('${post.likes}',
++                    style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
++                const SizedBox(width: 14),
++                const Icon(LucideIcons.messageCircle, size: 14, color: Color(0xFF8E8E8E)),
++                const SizedBox(width: 4),
++                Text('${post.totalComments}',
++                    style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
++                const Spacer(),
++                Text(post.timeLabel,
++                    style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
++              ],
++            ),
++          ),
++        ],
 +      ),
 +    );
 +  }
@@ -1568,11 +2065,8 @@ diff -ruN original/lib/suggestions_screen.dart swifly/lib/suggestions_screen.dar
        ),
 diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.dart
 --- original/lib/user_profile_screen.dart	2026-11-14 02:31:04.442573108 +0000
-+++ swifly/lib/user_profile_screen.dart	2026-11-14 02:32:47.484658133 +0000
-@@ -1,18 +1,22 @@
-+import 'dart:io';
-+
- import 'package:flutter/material.dart';
++++ swifly/lib/user_profile_screen.dart	2026-11-14 02:57:32.403747935 +0000
+@@ -2,17 +2,22 @@
  import 'package:lucide_icons_flutter/lucide_icons.dart';
  
  import 'chat_screen.dart';
@@ -1593,12 +2087,15 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
  import 'people_directory.dart';
 -import 'dm_theme.dart';
  import 'post_model.dart';
++import 'profile_details_section.dart';
++import 'profile_post_card.dart';
++import 'profile_store.dart';
 +import 'responsive.dart';
 +import 'story_player_screen.dart';
  
  class UserProfileScreen extends StatefulWidget {
    final Person user;
-@@ -28,6 +32,57 @@
+@@ -28,6 +33,81 @@
  }
  
  class _UserProfileScreenState extends State<UserProfileScreen> {
@@ -1607,6 +2104,8 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 +  int _following = 0;
 +  List<Post> _posts = const [];
 +  bool _postsLoaded = false;
++  Map<String, ProfileField> _details = const {};
++  bool _detailsLoaded = false;
 +
 +  @override
 +  void initState() {
@@ -1621,12 +2120,12 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 +    super.dispose();
 +  }
 +
-+  /// Loads the counts, then this person's posts. Counts come from the database,
-+  /// so they are right even if this person is not in the phone's cache.
++  /// Everything on this profile comes from the database: counts, posts and the
++  /// personal details this viewer may see. The follow lists are fetched early too.
 +  Future<void> _load() async {
 +    _userId = await DatabaseService.instance.idForHandle(widget.user.handle);
-+    await _loadCounts();
-+    await _loadPosts();
++    prefetchConnections(widget.user.handle);
++    await Future.wait([_loadCounts(), _loadPosts(), _loadDetails()]);
 +  }
 +
 +  Future<void> _loadCounts() async {
@@ -1642,21 +2141,43 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 +
 +  Future<void> _loadPosts() async {
 +    final id = _userId;
-+    if (id == null) {
-+      if (mounted) setState(() => _postsLoaded = true);
-+      return;
++    if (id != null) {
++      try {
++        final rows = await DatabaseService.instance.fetchPosts(limit: 50, offset: 0, authorId: id);
++        if (mounted) setState(() => _posts = [for (final r in rows) postFromRow(r)]);
++      } catch (_) {}
 +    }
-+    try {
-+      final rows = await DatabaseService.instance.fetchPosts(limit: 50, offset: 0, authorId: id);
-+      if (mounted) setState(() => _posts = [for (final r in rows) postFromRow(r)]);
-+    } catch (_) {}
 +    if (mounted) setState(() => _postsLoaded = true);
 +  }
++
++  Future<void> _loadDetails() async {
++    try {
++      final rows = await DatabaseService.instance.fetchProfileFieldsOf(widget.user.handle);
++      final known = {for (final s in kProfileSections) for (final d in s.fields) d.key};
++      final followed = FollowStore.instance.isFollowing(widget.user.handle);
++      final out = <String, ProfileField>{};
++      for (final r in rows) {
++        final key = r['key'] ?? '';
++        if (!known.contains(key)) continue;
++        final audience = Audience.values.firstWhere(
++          (a) => a.name == r['audience'],
++          orElse: () => Audience.everyone,
++        );
++        // The database already hides private fields. This is a second check on the device.
++        if (!NativeCore.canSee(audience.index, isOwner: false, viewerFollowsOwner: followed)) continue;
++        out[key] = ProfileField(value: (r['value'] ?? '').trim(), audience: audience);
++      }
++      if (mounted) setState(() => _details = out);
++    } catch (_) {}
++    if (mounted) setState(() => _detailsLoaded = true);
++  }
++
++  String get _bio => (_details['bio']?.value ?? '').trim();
 +
    /// Profile picture. With a story it gets a blue ring and opens the story.
    Widget _storyAvatar(BuildContext context, Person f, R r) {
      final avatar = DmAvatar(handle: f.handle, name: f.name, size: r.s(88));
-@@ -59,7 +114,6 @@
+@@ -59,7 +139,6 @@
    @override
    Widget build(BuildContext context) {
      final f = widget.user;
@@ -1664,7 +2185,7 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
      final r = R.of(context);
  
      return Scaffold(
-@@ -74,119 +128,213 @@
+@@ -74,120 +153,170 @@
          ),
          title: Text(
            f.handle,
@@ -1709,17 +2230,22 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 +              ),
 +              const SizedBox(height: 4),
 +              Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
++              if (_bio.isNotEmpty) ...[
++                const SizedBox(height: 10),
++                Text(_bio, style: const TextStyle(fontSize: 15, color: Colors.black)),
++              ],
 +              const SizedBox(height: 20),
 +              Row(
 +                children: [
 +                  _Stat(label: 'Posts', value: _postsLoaded ? '${_posts.length}' : '…'),
 +                  const SizedBox(width: 32),
 +                  GestureDetector(
++                    behavior: HitTestBehavior.opaque,
 +                    onTap: () => pushOnce(
 +                      context,
 +                      fastRoute(
                          name: 'connections:${f.handle}:followers',
-                         child: ConnectionsScreen(
+-                        child: ConnectionsScreen(
 -                            initialFollowers: true,
 -                            userHandle: f.handle,
 -                            userName: f.name)),
@@ -1738,10 +2264,7 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 -                            initialFollowers: false,
 -                            userHandle: f.handle,
 -                            userName: f.name)),
-+                          initialFollowers: true,
-+                          userHandle: f.handle,
-+                          userName: f.name,
-+                        ),
++                        child: ConnectionsScreen(initialFollowers: true, userHandle: f.handle, userName: f.name),
 +                      ),
 +                    ),
 +                    child: _Stat(label: 'Followers', value: NativeCore.formatCount(_followers)),
@@ -1762,17 +2285,14 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 -                    onPressed: () => pushOnce(
 +                  const SizedBox(width: 32),
 +                  GestureDetector(
++                    behavior: HitTestBehavior.opaque,
 +                    onTap: () => pushOnce(
                        context,
                        fastRoute(
 -                          name: 'chat:${f.handle}',
 -                          child: ChatScreen(handle: f.handle)),
 +                        name: 'connections:${f.handle}:following',
-+                        child: ConnectionsScreen(
-+                          initialFollowers: false,
-+                          userHandle: f.handle,
-+                          userName: f.name,
-+                        ),
++                        child: ConnectionsScreen(initialFollowers: false, userHandle: f.handle, userName: f.name),
 +                      ),
                      ),
 -                    style: ElevatedButton.styleFrom(
@@ -1831,6 +2351,8 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 -              ],
 +                ],
 +              ),
++              const SizedBox(height: 26),
++              _detailsSection(),
 +              const SizedBox(height: 30),
 +              const Text(
 +                'Posts',
@@ -1845,6 +2367,24 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 +        ),
 +      ),
 +    );
++  }
++
++  /// Only the details this viewer may see, read-only, with the same layout as your own profile.
++  Widget _detailsSection() {
++    if (!_detailsLoaded) {
++      return const Padding(
++        padding: EdgeInsets.symmetric(vertical: 16),
++        child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)),
++      );
++    }
++    final hasDetails = _details.entries.any((e) => e.key != 'bio' && e.value.value.isNotEmpty);
++    if (!hasDetails) {
++      return const Padding(
++        padding: EdgeInsets.symmetric(vertical: 8),
++        child: Text('No personal details shared with you', style: TextStyle(color: Color(0xFF8E8E8E))),
++      );
++    }
++    return ProfileDetailsSection(fields: _details);
 +  }
 +
 +  Widget _postsSection() {
@@ -1862,12 +2402,11 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
 +    }
 +    return Column(
 +      crossAxisAlignment: CrossAxisAlignment.stretch,
-+      children: [for (final p in _posts) _ProfilePostCard(post: p)],
++      children: [for (final p in _posts) ProfilePostCard(post: p)],
 +    );
 +  }
 +
-+  /// People to follow next, from the same rule as Discover: never people you
-+  /// already follow, and never people who already follow you.
++  /// People to follow next: never people you already follow, and never people who follow you.
 +  Widget _suggestionsSection(R r) {
 +    return ListenableBuilder(
 +      listenable: Listenable.merge([FollowStore.instance, PeopleDirectory.instance]),
@@ -1903,72 +2442,13 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
            ],
 -        ),
 -        ),
+-      ),
 +        );
 +      },
-+    );
-+  }
-+}
-+
-+/// One of this person's posts: picture (if any), text, and the like and comment counts.
-+class _ProfilePostCard extends StatelessWidget {
-+  final Post post;
-+  const _ProfilePostCard({required this.post});
-+
-+  @override
-+  Widget build(BuildContext context) {
-+    final media = post.media.isNotEmpty ? post.media.first : null;
-+    final preview = media?.previewPath;
-+    return Container(
-+      margin: const EdgeInsets.only(bottom: 14),
-+      clipBehavior: Clip.antiAlias,
-+      decoration: BoxDecoration(
-+        color: Colors.white,
-+        borderRadius: BorderRadius.circular(16),
-+        border: Border.all(color: const Color(0xFFEAEAEA)),
-+      ),
-+      child: Column(
-+        crossAxisAlignment: CrossAxisAlignment.start,
-+        children: [
-+          if (preview != null)
-+            AspectRatio(
-+              aspectRatio: 4 / 3,
-+              child: Image.file(
-+                File(preview),
-+                fit: BoxFit.cover,
-+                errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFF2F2F2)),
-+              ),
-+            ),
-+          if (post.text.trim().isNotEmpty)
-+            Padding(
-+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-+              child: Text(
-+                post.text,
-+                maxLines: 4,
-+                overflow: TextOverflow.ellipsis,
-+                style: const TextStyle(color: Colors.black, fontSize: 15),
-+              ),
-+            ),
-+          Padding(
-+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-+            child: Row(
-+              children: [
-+                const Icon(LucideIcons.heart, size: 14, color: Color(0xFF8E8E8E)),
-+                const SizedBox(width: 4),
-+                Text('${post.likes}', style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-+                const SizedBox(width: 14),
-+                const Icon(LucideIcons.messageCircle, size: 14, color: Color(0xFF8E8E8E)),
-+                const SizedBox(width: 4),
-+                Text('${post.totalComments}', style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-+                const Spacer(),
-+                Text(post.timeLabel, style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-+              ],
-+            ),
-+          ),
-+        ],
-       ),
      );
    }
-@@ -212,23 +360,25 @@
+ }
+@@ -212,23 +341,25 @@
          child: Column(
            children: [
              const SizedBox(height: 12),
@@ -2009,7 +2489,7 @@ diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.d
              ),
              const Spacer(),
              Padding(
-@@ -251,9 +401,10 @@
+@@ -251,9 +382,10 @@
    Widget build(BuildContext context) {
      return Column(
        children: [

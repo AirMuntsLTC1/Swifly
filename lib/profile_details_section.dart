@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'edit_profile_screen.dart';
 import 'logo_service.dart';
+import 'native_bridge.dart';
 import 'profile_store.dart';
 import 'responsive.dart';
 import 'suggest_engine.dart';
@@ -15,12 +16,17 @@ const Color _brandBlue = Color(0xFF1D6FDC);
 /// logo, places show a pin, and only the fields you filled in appear.
 /// Tap any row to change it.
 class ProfileDetailsSection extends StatelessWidget {
-  const ProfileDetailsSection({super.key});
+  /// null: your own details (editable, audience shown).
+  /// Given: another person's details, already filtered by the database. Read-only.
+  final Map<String, ProfileField>? fields;
+
+  const ProfileDetailsSection({super.key, this.fields});
 
   static const Set<String> _skip = {'Intro'};
 
   @override
   Widget build(BuildContext context) {
+    final readOnly = fields != null;
     return ListenableBuilder(
       listenable: ProfileStore.instance,
       builder: (context, _) {
@@ -30,16 +36,18 @@ class ProfileDetailsSection extends StatelessWidget {
           if (_skip.contains(section.title)) continue;
           final rows = <Widget>[];
           for (final d in section.fields) {
-            final f = store.fieldFor(d.key);
-            if (f.value.isEmpty) continue;
-            rows.add(d.multi ? _chipsRow(context, d, f) : _row(context, d, f, store));
+            final f = readOnly ? fields![d.key] : store.fieldFor(d.key);
+            if (f == null || f.value.isEmpty) continue;
+            rows.add(d.multi
+                ? _chipsRow(context, d, f, readOnly)
+                : _row(context, d, f, store, readOnly));
           }
           if (rows.isEmpty) continue;
           children.add(_heading(context, section.title));
           children.addAll(rows);
         }
         if (children.isEmpty) {
-          return _emptyHint(context);
+          return readOnly ? const SizedBox.shrink() : _emptyHint(context);
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,7 +148,13 @@ class ProfileDetailsSection extends StatelessWidget {
       case 'hometown':
         return (title: 'From ${f.value}', label: 'Hometown');
       case 'birthday':
-        final age = store.ageYears;
+        // Age comes from this field's own date, so it is right for other people too.
+        final bd = DateTime.tryParse(f.value);
+        final now = DateTime.now();
+        final raw = bd == null
+            ? -1
+            : NativeCore.ageYears(bd.year, bd.month, bd.day, now.year, now.month, now.day);
+        final age = raw < 0 ? null : raw;
         return (
           title: displayValue(d, f),
           label: age == null ? 'Birthday' : 'Birthday - $age years old',
@@ -150,11 +164,11 @@ class ProfileDetailsSection extends StatelessWidget {
     }
   }
 
-  Widget _row(BuildContext context, ProfileFieldDef d, ProfileField f, ProfileStore store) {
+  Widget _row(BuildContext context, ProfileFieldDef d, ProfileField f, ProfileStore store, bool readOnly) {
     final t = _text(d, f, store);
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () => Navigator.push(context, fieldEditorRoute(d)),
+      onTap: readOnly ? null : () => Navigator.push(context, fieldEditorRoute(d)),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -172,18 +186,21 @@ class ProfileDetailsSection extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black)),
                   const SizedBox(height: 2),
-                  Text(t.label,
+                  // Your own rows say who can see them, e.g. "Current city · Only me".
+                  Text(readOnly ? t.label : '${t.label} · ${f.audience.label}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 13, color: _grey)),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            Tooltip(
-              message: f.audience.label,
-              child: Icon(f.audience.icon, size: 16, color: _grey),
-            ),
+            if (!readOnly) ...[
+              const SizedBox(width: 8),
+              Tooltip(
+                message: f.audience.label,
+                child: Icon(f.audience.icon, size: 16, color: _grey),
+              ),
+            ],
           ],
         ),
       ),
@@ -191,12 +208,12 @@ class ProfileDetailsSection extends StatelessWidget {
   }
 
   /// Hobbies, music, languages ... as tappable chips.
-  Widget _chipsRow(BuildContext context, ProfileFieldDef d, ProfileField f) {
+  Widget _chipsRow(BuildContext context, ProfileFieldDef d, ProfileField f, bool readOnly) {
     final items = splitMulti(f.value);
     if (items.isEmpty) return const SizedBox.shrink();
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () => Navigator.push(context, fieldEditorRoute(d)),
+      onTap: readOnly ? null : () => Navigator.push(context, fieldEditorRoute(d)),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
@@ -213,7 +230,7 @@ class ProfileDetailsSection extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w700, color: _grey)),
                 ),
-                Icon(f.audience.icon, size: 16, color: _grey),
+                if (!readOnly) Icon(f.audience.icon, size: 16, color: _grey),
               ],
             ),
             const SizedBox(height: 8),

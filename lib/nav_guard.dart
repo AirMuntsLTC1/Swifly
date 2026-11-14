@@ -23,16 +23,10 @@ Route<T> fastRoute<T>({required Widget child, String? name}) {
   );
 }
 
-DateTime? _lastPush;
-
-/// Pushes [route] once. Ignores the tap when:
-///  - another push happened less than 350 ms ago (fast double tap), or
-///  - the screen on top already has the same route name (same screen twice).
+/// Pushes [route]. Ignores the tap only when the screen on top already has the
+/// same route name (the same screen opened twice). It used to also drop every
+/// tap made within 350 ms of an earlier push, which is why taps needed repeating.
 Future<T?> pushOnce<T>(BuildContext context, Route<T> route) {
-  final now = DateTime.now();
-  if (_lastPush != null && now.difference(_lastPush!).inMilliseconds < 350) {
-    return Future<T?>.value(null);
-  }
   final nav = Navigator.of(context);
   final name = route.settings.name;
   if (name != null) {
@@ -43,6 +37,5 @@ Future<T?> pushOnce<T>(BuildContext context, Route<T> route) {
     });
     if (top?.settings.name == name) return Future<T?>.value(null);
   }
-  _lastPush = now;
   return nav.push<T>(route);
 }

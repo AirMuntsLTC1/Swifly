@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'follow_store.dart';
+import 'people_directory.dart';
 
 const Color _brandBlue = Color(0xFF1D6FDC);
 
@@ -52,6 +53,8 @@ class FollowButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // You cannot follow yourself, so no button is shown on your own row.
+    if (handle == kMeHandle) return const SizedBox.shrink();
     return ListenableBuilder(
       listenable: FollowStore.instance,
       builder: (context, _) {

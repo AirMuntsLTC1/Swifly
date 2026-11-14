@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -15,6 +13,9 @@ import 'nav_guard.dart';
 import 'native_bridge.dart';
 import 'people_directory.dart';
 import 'post_model.dart';
+import 'profile_details_section.dart';
+import 'profile_post_card.dart';
+import 'profile_store.dart';
 import 'responsive.dart';
 import 'story_player_screen.dart';
 
@@ -37,6 +38,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   int _following = 0;
   List<Post> _posts = const [];
   bool _postsLoaded = false;
+  Map<String, ProfileField> _details = const {};
+  bool _detailsLoaded = false;
 
   @override
   void initState() {
@@ -51,12 +54,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     super.dispose();
   }
 
-  /// Loads the counts, then this person's posts. Counts come from the database,
-  /// so they are right even if this person is not in the phone's cache.
+  /// Everything on this profile comes from the database: counts, posts and the
+  /// personal details this viewer may see. The follow lists are fetched early too.
   Future<void> _load() async {
     _userId = await DatabaseService.instance.idForHandle(widget.user.handle);
-    await _loadCounts();
-    await _loadPosts();
+    prefetchConnections(widget.user.handle);
+    await Future.wait([_loadCounts(), _loadPosts(), _loadDetails()]);
   }
 
   Future<void> _loadCounts() async {
@@ -72,16 +75,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Future<void> _loadPosts() async {
     final id = _userId;
-    if (id == null) {
-      if (mounted) setState(() => _postsLoaded = true);
-      return;
+    if (id != null) {
+      try {
+        final rows = await DatabaseService.instance.fetchPosts(limit: 50, offset: 0, authorId: id);
+        if (mounted) setState(() => _posts = [for (final r in rows) postFromRow(r)]);
+      } catch (_) {}
     }
-    try {
-      final rows = await DatabaseService.instance.fetchPosts(limit: 50, offset: 0, authorId: id);
-      if (mounted) setState(() => _posts = [for (final r in rows) postFromRow(r)]);
-    } catch (_) {}
     if (mounted) setState(() => _postsLoaded = true);
   }
+
+  Future<void> _loadDetails() async {
+    try {
+      final rows = await DatabaseService.instance.fetchProfileFieldsOf(widget.user.handle);
+      final known = {for (final s in kProfileSections) for (final d in s.fields) d.key};
+      final followed = FollowStore.instance.isFollowing(widget.user.handle);
+      final out = <String, ProfileField>{};
+      for (final r in rows) {
+        final key = r['key'] ?? '';
+        if (!known.contains(key)) continue;
+        final audience = Audience.values.firstWhere(
+          (a) => a.name == r['audience'],
+          orElse: () => Audience.everyone,
+        );
+        // The database already hides private fields. This is a second check on the device.
+        if (!NativeCore.canSee(audience.index, isOwner: false, viewerFollowsOwner: followed)) continue;
+        out[key] = ProfileField(value: (r['value'] ?? '').trim(), audience: audience);
+      }
+      if (mounted) setState(() => _details = out);
+    } catch (_) {}
+    if (mounted) setState(() => _detailsLoaded = true);
+  }
+
+  String get _bio => (_details['bio']?.value ?? '').trim();
 
   /// Profile picture. With a story it gets a blue ring and opens the story.
   Widget _storyAvatar(BuildContext context, Person f, R r) {
@@ -147,36 +172,34 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
               const SizedBox(height: 4),
               Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
+              if (_bio.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(_bio, style: const TextStyle(fontSize: 15, color: Colors.black)),
+              ],
               const SizedBox(height: 20),
               Row(
                 children: [
                   _Stat(label: 'Posts', value: _postsLoaded ? '${_posts.length}' : '…'),
                   const SizedBox(width: 32),
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => pushOnce(
                       context,
                       fastRoute(
                         name: 'connections:${f.handle}:followers',
-                        child: ConnectionsScreen(
-                          initialFollowers: true,
-                          userHandle: f.handle,
-                          userName: f.name,
-                        ),
+                        child: ConnectionsScreen(initialFollowers: true, userHandle: f.handle, userName: f.name),
                       ),
                     ),
                     child: _Stat(label: 'Followers', value: NativeCore.formatCount(_followers)),
                   ),
                   const SizedBox(width: 32),
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => pushOnce(
                       context,
                       fastRoute(
                         name: 'connections:${f.handle}:following',
-                        child: ConnectionsScreen(
-                          initialFollowers: false,
-                          userHandle: f.handle,
-                          userName: f.name,
-                        ),
+                        child: ConnectionsScreen(initialFollowers: false, userHandle: f.handle, userName: f.name),
                       ),
                     ),
                     child: _Stat(label: 'Following', value: NativeCore.formatCount(_following)),
@@ -210,6 +233,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 26),
+              _detailsSection(),
               const SizedBox(height: 30),
               const Text(
                 'Posts',
@@ -224,6 +249,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
       ),
     );
+  }
+
+  /// Only the details this viewer may see, read-only, with the same layout as your own profile.
+  Widget _detailsSection() {
+    if (!_detailsLoaded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)),
+      );
+    }
+    final hasDetails = _details.entries.any((e) => e.key != 'bio' && e.value.value.isNotEmpty);
+    if (!hasDetails) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Text('No personal details shared with you', style: TextStyle(color: Color(0xFF8E8E8E))),
+      );
+    }
+    return ProfileDetailsSection(fields: _details);
   }
 
   Widget _postsSection() {
@@ -241,12 +284,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [for (final p in _posts) _ProfilePostCard(post: p)],
+      children: [for (final p in _posts) ProfilePostCard(post: p)],
     );
   }
 
-  /// People to follow next, from the same rule as Discover: never people you
-  /// already follow, and never people who already follow you.
+  /// People to follow next: never people you already follow, and never people who follow you.
   Widget _suggestionsSection(R r) {
     return ListenableBuilder(
       listenable: Listenable.merge([FollowStore.instance, PeopleDirectory.instance]),
@@ -275,67 +317,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ],
         );
       },
-    );
-  }
-}
-
-/// One of this person's posts: picture (if any), text, and the like and comment counts.
-class _ProfilePostCard extends StatelessWidget {
-  final Post post;
-  const _ProfilePostCard({required this.post});
-
-  @override
-  Widget build(BuildContext context) {
-    final media = post.media.isNotEmpty ? post.media.first : null;
-    final preview = media?.previewPath;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEAEAEA)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (preview != null)
-            AspectRatio(
-              aspectRatio: 4 / 3,
-              child: Image.file(
-                File(preview),
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFF2F2F2)),
-              ),
-            ),
-          if (post.text.trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              child: Text(
-                post.text,
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.black, fontSize: 15),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: Row(
-              children: [
-                const Icon(LucideIcons.heart, size: 14, color: Color(0xFF8E8E8E)),
-                const SizedBox(width: 4),
-                Text('${post.likes}', style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-                const SizedBox(width: 14),
-                const Icon(LucideIcons.messageCircle, size: 14, color: Color(0xFF8E8E8E)),
-                const SizedBox(width: 4),
-                Text('${post.totalComments}', style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-                const Spacer(),
-                Text(post.timeLabel, style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -21,6 +21,7 @@ import 'story_viewer_screen.dart';
 import 'user_profile_screen.dart';
 import 'profile_details_section.dart';
 import 'profile_store.dart';
+import 'profile_post_card.dart';
 import 'connections_screen.dart';
 import 'suggestions_screen.dart';
 import 'search_history.dart';
@@ -678,34 +679,13 @@ class _ProfileTabState extends State<ProfileTab> {
                           style: TextStyle(color: Color(0xFF8E8E8E))),
                     );
                   }
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final p in mine) ...[
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(r.pad, 12, r.pad, 0),
-                          child: Row(
-                            children: [
-                              const Icon(LucideIcons.calendar, size: 15, color: Color(0xFF65676B)),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'Posted ${_postStamp(p.created)}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF65676B)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        PostCard(key: ValueKey('mine-${p.id}'), post: p),
-                        const Divider(height: 1, color: Color(0xFFEAEAEA)),
-                      ],
-                    ],
+                  // Same card style as other people's profiles.
+                  return Padding(
+                    padding: EdgeInsets.symmetric(horizontal: r.pad),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [for (final p in mine) ProfilePostCard(post: p)],
+                    ),
                   );
                 },
               ),

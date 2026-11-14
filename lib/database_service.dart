@@ -704,6 +704,18 @@ class DatabaseService {
   }
 
   /// Rows: {'key': 'work', 'value': 'Dev at Google', 'audience': 'everyone'}
+  /// Personal details of one person that you are allowed to see. The database
+  /// applies the audience rules (Only me / Followers / Everyone), so private
+  /// fields never come back for anyone else.
+  Future<List<Map<String, String>>> fetchProfileFieldsOf(String handle) async {
+    final userId = await _idForHandle(handle);
+    final rows = await _db.from('profile_fields').select('key,value,audience').eq('user_id', userId);
+    return [
+      for (final r in rows)
+        {'key': '${r['key']}', 'value': '${r['value']}', 'audience': '${r['audience']}'},
+    ];
+  }
+
   Future<List<Map<String, String>>> fetchProfileFields() async {
     final rows = await _db.from('profile_fields').select('key,value,audience').eq('user_id', _requireMe());
     return [

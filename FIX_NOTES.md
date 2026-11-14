@@ -39,3 +39,30 @@
 4. Suggestions and Discover list nobody you follow or who follows you.
 5. Search finds others, never your own account.
 6. Open someone's profile: posts, Followers and Following show real numbers.
+
+## Round 2
+
+### Personal details (audience rules)
+- Other people's details now load from the database (fetchProfileFieldsOf). The
+  database applies Only me / Followers / Everyone, and the app checks again on the device.
+- Their profile shows those details read-only, with the same layout as your own.
+- Your own profile shows the audience next to each field, e.g. "Current city · Only me".
+- Age is calculated from each field's own birthday, so it is right for other people too.
+
+### Followers and Following taps
+- pushOnce no longer drops taps made within 350 ms of an earlier push. It only blocks
+  opening the same screen twice. This is why several taps were needed.
+- Another person's lists are prefetched when their profile opens, and a list
+  opened again shows at once while it refreshes.
+
+### Follow back showing "Follow"
+- FollowStore keeps your pending change until the server confirms it, so a late
+  reload cannot undo it.
+- The follow lists are reloaded from the database whenever they open, so labels
+  match the server.
+- A failed follow or unfollow is undone and the reason is shown, instead of failing silently.
+- No follow button is shown on your own account.
+
+### Posts
+- Your own profile and other profiles use the same post card (picture on top,
+  text, then likes, comments and time), taken from the screenshot.
