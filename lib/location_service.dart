@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'place_style.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// A real place: "Lagos, Lagos State, Nigeria".
@@ -58,6 +59,34 @@ class LocationService {
   final Map<String, List<PlaceResult>> _searchCache = {};
 
   // ---------- device location ----------
+
+  /// Latitude and longitude of the phone. Asks for permission first.
+  /// Null if the service is off, permission is refused, or there is no fix.
+  Future<({double lat, double lon})?> currentCoords() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
+        return null;
+      }
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+        ).timeout(const Duration(seconds: 15));
+      } catch (_) {
+        pos = await Geolocator.getLastKnownPosition();
+      }
+      if (pos == null) return null;
+      return (lat: pos.latitude, lon: pos.longitude);
+    } catch (_) {
+      return null;
+    }
+  }
+
 
   /// Asks Android for permission (showing the real "Allow location" popup),
   /// reads the GPS position and turns it into a city name.
@@ -382,7 +411,7 @@ class _UseLocationButtonState extends State<UseLocationButton> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2.4, color: blue),
                   )
-                : const Icon(LucideIcons.mapPin, size: 20, color: blue),
+                : const Icon(LucideIcons.mapPin, size: 20, color: kPlaceRed),
             const SizedBox(width: 12),
             Expanded(
               child: Text(

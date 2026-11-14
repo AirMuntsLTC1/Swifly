@@ -66,3 +66,28 @@
 ### Posts
 - Your own profile and other profiles use the same post card (picture on top,
   text, then likes, comments and time), taken from the screenshot.
+
+## Round 3: pictures, schools near you, red places
+
+### Schools
+- When the school field opens, the phone's location is requested. Schools within
+  about 15 km are listed under "Schools near <city>", with logos from Wikidata
+  (where Wikidata has one) and a school icon otherwise. The list is saved on the
+  phone for 7 days.
+
+### Pictures (no API key needed except as noted)
+- Music: artist search and album artwork from iTunes (no key).
+- Sports: team badge or jersey, and athlete photo, from TheSportsDB with the
+  public key "3". Athlete rows show their team as the subtitle.
+- Hobbies, movies, TV, games: Wikipedia thumbnails and search (no key).
+- Pictures are downloaded once and kept on the phone. Rows without a picture show a Lucide icon.
+
+### Places
+- Every location icon is a red Lucide map pin (kPlaceRed), in the picker, the
+  profile and "Use my current location".
+
+### Limits
+- Sports search by exact name only (free TheSportsDB tier). Typing part of a name
+  finds Wikipedia matches, not every team or athlete.
+- Hobby pictures come from Wikipedia and may be a generic image or none.
+- School logos only appear for schools that have a logo on Wikidata.

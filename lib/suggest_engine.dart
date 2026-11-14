@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'database_service.dart';
+import 'external_media.dart';
+import 'place_style.dart';
 import 'location_service.dart';
 import 'logo_service.dart';
 import 'native_bridge.dart';
@@ -259,6 +261,8 @@ class SuggestService {
         }
       } else if (kind == SuggestKind.company || kind == SuggestKind.school) {
         out.addAll(await LogoService.instance.searchOrgs(kind, q));
+      } else if (kind.hasPicture) {
+        out.addAll(await ExternalMedia.instance.searchNames(kind, q));
       }
     } catch (_) {}
     try {

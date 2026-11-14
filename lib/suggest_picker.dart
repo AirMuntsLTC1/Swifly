@@ -6,6 +6,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'location_service.dart';
 import 'logo_service.dart';
+import 'external_media.dart';
+import 'place_style.dart';
 import 'suggest_engine.dart';
 
 const Color _brandBlue = Color(0xFF1D6FDC);
@@ -57,6 +59,7 @@ class _SuggestPickerState extends State<SuggestPicker> {
   bool _open = false;
   int _ticket = 0;
   Timer? _debounce;
+  NearbySchools? _nearby;
 
   SuggestService get _service => SuggestService.instance;
 
@@ -70,6 +73,7 @@ class _SuggestPickerState extends State<SuggestPicker> {
     }
     _results = _service.searchLocal(widget.kind, '', exclude: _chosen.toSet(), limit: _kMaxRows);
     _focus.addListener(_onFocusChanged);
+    if (widget.kind == SuggestKind.school) _loadNearby();
     if (widget.autofocus) {
       _open = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -252,6 +256,9 @@ class _SuggestPickerState extends State<SuggestPicker> {
   Widget _leading(SuggestEntry? e, IconData icon, Color iconColor, Color circle) {
     final kind = widget.kind;
     if (e != null && (kind == SuggestKind.company || kind == SuggestKind.school)) {
+      if (e.logo.isNotEmpty && kind == SuggestKind.school) {
+        return SuggestLogo(kind: kind, title: e.title, knownUrl: e.logo, icon: icon, circle: circle);
+      }
       return LogoAvatar(kind: kind, name: e.title, size: 40, knownUrl: e.logo);
     }
     if (e != null && e.flag.isNotEmpty) {
@@ -261,6 +268,26 @@ class _SuggestPickerState extends State<SuggestPicker> {
         decoration: BoxDecoration(color: circle, shape: BoxShape.circle),
         alignment: Alignment.center,
         child: Text(e.flag, style: const TextStyle(fontSize: 22)),
+      );
+    }
+    // Places: red location pin, always.
+    if (e != null && kind == SuggestKind.place) {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(color: circle, shape: BoxShape.circle),
+        child: const Icon(LucideIcons.mapPin, size: 20, color: kPlaceRed),
+      );
+    }
+    // Music, sports, hobbies, movies, TV, games: real picture, else the Lucide icon.
+    if (e != null && kind.hasPicture) {
+      return SuggestLogo(
+        kind: kind,
+        title: e.title,
+        knownUrl: e.logo,
+        icon: icon,
+        iconColor: iconColor,
+        circle: circle,
       );
     }
     return Container(
@@ -315,6 +342,29 @@ class _SuggestPickerState extends State<SuggestPicker> {
     );
   }
 
+  /// Asks for the phone's location and lists the schools around it, with their logos.
+  Future<void> _loadNearby() async {
+    final near = await ExternalMedia.instance.schoolsNearPhone();
+    if (!mounted || near == null || near.entries.isEmpty) return;
+    setState(() {
+      _nearby = near;
+      if (_controller.text.trim().isEmpty) {
+        _results = [
+          for (final e in near.entries)
+            if (!_chosen.contains(e.value)) e,
+        ].take(_kMaxRows).toList();
+      }
+    });
+  }
+
+  String _headerText() {
+    final n = _nearby;
+    if (n != null && n.entries.isNotEmpty) {
+      return n.city.isEmpty ? 'Schools near you' : 'Schools near ${n.city}';
+    }
+    return _service.hasRecent(widget.kind) ? 'Recent and popular' : 'Popular';
+  }
+
   Widget _panel() {
     final query = _controller.text;
     final typed = query.trim();
@@ -324,7 +374,7 @@ class _SuggestPickerState extends State<SuggestPicker> {
       rows.add(Padding(
         padding: const EdgeInsets.only(top: 14, bottom: 2),
         child: Text(
-          _service.hasRecent(widget.kind) ? 'Recent and popular' : 'Popular',
+          _headerText(),
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _grey),
         ),
       ));

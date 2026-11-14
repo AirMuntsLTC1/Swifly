@@ -44,7 +44,9 @@ class AvatarCache {
         return file.path;
       }
 
-      final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 8)
+        ..userAgent = 'SwiflyApp/1.0 (social app)';
       try {
         final req = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 10));
         final res = await req.close().timeout(const Duration(seconds: 15));

@@ -85,7 +85,7 @@ final List<ProfileSection> kProfileSections = [
   ]),
   ProfileSection('Personal details', [
     ProfileFieldDef('city', 'Current city or town', LucideIcons.mapPin, suggest: SuggestKind.place),
-    ProfileFieldDef('hometown', 'Hometown', LucideIcons.house, suggest: SuggestKind.place),
+    ProfileFieldDef('hometown', 'Hometown', LucideIcons.mapPin, suggest: SuggestKind.place),
     ProfileFieldDef('birthday', 'Birthday', LucideIcons.cake, kind: FieldKind.date),
     ProfileFieldDef('gender', 'Gender', LucideIcons.user,
         kind: FieldKind.choice, choices: ['Male', 'Female', 'Custom']),

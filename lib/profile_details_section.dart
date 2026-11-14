@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'edit_profile_screen.dart';
 import 'logo_service.dart';
 import 'native_bridge.dart';
+import 'place_style.dart';
 import 'profile_store.dart';
 import 'responsive.dart';
 import 'suggest_engine.dart';
@@ -72,7 +73,7 @@ class ProfileDetailsSection extends StatelessWidget {
           ),
           child: const Row(
             children: [
-              Icon(LucideIcons.mapPin, size: 20, color: Colors.black),
+              Icon(LucideIcons.mapPin, size: 20, color: kPlaceRed),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -124,7 +125,7 @@ class ProfileDetailsSection extends StatelessWidget {
       width: size,
       height: size,
       decoration: const BoxDecoration(color: Color(0xFFF0F2F5), shape: BoxShape.circle),
-      child: Icon(d.icon, size: r.s(22), color: Colors.black),
+      child: Icon(d.icon, size: r.s(22), color: d.suggest == SuggestKind.place ? kPlaceRed : Colors.black),
     );
   }
 
