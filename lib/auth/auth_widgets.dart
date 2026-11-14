@@ -276,4 +276,3 @@ class AuthLink extends StatelessWidget {
     );
   }
 }
-

@@ -69,6 +69,3 @@ $cache->put($key, $entry);
 $cache->evict(SWIFLY_CACHE_LIMIT_BYTES);
 $entry['cached'] = false;
 swifly_emit($entry);
-
-
-

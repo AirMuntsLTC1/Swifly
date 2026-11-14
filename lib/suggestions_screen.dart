@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'nav_guard.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'follow_button.dart';
-import 'user_profile_screen.dart';
+import 'follow_store.dart';
+import 'nav_guard.dart';
 import 'people_directory.dart';
-import 'dm_theme.dart';
+import 'person_row.dart';
+import 'user_profile_screen.dart';
 
+/// Everyone you could follow. People you already follow, and people who follow
+/// you (follow back), are never listed here.
 class SuggestionsScreen extends StatelessWidget {
   const SuggestionsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Filter out your own account
-    final others = kPeople.where((p) => p.handle != kMeHandle).toList();
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -30,19 +30,28 @@ class SuggestionsScreen extends StatelessWidget {
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
         ),
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: others.length,
-        separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
-        itemBuilder: (context, i) {
-          final p = others[i];
-          return ListTile(
-            onTap: () => pushOnce(context, UserProfileScreen.route(p)),
-            contentPadding: EdgeInsets.zero,
-            leading: DmAvatar(handle: p.handle, name: p.name, size: 40),
-            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(p.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
-            trailing: FollowButton(handle: p.handle, compact: true),
+      body: ListenableBuilder(
+        listenable: Listenable.merge([FollowStore.instance, PeopleDirectory.instance]),
+        builder: (context, _) {
+          final others = FollowStore.instance.suggestedPeople();
+          if (others.isEmpty) {
+            return const Center(
+              child: Text('No new suggestions right now',
+                  style: TextStyle(color: Color(0xFF8E8E8E))),
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: others.length,
+            separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
+            itemBuilder: (context, i) {
+              final p = others[i];
+              return PersonRow(
+                person: p,
+                onTap: () => pushOnce(context, UserProfileScreen.route(p)),
+                trailing: FollowButton(handle: p.handle, compact: true),
+              );
+            },
           );
         },
       ),

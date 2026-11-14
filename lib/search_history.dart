@@ -29,6 +29,3 @@ class SearchHistory extends ChangeNotifier {
     notifyListeners();
   }
 }
-
-
-

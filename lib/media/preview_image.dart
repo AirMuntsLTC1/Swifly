@@ -38,6 +38,3 @@ class PreviewImage extends StatelessWidget {
     );
   }
 }
-
-
-

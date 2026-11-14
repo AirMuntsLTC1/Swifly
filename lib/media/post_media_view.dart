@@ -77,6 +77,3 @@ class _PostMediaViewState extends State<PostMediaView> {
     );
   }
 }
-
-
-

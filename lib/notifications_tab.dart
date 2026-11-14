@@ -290,6 +290,3 @@ class NotifAvatar extends StatelessWidget {
     );
   }
 }
-
-
-

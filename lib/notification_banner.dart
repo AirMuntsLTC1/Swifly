@@ -135,6 +135,3 @@ class _BannerCardState extends State<_BannerCard> with SingleTickerProviderState
     );
   }
 }
-
-
-

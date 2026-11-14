@@ -13,13 +13,16 @@ Route<T> _fade<T>(Widget page) => PageRouteBuilder<T>(
     );
 
 /// Call after a successful login / register / password reset.
-/// Loads this user's data, then opens Home and clears the sign-in screens.
+/// Opens Home straight away. The user's data loads in the background, and the
+/// screens update when it arrives. Waiting for every query first was what made
+/// sign-in take about a minute.
 Future<void> completeSignIn(BuildContext context) async {
   final nav = Navigator.of(context);
   AuthService.instance.applyUser();
-  await loadAppData();
-  startLiveActivity();
+  await loadLocalAppData(); // instant: last saved people and follows from the phone
   nav.pushAndRemoveUntil(_fade(const HomeScreen()), (_) => false);
+  loadAppData();
+  startLiveActivity();
 }
 
 /// Signs out, wipes this user's data from memory and returns to Sign in.
@@ -33,4 +36,3 @@ Future<void> logOut(BuildContext context) async {
 
 /// First screen after the splash.
 Widget startScreen() => AuthService.instance.needsLogin ? const SignInScreen() : const HomeScreen();
-

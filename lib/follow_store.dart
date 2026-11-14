@@ -47,7 +47,14 @@ class FollowStore extends ChangeNotifier {
     return FollowState.none;
   }
 
-  /// Replaces both lists. Called with mock data now, database results later.
+  /// People you can suggest: not you, not followed by you, and not following you.
+  /// Anyone you follow or who follows you is left out of every suggestion list.
+  List<Person> suggestedPeople() => [
+        for (final p in kPeople)
+          if (p.handle != kMeHandle && stateOf(p.handle) == FollowState.none) p,
+      ];
+
+  /// Replaces both lists from the database (or from the local cache on startup).
   void load({
     Set<String> following = const <String>{},
     Set<String> followers = const <String>{},
@@ -102,6 +109,3 @@ Person personFor(String handle) {
   }
   return Person(handle.replaceFirst('@', ''), handle);
 }
-
-
-

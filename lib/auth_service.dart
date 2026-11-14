@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'people_directory.dart';
@@ -53,7 +55,16 @@ class AuthService {
 
   SupabaseClient get client => Supabase.instance.client;
 
-  bool get signedIn => kAuthEnabled && client.auth.currentSession != null;
+  /// Never throws: if Supabase has not started yet, the answer is "not signed in".
+  bool get signedIn {
+    if (!kAuthEnabled) return false;
+    try {
+      return client.auth.currentSession != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   bool get needsLogin => kAuthEnabled && !signedIn;
 
   /// Copies the signed-in user's name and @username into [CurrentUser].
@@ -62,7 +73,8 @@ class AuthService {
     final u = client.auth.currentUser;
     if (u == null) return;
     final meta = u.userMetadata ?? const <String, dynamic>{};
-    final username = (meta['username'] ?? u.email?.split('@').first ?? '').toString();
+    // The database stores usernames in lower case, so compare in lower case too.
+    final username = (meta['username'] ?? u.email?.split('@').first ?? '').toString().toLowerCase();
     final display = (meta['display_name'] ?? '').toString().trim();
     CurrentUser.handle = '@$username';
     CurrentUser.name = display.isEmpty ? username : display;
@@ -76,11 +88,16 @@ class AuthService {
       var result = AuthResult.fromJson(json);
       final session = json['session'];
       if (result.ok && session is Map) {
-        final refresh = session['refresh_token']?.toString() ?? '';
-        if (refresh.isNotEmpty) {
-          await client.auth.setSession(refresh);
-          result = AuthResult.fromJson(json, hasSession: true);
+        // The Edge Function already signed the user in and returned the full session.
+        // Restoring it locally needs no extra network round trip (setSession did one,
+        // which made every login wait longer).
+        try {
+          await client.auth.recoverSession(jsonEncode(session));
+        } catch (_) {
+          final refresh = session['refresh_token']?.toString() ?? '';
+          if (refresh.isNotEmpty) await client.auth.setSession(refresh);
         }
+        result = AuthResult.fromJson(json, hasSession: signedIn);
       }
       return result;
     } on FunctionException catch (e) {
@@ -127,4 +144,3 @@ class AuthService {
     } catch (_) {}
   }
 }
-

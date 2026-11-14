@@ -30,6 +30,3 @@ class UploadManager extends ChangeNotifier {
     });
   }
 }
-
-
-

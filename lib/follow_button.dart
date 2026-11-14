@@ -99,6 +99,3 @@ class FollowButton extends StatelessWidget {
     );
   }
 }
-
-
-

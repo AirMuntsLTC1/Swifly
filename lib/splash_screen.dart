@@ -27,19 +27,18 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 
   Future<void> _initApp() async {
-    try {
-      await AuthService.init().timeout(const Duration(seconds: 10));
-      if (!AuthService.instance.needsLogin) {
-        AuthService.instance.applyUser();
-        setState(() => _status = 'Loading your feed...');
-        await PostStore.instance.loadCache(); // Load offline cache instantly
-        
-        // Load network data in the background
-        loadAppData();
-        startLiveActivity();
-      }
-    } catch (e) {
-      debugPrint('Init Error: $e');
+    final signedIn = await _bootAuth();
+    if (signedIn) {
+      AuthService.instance.applyUser();
+      // Show the saved feed and people right away. Each read is local and quick,
+      // and never waits longer than 2 seconds.
+      await Future.wait([
+        PostStore.instance.loadCache().timeout(const Duration(seconds: 2), onTimeout: () {}),
+        loadLocalAppData().timeout(const Duration(seconds: 2), onTimeout: () {}),
+      ]);
+      // Fresh data from the server arrives in the background.
+      loadAppData();
+      startLiveActivity();
     }
 
     if (!mounted) return;
@@ -48,6 +47,17 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       pageBuilder: (context, animation, secondaryAnimation) => startScreen(),
       transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(opacity: animation, child: child),
     ));
+  }
+
+  /// Starts Supabase (it reads the saved session from the phone) and says if the user is signed in.
+  Future<bool> _bootAuth() async {
+    try {
+      await AuthService.init().timeout(const Duration(seconds: 8));
+      return AuthService.instance.signedIn;
+    } catch (e) {
+      debugPrint('Init Error: $e');
+      return false;
+    }
   }
 
   @override

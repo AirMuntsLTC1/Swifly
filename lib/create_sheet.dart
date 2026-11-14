@@ -128,6 +128,3 @@ class _CreateItem extends StatelessWidget {
     );
   }
 }
-
-
-

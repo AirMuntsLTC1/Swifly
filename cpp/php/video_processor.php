@@ -151,6 +151,3 @@ function swifly_process_video(string $src, string $hint, SwiflyCache $cache, str
         'bytes' => swifly_file_size($dest) + ($thumb !== '' ? swifly_file_size($thumb) : 0),
     ];
 }
-
-
-

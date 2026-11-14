@@ -643,15 +643,19 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
               SizedBox(height: r.h(12)),
               ListenableBuilder(
-                listenable: PostStore.instance,
-                builder: (context, _) => SizedBox(
-                  height: r.h(190),
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: kPeople.where((p) => p.handle != kMeHandle).take(10).length,
-                    itemBuilder: (context, i) => _suggestionCard(r, kPeople.where((p) => p.handle != kMeHandle).toList()[i]),
-                  ),
-                ),
+                listenable: Listenable.merge([PostStore.instance, FollowStore.instance, PeopleDirectory.instance]),
+                builder: (context, _) {
+                  // Only people you do not follow and who do not follow you.
+                  final suggested = FollowStore.instance.suggestedPeople();
+                  return SizedBox(
+                    height: r.h(190),
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: suggested.length > 10 ? 10 : suggested.length,
+                      itemBuilder: (context, i) => _suggestionCard(r, suggested[i]),
+                    ),
+                  );
+                },
               ),
                   ],
                 ),
@@ -835,6 +839,3 @@ class UploadBanner extends StatelessWidget {
     );
   }
 }
-
-
-

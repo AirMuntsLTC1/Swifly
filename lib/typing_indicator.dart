@@ -86,6 +86,3 @@ class _TypingIndicatorState extends State<TypingIndicator>
     );
   }
 }
-
-
-

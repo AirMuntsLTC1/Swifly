@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'avatar_cache.dart';
 import 'follow_store.dart';
 import 'inbox_store.dart';
 import 'post_model.dart';
@@ -124,7 +125,8 @@ class DmAvatar extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: hasImage
           ? (path!.startsWith('http')
-              ? Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback())
+              // Remote picture: saved on the phone after the first download.
+              ? CachedAvatarImage(url: path, size: inner, fallback: fallback())
               : Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback()))
           : fallback(),
     );
@@ -159,6 +161,3 @@ Listenable dmListenable() => Listenable.merge([
       StoryStore.instance,
       DmTheme.instance,
     ]);
-
-
-

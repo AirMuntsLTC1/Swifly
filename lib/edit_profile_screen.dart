@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'avatar_cache.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
@@ -61,7 +62,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 CircleAvatar(
                   radius: 36,
                   backgroundColor: Colors.black,
-                  backgroundImage: hasImage ? (path.startsWith('http') ? NetworkImage(path) : FileImage(File(path)) as ImageProvider) : null,
+                  backgroundImage: hasImage ? avatarImageProvider(path) : null,
                   child: !hasImage ? const Icon(LucideIcons.user, color: Colors.white, size: 34) : null,
                 ),
                 Positioned(

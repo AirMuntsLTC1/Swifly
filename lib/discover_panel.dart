@@ -11,6 +11,10 @@ import 'search_history.dart';
 import 'user_profile_screen.dart';
 import 'people_directory.dart';
 import 'dm_theme.dart';
+import 'database_service.dart';
+import 'db_mappers.dart';
+import 'follow_store.dart';
+import 'person_row.dart';
 
 class DiscoverPanel extends StatefulWidget {
   final String query;
@@ -27,12 +31,10 @@ class DiscoverPanel extends StatefulWidget {
 }
 
 class _DiscoverPanelState extends State<DiscoverPanel> {
-  final Map<String, int> _followers = {
-    for (final f in kPeople) f.handle: kPeopleStats[f.handle]?.$1 ?? 0,
-  };
-  final Map<String, int> _following = {
-    for (final f in kPeople) f.handle: kPeopleStats[f.handle]?.$2 ?? 0,
-  };
+  // The search for the current text. Started once per text, so typing does not repeat it.
+  String? _peopleQuery;
+  Future<List<Person>>? _peopleFuture;
+
   @override
   Widget build(BuildContext context) {
     final q = widget.query.trim();
@@ -89,8 +91,12 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
 
   Widget _browse() {
     return ListenableBuilder(
-      listenable:
-          Listenable.merge([SearchHistory.instance, PostStore.instance]),
+      listenable: Listenable.merge([
+        SearchHistory.instance,
+        PostStore.instance,
+        FollowStore.instance,
+        PeopleDirectory.instance,
+      ]),
       builder: (context, _) {
         final recents = SearchHistory.instance.items;
         return ListView(
@@ -118,7 +124,7 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
               ),
             ),
             _title('People to follow'),
-            for (final f in kPeople.where((p) => p.handle != kMeHandle)) _personTile(f),
+            ..._suggestionTiles(),
           ],
         );
       },
@@ -185,22 +191,67 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     );
   }
 
+  /// Suggestions on the Discover page: people you do not follow and who do not follow you.
+  List<Widget> _suggestionTiles() {
+    final people = FollowStore.instance.suggestedPeople();
+    if (people.isEmpty) return [_empty('No new suggestions right now')];
+    return [for (final f in people) _personTile(f)];
+  }
+
+  /// Search across the whole database. Starts once per text. If the network
+  /// fails, the people already on the phone are searched instead.
+  Future<List<Person>> _searchPeople(String q) {
+    if (_peopleFuture == null || _peopleQuery != q) {
+      _peopleQuery = q;
+      _peopleFuture = DatabaseService.instance.searchPeople(q).then((rows) {
+        final people = [for (final r in rows) personFromRow(r)];
+        final stats = <String, (int, int)>{
+          for (final r in rows)
+            '${r['handle']}': (
+              (r['followers_count'] as num?)?.toInt() ?? 0,
+              (r['following_count'] as num?)?.toInt() ?? 0,
+            ),
+        };
+        PeopleDirectory.instance.merge(people: people, stats: stats);
+        return people;
+      });
+    }
+    return _peopleFuture!;
+  }
+
+  /// People already on the phone whose name or @handle matches. Never includes you.
+  List<Person> _localMatches(String q) => [
+        for (final f in kPeople)
+          if (f.handle != kMeHandle &&
+              (NativeCore.containsCI(f.name, q) || NativeCore.containsCI(f.handle, q)))
+            f,
+      ];
+
   Widget _results(String q) {
-    final people = kPeople
-        .where((f) => f.handle != kMeHandle)
-        .where((f) =>
-            NativeCore.containsCI(f.name, q) ||
-            NativeCore.containsCI(f.handle, q))
-        .toList();
     final posts = PostStore.instance.search(q);
     return ListView(
       padding: const EdgeInsets.only(bottom: 96),
       children: [
         _title('People'),
-        if (people.isEmpty)
-          _empty('No people match "$q"')
-        else
-          for (final f in people) _personTile(f),
+        FutureBuilder<List<Person>>(
+          future: _searchPeople(q),
+          builder: (context, snap) {
+            final people = snap.hasData ? snap.data! : _localMatches(q);
+            if (people.isEmpty) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: LinearProgressIndicator(minHeight: 2, color: Colors.black),
+                );
+              }
+              return _empty('No people match "$q"');
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [for (final f in people) _personTile(f)],
+            );
+          },
+        ),
         _title('Posts'),
         if (posts.isEmpty)
           _empty('No posts match "$q"')
@@ -305,57 +356,19 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     );
   }
 
+  /// One person row: avatar, name, handle, follower counts and the follow button.
   Widget _personTile(Person f) {
-    final followers = _followers[f.handle] ?? 0;
-    final following = _following[f.handle] ?? 0;
-    return InkWell(
+    final stats = kPeopleStats[f.handle] ?? (0, 0);
+    return PersonRow(
+      person: f,
       onTap: () => pushOnce(context, UserProfileScreen.route(f)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            DmAvatar(handle: f.handle, name: f.name, size: 40),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(f.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, color: Colors.black)),
-                  const SizedBox(height: 2),
-                  Text(f.handle, 
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Color(0xFF8E8E8E))),
-                  const SizedBox(height: 3),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    transitionBuilder: (child, anim) =>
-                        FadeTransition(opacity: anim, child: child),
-                    child: Text(
-                      '${NativeCore.formatCount(followers)} followers · '
-                      '${NativeCore.formatCount(following)} following',
-                      key: ValueKey('$followers-$following'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            FollowButton(handle: f.handle, compact: true),
-          ],
-        ),
+      subtitle: Text(
+        '${NativeCore.formatCount(stats.$1)} followers · ${NativeCore.formatCount(stats.$2)} following',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black),
       ),
+      trailing: FollowButton(handle: f.handle, compact: true),
     );
   }
 
@@ -378,6 +391,3 @@ class _DiscoverPanelState extends State<DiscoverPanel> {
     );
   }
 }
-
-
-

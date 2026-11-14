@@ -240,6 +240,3 @@ class _NewMessageScreenState extends State<NewMessageScreen> {
     );
   }
 }
-
-
-

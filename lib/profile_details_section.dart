@@ -245,6 +245,3 @@ class ProfileDetailsSection extends StatelessWidget {
     );
   }
 }
-
-
-

@@ -686,6 +686,3 @@ class _MessagesTabState extends State<MessagesTab> {
     );
   }
 }
-
-
-

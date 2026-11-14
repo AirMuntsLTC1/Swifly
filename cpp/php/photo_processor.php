@@ -164,6 +164,3 @@ function swifly_process_photo(string $src, string $hint, SwiflyCache $cache, str
         'bytes' => swifly_file_size($dest) + ($thumb !== $dest ? swifly_file_size($thumb) : 0),
     ];
 }
-
-
-

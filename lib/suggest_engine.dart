@@ -333,6 +333,3 @@ class SuggestService {
   /// Whether the empty box is showing the person's recent picks.
   bool hasRecent(SuggestKind kind) => (_recent[kind] ?? const <String>[]).isNotEmpty;
 }
-
-
-

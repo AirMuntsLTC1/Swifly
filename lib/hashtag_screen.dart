@@ -165,6 +165,3 @@ class HashtagScreen extends StatelessWidget {
     );
   }
 }
-
-
-

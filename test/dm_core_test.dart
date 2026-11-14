@@ -34,6 +34,3 @@ void main() {
     expect(NativeCore.dmRankPeople([false, true, false], [5, 0, 9]), [1, 2, 0]);
   });
 }
-
-
-

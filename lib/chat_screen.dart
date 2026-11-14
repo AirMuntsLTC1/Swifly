@@ -858,6 +858,3 @@ class _SwipeToReplyState extends State<_SwipeToReply> {
     );
   }
 }
-
-
-

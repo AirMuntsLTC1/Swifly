@@ -1,0 +1,2025 @@
+diff -ruN original/FIX_NOTES.md swifly/FIX_NOTES.md
+--- original/FIX_NOTES.md	1970-01-01 00:00:00.000000000 +0000
++++ swifly/FIX_NOTES.md	2026-11-14 02:33:37.027567237 +0000
+@@ -0,0 +1,41 @@
++# Swifly fix round: what changed
++
++## Startup and login speed
++- splash_screen.dart: no longer waits for every database query. It starts Supabase
++  (8 s limit), shows the saved feed and saved people/follows straight away, then opens
++  the first screen. Fresh data loads in the background.
++- auth/auth_flow.dart: completeSignIn opens Home at once and loads data in the background.
++  Before, it waited for all seven queries, which is why login took about a minute.
++- auth_service.dart: restores the session with recoverSession (no extra network refresh).
++  signedIn never throws. Usernames are compared in lower case.
++- app_bootstrap.dart: each query loads separately and logs its own failure. Results are
++  saved to the phone (local_cache.dart) so the next start is instant.
++- database_service.dart: posts load their media in parallel. Messages look up all
++  people in one query instead of one per message. Story photos load in parallel.
++
++## Profile pictures and cache
++- avatar_cache.dart (new): each picture is saved on the phone once, under a stable file
++  name. Later views read the file with no network. Avatars are prefetched when people load.
++- dm_theme.dart (DmAvatar) and edit_profile_screen.dart use the cache.
++
++## Suggestions, Discover and search
++- follow_store.dart: suggestedPeople() returns only people you do not follow and who do
++  not follow you. Suggestions, Discover, the home strip and the profile strip all use it.
++- discover_panel.dart: search queries the whole database (not just the first 500
++  people) and never returns your own account.
++- person_row.dart (new): one row layout for people lists. The name column is Expanded
++  with ellipsis, so long names no longer squeeze into a narrow column.
++
++## Other people's profiles
++- user_profile_screen.dart: shows that person's posts, real follower and following
++  counts from the database, and suggestions that exclude people you already follow.
++- connections_screen.dart: another person's Followers/Following now load from the
++  database for that person. Before, they always showed your own (often empty) lists.
++
++## Verify on the device
++1. Cold start with a saved session: the feed appears at once.
++2. Sign in: Home opens within a second or two of the server answering.
++3. Profile pictures appear once, and show again instantly after restarting.
++4. Suggestions and Discover list nobody you follow or who follows you.
++5. Search finds others, never your own account.
++6. Open someone's profile: posts, Followers and Following show real numbers.
+diff -ruN original/lib/app_bootstrap.dart swifly/lib/app_bootstrap.dart
+--- original/lib/app_bootstrap.dart	2026-11-14 02:31:04.441524825 +0000
++++ swifly/lib/app_bootstrap.dart	2026-11-14 02:31:20.767998793 +0000
+@@ -1,8 +1,12 @@
++import 'package:flutter/foundation.dart';
++
+ import 'app_feedback.dart';
++import 'avatar_cache.dart';
+ import 'database_service.dart';
+ import 'db_mappers.dart';
+ import 'follow_store.dart';
+ import 'inbox_store.dart';
++import 'local_cache.dart';
+ import 'people_directory.dart';
+ import 'post_model.dart';
+ import 'profile_store.dart';
+@@ -13,9 +17,35 @@
+ bool _loading = false;
+ bool _pendingReload = false;
+ 
++/// Step 1 of startup, instant: fills people and follows from the last saved copy
++/// on the phone. No network. The screens can show something right away.
++Future<void> loadLocalAppData() async {
++  if (!kAuthEnabled) return;
++  final uid = DatabaseService.instance.myId ?? 'anon';
++
++  final people = await LocalCache.load('people');
++  if (people is List && PeopleDirectory.instance.people.isEmpty) {
++    final rows = [for (final r in people) Map<String, dynamic>.from(r as Map)];
++    PeopleDirectory.instance.load(people: rows.map(personFromRow).toList(), stats: statsFromRows(rows));
++  }
++
++  final follows = await LocalCache.load('follows_$uid');
++  if (follows is Map && FollowStore.instance.followingHandles.isEmpty && FollowStore.instance.followerHandles.isEmpty) {
++    FollowStore.instance.load(
++      following: {for (final h in (follows['following'] as List? ?? const [])) '$h'},
++      followers: {for (final h in (follows['followers'] as List? ?? const [])) '$h'},
++    );
++  }
++}
++
++/// Step 2, in the background: fresh data from Supabase. Each piece loads on its
++/// own and is saved to the phone as soon as it arrives.
+ Future<void> loadAppData() async {
+   if (!kAuthEnabled) return;
+-  if (_loading) { _pendingReload = true; return; }
++  if (_loading) {
++    _pendingReload = true;
++    return;
++  }
+   _loading = true;
+   StartupTimer.log('loadAppData started');
+ 
+@@ -34,7 +64,7 @@
+ Future<void> refreshPosts() async {
+   final saved = await DatabaseService.instance.fetchPosts(limit: 20, offset: 0);
+   final pending = PostStore.instance.unsaved;
+-  
++
+   final filteredSaved = saved.where((savedRow) {
+     final savedText = '${savedRow['text'] ?? ''}'.trim();
+     final savedMediaLen = (savedRow['media'] as List?)?.length ?? 0;
+@@ -54,22 +84,66 @@
+   SupabaseRealtime.start();
+ }
+ 
++/// Runs one loading step. A failure is logged and does not stop the others.
++Future<void> _step(String name, Future<void> Function() body) async {
++  try {
++    await body();
++    StartupTimer.log('$name loaded');
++  } catch (e) {
++    debugPrint('[Swifly load] $name failed: $e');
++  }
++}
++
+ Future<void> _loadFromDatabase() async {
+   final db = DatabaseService.instance;
++  final uid = db.myId ?? 'anon';
++
+   await Future.wait([
+-    db.fetchMe().then((me) { if (me != null) { CurrentUser.name = me['name'] ?? me['display_name']; CurrentUser.handle = me['handle']; } }).catchError((_) {}),
+-    db.fetchPeople().then((rows) => PeopleDirectory.instance.load(people: rows.map(personFromRow).toList(), stats: statsFromRows(rows))).catchError((_) {}),
+-    db.fetchPosts(limit: 20, offset: 0).then((rows) => PostStore.instance.merge(newPosts: rows.map(postFromRow).toList())).catchError((_) {}),
+-    db.fetchFollows().then((f) => FollowStore.instance.load(following: (f['following'] ?? []).toSet(), followers: (f['followers'] ?? []).toSet())).catchError((_) {}),
+-    db.fetchNotifications().then((rows) => NotificationStore.instance.load(rows.map(notificationFromRow).toList())).catchError((_) {}),
+-    db.fetchMessages().then((rows) => ChatStore.instance.load(threadsFromRows(rows))).catchError((_) {}),
+-    ProfileStore.instance.loadFromDatabase().catchError((_) {}),
++    _step('me', () async {
++      final me = await db.fetchMe();
++      if (me != null) {
++        CurrentUser.name = '${me['name'] ?? me['display_name']}';
++        CurrentUser.handle = '${me['handle']}';
++      }
++    }),
++    _step('people', () async {
++      final rows = await db.fetchPeople();
++      PeopleDirectory.instance.load(people: rows.map(personFromRow).toList(), stats: statsFromRows(rows));
++      LocalCache.save('people', rows);
++      // Start downloading every profile picture now, so they are on the phone before they are shown.
++      for (final r in rows) {
++        AvatarCache.instance.pathFor('${r['avatar_url'] ?? ''}');
++      }
++    }),
++    _step('posts', () async {
++      final rows = await db.fetchPosts(limit: 20, offset: 0);
++      PostStore.instance.merge(newPosts: rows.map(postFromRow).toList());
++    }),
++    _step('follows', () async {
++      final f = await db.fetchFollows();
++      final following = (f['following'] ?? const <String>[]).toSet();
++      final followers = (f['followers'] ?? const <String>[]).toSet();
++      FollowStore.instance.load(following: following, followers: followers);
++      LocalCache.save('follows_$uid', {'following': following.toList(), 'followers': followers.toList()});
++    }),
++    _step('notifications', () async {
++      final rows = await db.fetchNotifications();
++      NotificationStore.instance.load(rows.map(notificationFromRow).toList());
++    }),
++    _step('messages', () async {
++      final rows = await db.fetchMessages();
++      ChatStore.instance.load(threadsFromRows(rows));
++    }),
++    _step('profile', () => ProfileStore.instance.loadFromDatabase()),
+   ]);
+ }
+ 
+ Future<void> clearAppData() async {
+-  try { await SupabaseRealtime.stop(); } catch (_) {}
+-  CurrentUser.name = 'Your Name'; CurrentUser.handle = '@yourhandle';
++  try {
++    await SupabaseRealtime.stop();
++  } catch (_) {}
++  CurrentUser.name = 'Your Name';
++  CurrentUser.handle = '@yourhandle';
+   PeopleDirectory.instance.load();
+   PostStore.instance.load(posts: []);
+   await PostStore.instance.clearCache();
+@@ -78,4 +152,6 @@
+   ChatStore.instance.reset();
+   await ProfileStore.instance.clearDevice();
+   await DatabaseService.instance.clearLocalMediaCache();
++  await LocalCache.clear();
++  await AvatarCache.instance.clear();
+ }
+diff -ruN original/lib/auth/auth_flow.dart swifly/lib/auth/auth_flow.dart
+--- original/lib/auth/auth_flow.dart	2026-11-14 02:31:04.441567567 +0000
++++ swifly/lib/auth/auth_flow.dart	2026-11-14 02:31:12.810579175 +0000
+@@ -13,13 +13,16 @@
+     );
+ 
+ /// Call after a successful login / register / password reset.
+-/// Loads this user's data, then opens Home and clears the sign-in screens.
++/// Opens Home straight away. The user's data loads in the background, and the
++/// screens update when it arrives. Waiting for every query first was what made
++/// sign-in take about a minute.
+ Future<void> completeSignIn(BuildContext context) async {
+   final nav = Navigator.of(context);
+   AuthService.instance.applyUser();
+-  await loadAppData();
+-  startLiveActivity();
++  await loadLocalAppData(); // instant: last saved people and follows from the phone
+   nav.pushAndRemoveUntil(_fade(const HomeScreen()), (_) => false);
++  loadAppData();
++  startLiveActivity();
+ }
+ 
+ /// Signs out, wipes this user's data from memory and returns to Sign in.
+diff -ruN original/lib/auth_service.dart swifly/lib/auth_service.dart
+--- original/lib/auth_service.dart	2026-11-14 02:31:04.441633239 +0000
++++ swifly/lib/auth_service.dart	2026-11-14 02:31:12.810343189 +0000
+@@ -1,3 +1,5 @@
++import 'dart:convert';
++
+ import 'package:supabase_flutter/supabase_flutter.dart';
+ 
+ import 'people_directory.dart';
+@@ -53,7 +55,16 @@
+ 
+   SupabaseClient get client => Supabase.instance.client;
+ 
+-  bool get signedIn => kAuthEnabled && client.auth.currentSession != null;
++  /// Never throws: if Supabase has not started yet, the answer is "not signed in".
++  bool get signedIn {
++    if (!kAuthEnabled) return false;
++    try {
++      return client.auth.currentSession != null;
++    } catch (_) {
++      return false;
++    }
++  }
++
+   bool get needsLogin => kAuthEnabled && !signedIn;
+ 
+   /// Copies the signed-in user's name and @username into [CurrentUser].
+@@ -62,7 +73,8 @@
+     final u = client.auth.currentUser;
+     if (u == null) return;
+     final meta = u.userMetadata ?? const <String, dynamic>{};
+-    final username = (meta['username'] ?? u.email?.split('@').first ?? '').toString();
++    // The database stores usernames in lower case, so compare in lower case too.
++    final username = (meta['username'] ?? u.email?.split('@').first ?? '').toString().toLowerCase();
+     final display = (meta['display_name'] ?? '').toString().trim();
+     CurrentUser.handle = '@$username';
+     CurrentUser.name = display.isEmpty ? username : display;
+@@ -76,11 +88,16 @@
+       var result = AuthResult.fromJson(json);
+       final session = json['session'];
+       if (result.ok && session is Map) {
+-        final refresh = session['refresh_token']?.toString() ?? '';
+-        if (refresh.isNotEmpty) {
+-          await client.auth.setSession(refresh);
+-          result = AuthResult.fromJson(json, hasSession: true);
++        // The Edge Function already signed the user in and returned the full session.
++        // Restoring it locally needs no extra network round trip (setSession did one,
++        // which made every login wait longer).
++        try {
++          await client.auth.recoverSession(jsonEncode(session));
++        } catch (_) {
++          final refresh = session['refresh_token']?.toString() ?? '';
++          if (refresh.isNotEmpty) await client.auth.setSession(refresh);
+         }
++        result = AuthResult.fromJson(json, hasSession: signedIn);
+       }
+       return result;
+     } on FunctionException catch (e) {
+diff -ruN original/lib/avatar_cache.dart swifly/lib/avatar_cache.dart
+--- original/lib/avatar_cache.dart	1970-01-01 00:00:00.000000000 +0000
++++ swifly/lib/avatar_cache.dart	2026-11-14 02:33:22.921205294 +0000
+@@ -0,0 +1,160 @@
++import 'dart:io';
++
++import 'package:flutter/material.dart';
++import 'package:path_provider/path_provider.dart';
++
++/// Keeps every profile picture on the phone after the first download.
++///
++/// The file name comes from a stable hash of the URL (Dart's own String.hashCode
++/// is not stable between app launches, so it cannot be used for file names).
++/// Pictures that are already on disk show without any network request.
++class AvatarCache {
++  AvatarCache._();
++  static final AvatarCache instance = AvatarCache._();
++
++  /// URL -> local file path, for pictures already on the phone.
++  final Map<String, String> _ready = {};
++
++  /// URL -> download still in progress (so one picture is never fetched twice at once).
++  final Map<String, Future<String?>> _pending = {};
++
++  Directory? _dir;
++
++  /// The local file for [url] if it is already here. Synchronous, so it can be
++  /// used in build() without flicker.
++  String? cachedPath(String url) => _ready[url];
++
++  /// Local file for [url]. Downloads it once if needed. Null if it cannot be loaded.
++  Future<String?> pathFor(String url) {
++    if (url.isEmpty || !url.startsWith('http')) return Future.value(null);
++    final ready = _ready[url];
++    if (ready != null) return Future.value(ready);
++    return _pending.putIfAbsent(url, () => _download(url));
++  }
++
++  Future<String?> _download(String url) async {
++    try {
++      _dir ??= Directory('${(await getApplicationSupportDirectory()).path}/avatars');
++      final dir = _dir!;
++      if (!await dir.exists()) await dir.create(recursive: true);
++
++      final file = File('${dir.path}/${_fileKey(url)}.img');
++      if (await file.exists() && await file.length() > 0) {
++        _ready[url] = file.path;
++        return file.path;
++      }
++
++      final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
++      try {
++        final req = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 10));
++        final res = await req.close().timeout(const Duration(seconds: 15));
++        if (res.statusCode != 200) return null;
++        final bytes = await res.fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
++        if (bytes.isEmpty) return null;
++
++        // Write to a temp file first, so a half-written picture is never used.
++        final tmp = File('${file.path}.tmp');
++        await tmp.writeAsBytes(bytes, flush: true);
++        await tmp.rename(file.path);
++        _ready[url] = file.path;
++        return file.path;
++      } finally {
++        client.close(force: true);
++      }
++    } catch (_) {
++      return null;
++    } finally {
++      _pending.remove(url);
++    }
++  }
++
++  /// Forget everything on the phone (used on sign out).
++  Future<void> clear() async {
++    _ready.clear();
++    try {
++      final dir = Directory('${(await getApplicationSupportDirectory()).path}/avatars');
++      if (await dir.exists()) await dir.delete(recursive: true);
++    } catch (_) {}
++  }
++
++  /// Two 32-bit hashes of the URL, written as hex. Stable across launches.
++  static String _fileKey(String url) {
++    var fnv = 0x811c9dc5;
++    var djb = 5381;
++    for (final c in url.codeUnits) {
++      fnv = ((fnv ^ c) * 0x01000193) & 0xffffffff;
++      djb = ((djb * 33) ^ c) & 0xffffffff;
++    }
++    return '${fnv.toRadixString(16)}_${djb.toRadixString(16)}_${url.length}';
++  }
++}
++
++/// Image provider for an avatar path: a saved file if there is one (no download),
++/// otherwise the network picture, which is also saved for next time.
++ImageProvider avatarImageProvider(String path) {
++  if (!path.startsWith('http')) return FileImage(File(path));
++  final local = AvatarCache.instance.cachedPath(path);
++  if (local != null) return FileImage(File(local));
++  AvatarCache.instance.pathFor(path);
++  return NetworkImage(path);
++}
++
++/// A round-ready picture from the URL. It shows the saved file at once, and
++/// downloads only the first time the picture is needed. [fallback] shows while
++/// there is no picture yet, or if the download fails.
++class CachedAvatarImage extends StatefulWidget {
++  final String url;
++  final double size;
++  final Widget fallback;
++
++  const CachedAvatarImage({
++    super.key,
++    required this.url,
++    required this.size,
++    required this.fallback,
++  });
++
++  @override
++  State<CachedAvatarImage> createState() => _CachedAvatarImageState();
++}
++
++class _CachedAvatarImageState extends State<CachedAvatarImage> {
++  String? _path;
++
++  @override
++  void initState() {
++    super.initState();
++    _resolve();
++  }
++
++  @override
++  void didUpdateWidget(covariant CachedAvatarImage oldWidget) {
++    super.didUpdateWidget(oldWidget);
++    if (oldWidget.url != widget.url) _resolve();
++  }
++
++  void _resolve() {
++    final url = widget.url;
++    final ready = AvatarCache.instance.cachedPath(url);
++    _path = ready;
++    if (ready != null) return;
++    AvatarCache.instance.pathFor(url).then((p) {
++      if (!mounted || url != widget.url || p == null) return;
++      setState(() => _path = p);
++    });
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final p = _path;
++    if (p == null) return widget.fallback;
++    return Image.file(
++      File(p),
++      width: widget.size,
++      height: widget.size,
++      fit: BoxFit.cover,
++      gaplessPlayback: true,
++      errorBuilder: (_, __, ___) => widget.fallback,
++    );
++  }
++}
+diff -ruN original/lib/connections_screen.dart swifly/lib/connections_screen.dart
+--- original/lib/connections_screen.dart	2026-11-14 02:31:04.441713264 +0000
++++ swifly/lib/connections_screen.dart	2026-11-14 02:32:49.631479984 +0000
+@@ -2,22 +2,23 @@
+ import 'nav_guard.dart';
+ import 'package:lucide_icons_flutter/lucide_icons.dart';
+ 
++import 'database_service.dart';
++import 'db_mappers.dart';
+ import 'follow_button.dart';
+ import 'follow_store.dart';
+-import 'post_model.dart';
+-import 'user_profile_screen.dart';
+ import 'people_directory.dart';
++import 'person_row.dart';
++import 'user_profile_screen.dart';
+ 
+-/// Followers and Following lists. Both come from [FollowStore], so they update
+-/// live when someone follows or unfollows.
+-/// Currently shows the signed-in user's lists; [userHandle] is kept for when
+-/// other people's lists come from the database.
++/// Followers and Following lists.
++///
++/// - Your own lists (no [userHandle], or your handle) come from [FollowStore] and update live.
++/// - Another person's lists come from the database, for that person.
+ class ConnectionsScreen extends StatefulWidget {
+   final bool initialFollowers;
+-  // Optional. Not used yet. Defaults cannot read kMeHandle/kMeName here because
+-  // those values are only known at runtime, not at compile time.
+   final String? userHandle;
+   final String? userName;
++
+   const ConnectionsScreen({
+     super.key,
+     required this.initialFollowers,
+@@ -31,11 +32,44 @@
+ 
+ class _ConnectionsScreenState extends State<ConnectionsScreen> {
+   late bool _showFollowers;
++  Future<List<Person>>? _remote;
++
++  bool get _isOtherPerson => widget.userHandle != null && widget.userHandle != kMeHandle;
+ 
+   @override
+   void initState() {
+     super.initState();
+     _showFollowers = widget.initialFollowers;
++    _reloadRemote();
++  }
++
++  /// Loads the other person's list for the current tab. Also merges the people into the directory.
++  void _reloadRemote() {
++    if (!_isOtherPerson) {
++      _remote = null;
++      return;
++    }
++    _remote = DatabaseService.instance
++        .fetchConnections(widget.userHandle!, followers: _showFollowers)
++        .then((rows) {
++      final people = [for (final r in rows) personFromRow(r)];
++      final stats = <String, (int, int)>{
++        for (final r in rows)
++          '${r['handle']}': (
++            (r['followers_count'] as num?)?.toInt() ?? 0,
++            (r['following_count'] as num?)?.toInt() ?? 0,
++          ),
++      };
++      PeopleDirectory.instance.merge(people: people, stats: stats);
++      return people;
++    });
++  }
++
++  void _setTab(bool followers) {
++    setState(() {
++      _showFollowers = followers;
++      _reloadRemote();
++    });
+   }
+ 
+   @override
+@@ -62,64 +96,78 @@
+             child: Row(
+               children: [
+                 Expanded(
+-                  child: _buildTabButton('Followers', _showFollowers, () {
+-                    setState(() => _showFollowers = true);
+-                  }),
++                  child: _buildTabButton('Followers', _showFollowers, () => _setTab(true)),
+                 ),
+                 const SizedBox(width: 12),
+                 Expanded(
+-                  child: _buildTabButton('Following', !_showFollowers, () {
+-                    setState(() => _showFollowers = false);
+-                  }),
++                  child: _buildTabButton('Following', !_showFollowers, () => _setTab(false)),
+                 ),
+               ],
+             ),
+           ),
+           Expanded(
+-            child: ListenableBuilder(
+-              listenable: FollowStore.instance,
+-              builder: (context, _) {
+-                final handles = (_showFollowers
+-                        ? FollowStore.instance.followerHandles
+-                        : FollowStore.instance.followingHandles)
+-                    .toList();
+-                if (handles.isEmpty) {
+-                  return Center(
+-                    child: Text(
+-                      _showFollowers ? 'No followers yet' : 'Not following anyone yet',
+-                      style: const TextStyle(color: Color(0xFF8E8E8E)),
+-                    ),
+-                  );
+-                }
+-                return ListView.separated(
+-                  padding: const EdgeInsets.all(16),
+-                  itemCount: handles.length,
+-                  separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
+-                  itemBuilder: (context, i) {
+-                    final p = personFor(handles[i]);
+-                    return ListTile(
+-                      onTap: () => pushOnce(context, UserProfileScreen.route(p)),
+-                      contentPadding: EdgeInsets.zero,
+-                      leading: const CircleAvatar(
+-                        backgroundColor: Colors.black,
+-                        child: Icon(LucideIcons.user, color: Colors.white),
+-                      ),
+-                      title: Text(p.name,
+-                          style: const TextStyle(fontWeight: FontWeight.w700)),
+-                      subtitle: Text(p.handle,
+-                          style: const TextStyle(color: Color(0xFF8E8E8E))),
+-                      trailing: FollowButton(handle: p.handle, compact: true),
+-                    );
+-                  },
+-                );
+-              },
+-            ),
++            child: _isOtherPerson ? _remoteList() : _myList(),
+           ),
+         ],
+       ),
+     );
+   }
+ 
++  /// Your own list, live from FollowStore.
++  Widget _myList() {
++    return ListenableBuilder(
++      listenable: FollowStore.instance,
++      builder: (context, _) {
++        final handles = (_showFollowers
++                ? FollowStore.instance.followerHandles
++                : FollowStore.instance.followingHandles)
++            .toList();
++        return _renderPeople([for (final h in handles) personFor(h)], _emptyText());
++      },
++    );
++  }
++
++  /// Another person's list, from the database.
++  Widget _remoteList() {
++    return FutureBuilder<List<Person>>(
++      future: _remote,
++      builder: (context, snap) {
++        if (snap.hasData) return _renderPeople(snap.data!, _emptyText());
++        if (snap.hasError) {
++          return const Center(
++            child: Text('Could not load this list. Check your connection.',
++                textAlign: TextAlign.center,
++                style: TextStyle(color: Color(0xFF8E8E8E))),
++          );
++        }
++        return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black));
++      },
++    );
++  }
++
++  String _emptyText() => _showFollowers ? 'No followers yet' : 'Not following anyone yet';
++
++  Widget _renderPeople(List<Person> people, String emptyText) {
++    if (people.isEmpty) {
++      return Center(
++        child: Text(emptyText, style: const TextStyle(color: Color(0xFF8E8E8E))),
++      );
++    }
++    return ListView.separated(
++      padding: const EdgeInsets.symmetric(vertical: 8),
++      itemCount: people.length,
++      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
++      itemBuilder: (context, i) {
++        final p = people[i];
++        return PersonRow(
++          person: p,
++          onTap: () => pushOnce(context, UserProfileScreen.route(p)),
++          trailing: FollowButton(handle: p.handle, compact: true),
++        );
++      },
++    );
++  }
++
+   Widget _buildTabButton(String label, bool active, VoidCallback onTap) {
+     return GestureDetector(
+       onTap: onTap,
+diff -ruN original/lib/database_service.dart swifly/lib/database_service.dart
+--- original/lib/database_service.dart	2026-11-14 02:31:04.441759693 +0000
++++ swifly/lib/database_service.dart	2026-11-14 02:31:48.731044554 +0000
+@@ -7,6 +7,7 @@
+ import 'package:supabase_flutter/supabase_flutter.dart';
+ 
+ import 'supabase_config.dart';
++import 'avatar_cache.dart';
+ 
+ /// Every read and write the app makes to Supabase goes through this file.
+ /// Tables, columns, policies and triggers: supabase/schema.sql.
+@@ -54,6 +55,30 @@
+     return who;
+   }
+ 
++  /// Loads many profiles with ONE query and fills the cache, instead of one query per person.
++  Future<void> _loadWhoMany(Iterable<String> ids) async {
++    final missing = {for (final id in ids) if (id.isNotEmpty && !_byId.containsKey(id)) id}.toList();
++    if (missing.isEmpty) return;
++    final rows = await _db
++        .from('profiles')
++        .select('id,username,display_name,avatar_url')
++        .inFilter('id', missing);
++    for (final r in rows) {
++      final who = _Who.fromRow(Map<String, dynamic>.from(r));
++      _byId[who.id] = who;
++      _idByUsername[who.username] = who.id;
++    }
++  }
++
++  /// Profile id for a handle like '@wilme'. Null if the account does not exist.
++  Future<String?> idForHandle(String handle) async {
++    try {
++      return await _idForHandle(handle);
++    } catch (_) {
++      return null;
++    }
++  }
++
+   /// '@wilme' -> the profile id of that account.
+   Future<String> _idForHandle(String handle) async {
+     final username = handle.replaceFirst('@', '').trim().toLowerCase();
+@@ -322,25 +347,77 @@
+     };
+   }
+ 
+-  /// Rows: {name, handle, followers_count, following_count}, biggest first.
++  /// Rows: {id, name, handle, avatar_url, followers_count, following_count}, biggest first.
+   Future<List<Map<String, dynamic>>> fetchPeople() async {
+     final rows = await _db
+         .from('profiles')
+-        .select('username,display_name,followers_count,following_count,avatar_url')
++        .select('id,username,display_name,followers_count,following_count,avatar_url')
+         .order('followers_count', ascending: false)
+         .limit(500);
++    return [for (final r in rows) _personRow(Map<String, dynamic>.from(r))];
++  }
++
++  /// People whose @handle or name contains [query]. Never includes the signed-in user.
++  /// Searches the whole database, not only the first 500 people loaded at startup.
++  Future<List<Map<String, dynamic>>> searchPeople(String query, {int limit = 30}) async {
++    final me = _requireMe();
++    final q = query.trim().replaceFirst('@', '').replaceAll(RegExp(r'[,()*"\\%]'), '');
++    if (q.isEmpty) return <Map<String, dynamic>>[];
++    final rows = await _db
++        .from('profiles')
++        .select('id,username,display_name,followers_count,following_count,avatar_url')
++        .neq('id', me)
++        .or('username.ilike.*$q*,display_name.ilike.*$q*')
++        .limit(limit);
++    return [for (final r in rows) _personRow(Map<String, dynamic>.from(r))];
++  }
++
++  /// Followers or following of another person, from the database.
++  /// Rows have the same shape as fetchPeople.
++  Future<List<Map<String, dynamic>>> fetchConnections(String handle, {required bool followers}) async {
++    final userId = await _idForHandle(handle);
++    final rows = followers
++        ? await _db
++            .from('follows')
++            .select('profile:profiles!follower(id,username,display_name,followers_count,following_count,avatar_url)')
++            .eq('followee', userId)
++        : await _db
++            .from('follows')
++            .select('profile:profiles!followee(id,username,display_name,followers_count,following_count,avatar_url)')
++            .eq('follower', userId);
+     return [
+       for (final r in rows)
+-        {
+-          'name': _Who.fromRow(Map<String, dynamic>.from(r)).name,
+-          'handle': _Who.fromRow(Map<String, dynamic>.from(r)).handle,
+-          'avatar_url': r['avatar_url'] ?? '',
+-          'followers_count': r['followers_count'] ?? 0,
+-          'following_count': r['following_count'] ?? 0,
+-        },
++        if (r['profile'] is Map) _personRow(_embedded(r['profile'])),
+     ];
+   }
+ 
++  /// Follower and following counts of one person, straight from their profile row.
++  Future<Map<String, int>> fetchProfileCounts(String handle) async {
++    final userId = await _idForHandle(handle);
++    final row = await _db
++        .from('profiles')
++        .select('followers_count,following_count')
++        .eq('id', userId)
++        .single();
++    return {
++      'followers': (row['followers_count'] as num?)?.toInt() ?? 0,
++      'following': (row['following_count'] as num?)?.toInt() ?? 0,
++    };
++  }
++
++  /// One profile as a row: id, name, handle, avatar_url and the two counts.
++  static Map<String, dynamic> _personRow(Map<String, dynamic> r) {
++    final who = _Who.fromRow(r);
++    return <String, dynamic>{
++      'id': '${r['id'] ?? ''}',
++      'name': who.name,
++      'handle': who.handle,
++      'avatar_url': r['avatar_url'] ?? '',
++      'followers_count': r['followers_count'] ?? 0,
++      'following_count': r['following_count'] ?? 0,
++    };
++  }
++
+   /// Hashtag names without the #, most popular first.
+   Future<List<String>> fetchTrendingTags() async {
+     final rows = await _db.from('trending_tags').select('tag').order('uses', ascending: false).limit(12);
+@@ -349,79 +426,84 @@
+ 
+   /// Posts you are allowed to see (the database decides), newest first, with
+   /// comments, replies, and whether you liked or saved each one.
+-  Future<List<Map<String, dynamic>>> fetchPosts({int limit = 4, int offset = 0}) async {
++  /// Pass [authorId] to get one person's posts (used on their profile).
++  Future<List<Map<String, dynamic>>> fetchPosts({int limit = 4, int offset = 0, String? authorId}) async {
+     final me = _requireMe();
+-    final postRows = await _db
++    final base = _db
+         .from('posts')
+-        .select('id,text,audience,tagged_handles,likes,saves,shares,created_at,author:profiles!author_id(username,display_name)')
++        .select('id,author_id,text,audience,tagged_handles,likes,saves,shares,created_at,author:profiles!author_id(username,display_name,avatar_url)');
++    final filtered = authorId == null ? base : base.eq('author_id', authorId);
++    final postRows = await filtered
+         .order('created_at', ascending: false)
+         .range(offset, offset + limit - 1);
+     if (postRows.isEmpty) return <Map<String, dynamic>>[];
+ 
+     final ids = [for (final r in postRows) '${r['id']}'];
+ 
+-    final commentRows = await _db
+-        .from('comments')
+-        .select('id,post_id,parent_id,text,created_at,author:profiles!author_id(username,display_name)')
+-        .inFilter('post_id', ids)
+-        .order('created_at', ascending: true);
+-    final likedRows = await _db.from('post_likes').select('post_id').eq('user_id', me).inFilter('post_id', ids);
+-    final savedRows = await _db.from('post_saves').select('post_id').eq('user_id', me).inFilter('post_id', ids);
++    // The four lookups below do not depend on each other, so they run together.
++    final results = await Future.wait<List<dynamic>>([
++      _db
++          .from('comments')
++          .select('id,post_id,parent_id,text,created_at,author:profiles!author_id(username,display_name)')
++          .inFilter('post_id', ids)
++          .order('created_at', ascending: true),
++      _db.from('post_likes').select('post_id').eq('user_id', me).inFilter('post_id', ids),
++      _db.from('post_saves').select('post_id').eq('user_id', me).inFilter('post_id', ids),
++      _db
++          .from('post_media')
++          .select('post_id,position,kind,storage_path,thumb_path,width,height,duration_ms,engine')
++          .inFilter('post_id', ids)
++          .order('position', ascending: true),
++    ]);
++    final commentRows = results[0];
++    final likedRows = results[1];
++    final savedRows = results[2];
++    final mediaRows = results[3];
+ 
+-    final liked = {for (final r in likedRows) '${r['post_id']}'};
+-    final saved = {for (final r in savedRows) '${r['post_id']}'};
++    final liked = {for (final r in likedRows) '${(r as Map)['post_id']}'};
++    final saved = {for (final r in savedRows) '${(r as Map)['post_id']}'};
+ 
+     // Build every comment first, then attach replies to their parent.
+     final byId = <String, Map<String, dynamic>>{};
+     for (final r in commentRows) {
+-      final author = _Who.fromRow(_embedded(r['author']));
+-      byId['${r['id']}'] = <String, dynamic>{
+-        'id': '${r['id']}',
++      final row = Map<String, dynamic>.from(r as Map);
++      final author = _Who.fromRow(_embedded(row['author']));
++      byId['${row['id']}'] = <String, dynamic>{
++        'id': '${row['id']}',
+         'name': author.name,
+         'author_handle': author.handle,
+-        'text': '${r['text']}',
+-        'created_at': '${r['created_at']}',
++        'text': '${row['text']}',
++        'created_at': '${row['created_at']}',
+         'replies': <Map<String, dynamic>>[],
+       };
+     }
+     final topLevel = <String, List<Map<String, dynamic>>>{};
+     for (final r in commentRows) {
+-      final node = byId['${r['id']}']!;
+-      final parent = r['parent_id'];
++      final row = Map<String, dynamic>.from(r as Map);
++      final node = byId['${row['id']}']!;
++      final parent = row['parent_id'];
+       if (parent == null) {
+-        topLevel.putIfAbsent('${r['post_id']}', () => <Map<String, dynamic>>[]).add(node);
++        topLevel.putIfAbsent('${row['post_id']}', () => <Map<String, dynamic>>[]).add(node);
+       } else {
+         final p = byId['$parent'];
+         if (p != null) (p['replies'] as List<Map<String, dynamic>>).add(node);
+       }
+     }
+ 
+-    final mediaRows = await _db
+-        .from('post_media')
+-        .select('post_id,position,kind,storage_path,thumb_path,width,height,duration_ms,engine')
+-        .inFilter('post_id', ids)
+-        .order('position', ascending: true);
++    // Every media file downloads at the same time. Results keep their order.
++    final mediaEntries = await Future.wait([
++      for (final m in mediaRows) _prepareMedia(Map<String, dynamic>.from(m as Map)),
++    ]);
+     final mediaByPost = <String, List<Map<String, dynamic>>>{};
+-    for (final m in mediaRows) {
+-      final local = await _cachedFile('post-media', '${m['storage_path']}');
+-      if (local == null) continue; // could not download: skip it rather than show a broken tile
+-      final thumbPath = m['thumb_path'];
+-      final thumb = thumbPath == null ? null : await _cachedFile('post-media', '$thumbPath');
+-      mediaByPost.putIfAbsent('${m['post_id']}', () => <Map<String, dynamic>>[]).add({
+-        'kind': m['kind'],
+-        'path': local,
+-        'thumb': thumb,
+-        'width': m['width'],
+-        'height': m['height'],
+-        'duration_ms': m['duration_ms'],
+-        'engine': m['engine'] ?? '',
+-      });
++    for (final e in mediaEntries) {
++      if (e == null) continue; // could not download: skip it rather than show a broken tile
++      mediaByPost.putIfAbsent(e.$1, () => <Map<String, dynamic>>[]).add(e.$2);
+     }
+ 
+     return [
+       for (final r in postRows)
+         _postMap(
+-          r,
++          Map<String, dynamic>.from(r),
+           liked: liked.contains('${r['id']}'),
+           saved: saved.contains('${r['id']}'),
+           comments: topLevel['${r['id']}'] ?? <Map<String, dynamic>>[],
+@@ -430,6 +512,27 @@
+     ];
+   }
+ 
++  /// Downloads (or reads from the phone) one media file and its thumbnail.
++  /// Returns (post id, media map), or null if the file is not available.
++  Future<(String, Map<String, dynamic>)?> _prepareMedia(Map<String, dynamic> m) async {
++    final local = await _cachedFile('post-media', '${m['storage_path']}');
++    if (local == null) return null;
++    final thumbPath = m['thumb_path'];
++    final thumb = thumbPath == null ? null : await _cachedFile('post-media', '$thumbPath');
++    return (
++      '${m['post_id']}',
++      <String, dynamic>{
++        'kind': m['kind'],
++        'path': local,
++        'thumb': thumb,
++        'width': m['width'],
++        'height': m['height'],
++        'duration_ms': m['duration_ms'],
++        'engine': m['engine'] ?? '',
++      },
++    );
++  }
++
+   Map<String, dynamic> _postMap(
+     Map<String, dynamic> r, {
+     required bool liked,
+@@ -495,6 +598,12 @@
+         .order('created_at', ascending: true)
+         .limit(1000);
+ 
++    // One query for every person in these messages, instead of one per message.
++    await _loadWhoMany([
++      for (final r in rows) '${r['sender']}' == me ? '${r['recipient']}' : '${r['sender']}',
++    ]);
++
++    final thumbs = <String, Future<String?>>{};
+     final out = <Map<String, dynamic>>[];
+     for (final r in rows) {
+       final fromMe = '${r['sender']}' == me;
+@@ -513,7 +622,7 @@
+           if (first['kind'] == 'video') isVideo = true;
+           final thumbPath = first['thumb_path'];
+           if (thumbPath != null) {
+-            thumb = await _cachedFile('post-media', '$thumbPath');
++            thumb = await thumbs.putIfAbsent('$thumbPath', () => _cachedFile('post-media', '$thumbPath'));
+           }
+         }
+         postData = {
+@@ -669,15 +778,20 @@
+     for (final r in rows) {
+       newest.putIfAbsent('${r['author_id']}', () => Map<String, dynamic>.from(r));
+     }
++    final list = newest.values.toList();
++    final photos = await Future.wait<String?>([
++      for (final r in list)
++        r['photo_path'] == null ? Future<String?>.value(null) : _cachedStoryPhoto('${r['photo_path']}'),
++    ]);
+     final out = <Map<String, dynamic>>[];
+-    for (final r in newest.values) {
++    for (var i = 0; i < list.length; i++) {
++      final r = list[i];
+       final who = _Who.fromRow(_embedded(r['author']));
+-      final photoPath = r['photo_path'];
+       out.add({
+         ...r,
+         'handle': who.handle,
+         'name': who.name,
+-        'photo_local': photoPath == null ? null : await _cachedStoryPhoto('$photoPath'),
++        'photo_local': photos[i],
+       });
+     }
+     return out;
+@@ -759,31 +873,8 @@
+     });
+   }
+ 
+-    Future<String?> cacheAvatarImage(String url) async {
+-    if (url.isEmpty) return null;
+-    try {
+-      final dir = await getApplicationSupportDirectory();
+-      final safeName = url.split('/').last.split('?').first;
+-      final hash = url.hashCode.toRadixString(16);
+-      final file = File('${dir.path}/avatars/${hash}_$safeName');
+-      if (await file.exists()) return file.path;
+-      await file.parent.create(recursive: true);
+-      
+-      final client = HttpClient();
+-      try {
+-        final req = await client.getUrl(Uri.parse(url));
+-        final res = await req.close();
+-        if (res.statusCode == 200) {
+-          final bytes = await res.fold<List<int>>([], (p, e) => p..addAll(e));
+-          await file.writeAsBytes(bytes);
+-          return file.path;
+-        }
+-      } finally {
+-        client.close(force: true);
+-      }
+-    } catch (_) {}
+-    return null;
+-  }
++  /// Local copy of a profile picture. Downloads once. Null if it cannot be loaded.
++  Future<String?> cacheAvatarImage(String url) => AvatarCache.instance.pathFor(url);
+ 
+   Future<void> clearLocalMediaCache() async {
+     try {
+diff -ruN original/lib/discover_panel.dart swifly/lib/discover_panel.dart
+--- original/lib/discover_panel.dart	2026-11-14 02:31:04.441848718 +0000
++++ swifly/lib/discover_panel.dart	2026-11-14 02:32:13.804150929 +0000
+@@ -11,6 +11,10 @@
+ import 'user_profile_screen.dart';
+ import 'people_directory.dart';
+ import 'dm_theme.dart';
++import 'database_service.dart';
++import 'db_mappers.dart';
++import 'follow_store.dart';
++import 'person_row.dart';
+ 
+ class DiscoverPanel extends StatefulWidget {
+   final String query;
+@@ -27,12 +31,10 @@
+ }
+ 
+ class _DiscoverPanelState extends State<DiscoverPanel> {
+-  final Map<String, int> _followers = {
+-    for (final f in kPeople) f.handle: kPeopleStats[f.handle]?.$1 ?? 0,
+-  };
+-  final Map<String, int> _following = {
+-    for (final f in kPeople) f.handle: kPeopleStats[f.handle]?.$2 ?? 0,
+-  };
++  // The search for the current text. Started once per text, so typing does not repeat it.
++  String? _peopleQuery;
++  Future<List<Person>>? _peopleFuture;
++
+   @override
+   Widget build(BuildContext context) {
+     final q = widget.query.trim();
+@@ -89,8 +91,12 @@
+ 
+   Widget _browse() {
+     return ListenableBuilder(
+-      listenable:
+-          Listenable.merge([SearchHistory.instance, PostStore.instance]),
++      listenable: Listenable.merge([
++        SearchHistory.instance,
++        PostStore.instance,
++        FollowStore.instance,
++        PeopleDirectory.instance,
++      ]),
+       builder: (context, _) {
+         final recents = SearchHistory.instance.items;
+         return ListView(
+@@ -118,7 +124,7 @@
+               ),
+             ),
+             _title('People to follow'),
+-            for (final f in kPeople.where((p) => p.handle != kMeHandle)) _personTile(f),
++            ..._suggestionTiles(),
+           ],
+         );
+       },
+@@ -185,22 +191,67 @@
+     );
+   }
+ 
++  /// Suggestions on the Discover page: people you do not follow and who do not follow you.
++  List<Widget> _suggestionTiles() {
++    final people = FollowStore.instance.suggestedPeople();
++    if (people.isEmpty) return [_empty('No new suggestions right now')];
++    return [for (final f in people) _personTile(f)];
++  }
++
++  /// Search across the whole database. Starts once per text. If the network
++  /// fails, the people already on the phone are searched instead.
++  Future<List<Person>> _searchPeople(String q) {
++    if (_peopleFuture == null || _peopleQuery != q) {
++      _peopleQuery = q;
++      _peopleFuture = DatabaseService.instance.searchPeople(q).then((rows) {
++        final people = [for (final r in rows) personFromRow(r)];
++        final stats = <String, (int, int)>{
++          for (final r in rows)
++            '${r['handle']}': (
++              (r['followers_count'] as num?)?.toInt() ?? 0,
++              (r['following_count'] as num?)?.toInt() ?? 0,
++            ),
++        };
++        PeopleDirectory.instance.merge(people: people, stats: stats);
++        return people;
++      });
++    }
++    return _peopleFuture!;
++  }
++
++  /// People already on the phone whose name or @handle matches. Never includes you.
++  List<Person> _localMatches(String q) => [
++        for (final f in kPeople)
++          if (f.handle != kMeHandle &&
++              (NativeCore.containsCI(f.name, q) || NativeCore.containsCI(f.handle, q)))
++            f,
++      ];
++
+   Widget _results(String q) {
+-    final people = kPeople
+-        .where((f) => f.handle != kMeHandle)
+-        .where((f) =>
+-            NativeCore.containsCI(f.name, q) ||
+-            NativeCore.containsCI(f.handle, q))
+-        .toList();
+     final posts = PostStore.instance.search(q);
+     return ListView(
+       padding: const EdgeInsets.only(bottom: 96),
+       children: [
+         _title('People'),
+-        if (people.isEmpty)
+-          _empty('No people match "$q"')
+-        else
+-          for (final f in people) _personTile(f),
++        FutureBuilder<List<Person>>(
++          future: _searchPeople(q),
++          builder: (context, snap) {
++            final people = snap.hasData ? snap.data! : _localMatches(q);
++            if (people.isEmpty) {
++              if (snap.connectionState == ConnectionState.waiting) {
++                return const Padding(
++                  padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
++                  child: LinearProgressIndicator(minHeight: 2, color: Colors.black),
++                );
++              }
++              return _empty('No people match "$q"');
++            }
++            return Column(
++              crossAxisAlignment: CrossAxisAlignment.stretch,
++              children: [for (final f in people) _personTile(f)],
++            );
++          },
++        ),
+         _title('Posts'),
+         if (posts.isEmpty)
+           _empty('No posts match "$q"')
+@@ -305,57 +356,19 @@
+     );
+   }
+ 
++  /// One person row: avatar, name, handle, follower counts and the follow button.
+   Widget _personTile(Person f) {
+-    final followers = _followers[f.handle] ?? 0;
+-    final following = _following[f.handle] ?? 0;
+-    return InkWell(
++    final stats = kPeopleStats[f.handle] ?? (0, 0);
++    return PersonRow(
++      person: f,
+       onTap: () => pushOnce(context, UserProfileScreen.route(f)),
+-      child: Padding(
+-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+-        child: Row(
+-          children: [
+-            DmAvatar(handle: f.handle, name: f.name, size: 40),
+-            const SizedBox(width: 14),
+-            Expanded(
+-              child: Column(
+-                crossAxisAlignment: CrossAxisAlignment.start,
+-                mainAxisSize: MainAxisSize.min,
+-                children: [
+-                  Text(f.name,
+-                      maxLines: 1,
+-                      overflow: TextOverflow.ellipsis,
+-                      style: const TextStyle(
+-                          fontWeight: FontWeight.w700, color: Colors.black)),
+-                  const SizedBox(height: 2),
+-                  Text(f.handle, 
+-                      maxLines: 1,
+-                      overflow: TextOverflow.ellipsis,
+-                      style: const TextStyle(color: Color(0xFF8E8E8E))),
+-                  const SizedBox(height: 3),
+-                  AnimatedSwitcher(
+-                    duration: const Duration(milliseconds: 250),
+-                    transitionBuilder: (child, anim) =>
+-                        FadeTransition(opacity: anim, child: child),
+-                    child: Text(
+-                      '${NativeCore.formatCount(followers)} followers · '
+-                      '${NativeCore.formatCount(following)} following',
+-                      key: ValueKey('$followers-$following'),
+-                      maxLines: 1,
+-                      overflow: TextOverflow.ellipsis,
+-                      style: const TextStyle(
+-                          fontSize: 12,
+-                          fontWeight: FontWeight.w600,
+-                          color: Colors.black),
+-                    ),
+-                  ),
+-                ],
+-              ),
+-            ),
+-            const SizedBox(width: 10),
+-            FollowButton(handle: f.handle, compact: true),
+-          ],
+-        ),
++      subtitle: Text(
++        '${NativeCore.formatCount(stats.$1)} followers · ${NativeCore.formatCount(stats.$2)} following',
++        maxLines: 1,
++        overflow: TextOverflow.ellipsis,
++        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black),
+       ),
++      trailing: FollowButton(handle: f.handle, compact: true),
+     );
+   }
+ 
+diff -ruN original/lib/dm_theme.dart swifly/lib/dm_theme.dart
+--- original/lib/dm_theme.dart	2026-11-14 02:31:04.441886524 +0000
++++ swifly/lib/dm_theme.dart	2026-11-14 02:32:03.332154134 +0000
+@@ -2,6 +2,7 @@
+ 
+ import 'package:flutter/material.dart';
+ 
++import 'avatar_cache.dart';
+ import 'follow_store.dart';
+ import 'inbox_store.dart';
+ import 'post_model.dart';
+@@ -124,7 +125,8 @@
+       clipBehavior: Clip.antiAlias,
+       child: hasImage
+           ? (path!.startsWith('http')
+-              ? Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback())
++              // Remote picture: saved on the phone after the first download.
++              ? CachedAvatarImage(url: path, size: inner, fallback: fallback())
+               : Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback()))
+           : fallback(),
+     );
+diff -ruN original/lib/edit_profile_screen.dart swifly/lib/edit_profile_screen.dart
+--- original/lib/edit_profile_screen.dart	2026-11-14 02:31:04.441913773 +0000
++++ swifly/lib/edit_profile_screen.dart	2026-11-14 02:33:22.921469725 +0000
+@@ -1,6 +1,7 @@
+ import 'dart:io';
+ 
+ import 'package:flutter/material.dart';
++import 'avatar_cache.dart';
+ import 'package:lucide_icons_flutter/lucide_icons.dart';
+ import 'package:photo_manager/photo_manager.dart';
+ import 'package:wechat_assets_picker/wechat_assets_picker.dart';
+@@ -61,7 +62,7 @@
+                 CircleAvatar(
+                   radius: 36,
+                   backgroundColor: Colors.black,
+-                  backgroundImage: hasImage ? (path.startsWith('http') ? NetworkImage(path) : FileImage(File(path)) as ImageProvider) : null,
++                  backgroundImage: hasImage ? avatarImageProvider(path) : null,
+                   child: !hasImage ? const Icon(LucideIcons.user, color: Colors.white, size: 34) : null,
+                 ),
+                 Positioned(
+diff -ruN original/lib/follow_store.dart swifly/lib/follow_store.dart
+--- original/lib/follow_store.dart	2026-11-14 02:31:04.441965619 +0000
++++ swifly/lib/follow_store.dart	2026-11-14 02:31:12.809073427 +0000
+@@ -47,7 +47,14 @@
+     return FollowState.none;
+   }
+ 
+-  /// Replaces both lists. Called with mock data now, database results later.
++  /// People you can suggest: not you, not followed by you, and not following you.
++  /// Anyone you follow or who follows you is left out of every suggestion list.
++  List<Person> suggestedPeople() => [
++        for (final p in kPeople)
++          if (p.handle != kMeHandle && stateOf(p.handle) == FollowState.none) p,
++      ];
++
++  /// Replaces both lists from the database (or from the local cache on startup).
+   void load({
+     Set<String> following = const <String>{},
+     Set<String> followers = const <String>{},
+diff -ruN original/lib/home_screen.dart swifly/lib/home_screen.dart
+--- original/lib/home_screen.dart	2026-11-14 02:31:04.441989362 +0000
++++ swifly/lib/home_screen.dart	2026-11-14 02:32:54.070995044 +0000
+@@ -643,15 +643,19 @@
+               ),
+               SizedBox(height: r.h(12)),
+               ListenableBuilder(
+-                listenable: PostStore.instance,
+-                builder: (context, _) => SizedBox(
+-                  height: r.h(190),
+-                  child: ListView.builder(
+-                    scrollDirection: Axis.horizontal,
+-                    itemCount: kPeople.where((p) => p.handle != kMeHandle).take(10).length,
+-                    itemBuilder: (context, i) => _suggestionCard(r, kPeople.where((p) => p.handle != kMeHandle).toList()[i]),
+-                  ),
+-                ),
++                listenable: Listenable.merge([PostStore.instance, FollowStore.instance, PeopleDirectory.instance]),
++                builder: (context, _) {
++                  // Only people you do not follow and who do not follow you.
++                  final suggested = FollowStore.instance.suggestedPeople();
++                  return SizedBox(
++                    height: r.h(190),
++                    child: ListView.builder(
++                      scrollDirection: Axis.horizontal,
++                      itemCount: suggested.length > 10 ? 10 : suggested.length,
++                      itemBuilder: (context, i) => _suggestionCard(r, suggested[i]),
++                    ),
++                  );
++                },
+               ),
+                   ],
+                 ),
+diff -ruN original/lib/local_cache.dart swifly/lib/local_cache.dart
+--- original/lib/local_cache.dart	1970-01-01 00:00:00.000000000 +0000
++++ swifly/lib/local_cache.dart	2026-11-14 02:31:04.444469365 +0000
+@@ -0,0 +1,47 @@
++import 'dart:convert';
++import 'dart:io';
++
++import 'package:path_provider/path_provider.dart';
++
++/// Small JSON files kept on the phone. The app reads them first when it opens,
++/// so people and follow lists show straight away, then the server refreshes them.
++class LocalCache {
++  LocalCache._();
++
++  static Future<File> _file(String name) async {
++    final dir = await getApplicationSupportDirectory();
++    return File('${dir.path}/cache_$name.json');
++  }
++
++  static Future<void> save(String name, Object data) async {
++    try {
++      final f = await _file(name);
++      final tmp = File('${f.path}.tmp');
++      await tmp.writeAsString(jsonEncode(data), flush: true);
++      await tmp.rename(f.path);
++    } catch (_) {}
++  }
++
++  /// The saved value, or null if there is none or it cannot be read.
++  static Future<dynamic> load(String name) async {
++    try {
++      final f = await _file(name);
++      if (!await f.exists()) return null;
++      return jsonDecode(await f.readAsString());
++    } catch (_) {
++      return null;
++    }
++  }
++
++  /// Removes every saved cache file (used on sign out).
++  static Future<void> clear() async {
++    try {
++      final dir = await getApplicationSupportDirectory();
++      for (final entity in dir.listSync()) {
++        if (entity is File && entity.path.contains('/cache_')) {
++          await entity.delete();
++        }
++      }
++    } catch (_) {}
++  }
++}
+diff -ruN original/lib/people_directory.dart swifly/lib/people_directory.dart
+--- original/lib/people_directory.dart	2026-11-14 02:31:04.442245217 +0000
++++ swifly/lib/people_directory.dart	2026-11-14 02:31:12.808672660 +0000
+@@ -33,6 +33,20 @@
+   Map<String, (int, int)> get stats => _stats;
+   List<String> get trending => _trending;
+ 
++  /// Adds or updates people (for example from a search) without dropping the rest.
++  void merge({
++    List<Person> people = const [],
++    Map<String, (int, int)> stats = const {},
++  }) {
++    final byHandle = {for (final p in _people) p.handle: p};
++    for (final p in people) {
++      byHandle[p.handle] = p;
++    }
++    _people = List.unmodifiable(byHandle.values);
++    _stats = Map.unmodifiable({..._stats, ...stats});
++    notifyListeners();
++  }
++
+   void load({
+     List<Person> people = const [],
+     Map<String, (int, int)> stats = const {},
+diff -ruN original/lib/person_row.dart swifly/lib/person_row.dart
+--- original/lib/person_row.dart	1970-01-01 00:00:00.000000000 +0000
++++ swifly/lib/person_row.dart	2026-11-14 02:31:04.445112876 +0000
+@@ -0,0 +1,71 @@
++import 'package:flutter/material.dart';
++
++import 'dm_theme.dart';
++import 'people_directory.dart';
++
++/// One person in a list: avatar, name, @handle, and an optional action button.
++///
++/// The text column is wrapped in Expanded, so it always gets the space left over.
++/// Long names are cut with "..." on one line. They never squeeze into a narrow column.
++class PersonRow extends StatelessWidget {
++  final Person person;
++  final Widget? trailing;
++  final Widget? subtitle;
++  final VoidCallback? onTap;
++  final double avatarSize;
++
++  const PersonRow({
++    super.key,
++    required this.person,
++    this.trailing,
++    this.subtitle,
++    this.onTap,
++    this.avatarSize = 44,
++  });
++
++  @override
++  Widget build(BuildContext context) {
++    final p = person;
++    return InkWell(
++      onTap: onTap,
++      child: Padding(
++        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
++        child: Row(
++          children: [
++            DmAvatar(handle: p.handle, name: p.name, size: avatarSize),
++            const SizedBox(width: 12),
++            Expanded(
++              child: Column(
++                crossAxisAlignment: CrossAxisAlignment.start,
++                mainAxisSize: MainAxisSize.min,
++                children: [
++                  Text(
++                    p.name,
++                    maxLines: 1,
++                    overflow: TextOverflow.ellipsis,
++                    style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
++                  ),
++                  const SizedBox(height: 2),
++                  Text(
++                    p.handle,
++                    maxLines: 1,
++                    overflow: TextOverflow.ellipsis,
++                    style: const TextStyle(color: Color(0xFF8E8E8E)),
++                  ),
++                  if (subtitle != null) ...[
++                    const SizedBox(height: 3),
++                    subtitle!,
++                  ],
++                ],
++              ),
++            ),
++            if (trailing != null) ...[
++              const SizedBox(width: 10),
++              trailing!,
++            ],
++          ],
++        ),
++      ),
++    );
++  }
++}
+diff -ruN original/lib/splash_screen.dart swifly/lib/splash_screen.dart
+--- original/lib/splash_screen.dart	2026-11-14 02:31:04.442372564 +0000
++++ swifly/lib/splash_screen.dart	2026-11-14 02:31:29.666850844 +0000
+@@ -27,19 +27,18 @@
+   }
+ 
+   Future<void> _initApp() async {
+-    try {
+-      await AuthService.init().timeout(const Duration(seconds: 10));
+-      if (!AuthService.instance.needsLogin) {
+-        AuthService.instance.applyUser();
+-        setState(() => _status = 'Loading your feed...');
+-        await PostStore.instance.loadCache(); // Load offline cache instantly
+-        
+-        // Load network data in the background
+-        loadAppData();
+-        startLiveActivity();
+-      }
+-    } catch (e) {
+-      debugPrint('Init Error: $e');
++    final signedIn = await _bootAuth();
++    if (signedIn) {
++      AuthService.instance.applyUser();
++      // Show the saved feed and people right away. Each read is local and quick,
++      // and never waits longer than 2 seconds.
++      await Future.wait([
++        PostStore.instance.loadCache().timeout(const Duration(seconds: 2), onTimeout: () {}),
++        loadLocalAppData().timeout(const Duration(seconds: 2), onTimeout: () {}),
++      ]);
++      // Fresh data from the server arrives in the background.
++      loadAppData();
++      startLiveActivity();
+     }
+ 
+     if (!mounted) return;
+@@ -50,6 +49,17 @@
+     ));
+   }
+ 
++  /// Starts Supabase (it reads the saved session from the phone) and says if the user is signed in.
++  Future<bool> _bootAuth() async {
++    try {
++      await AuthService.init().timeout(const Duration(seconds: 8));
++      return AuthService.instance.signedIn;
++    } catch (e) {
++      debugPrint('Init Error: $e');
++      return false;
++    }
++  }
++
+   @override
+   void dispose() { _controller.dispose(); super.dispose(); }
+ 
+diff -ruN original/lib/suggestions_screen.dart swifly/lib/suggestions_screen.dart
+--- original/lib/suggestions_screen.dart	2026-11-14 02:31:04.442515332 +0000
++++ swifly/lib/suggestions_screen.dart	2026-11-14 02:32:03.332425873 +0000
+@@ -1,20 +1,20 @@
+ import 'package:flutter/material.dart';
+-import 'nav_guard.dart';
+ import 'package:lucide_icons_flutter/lucide_icons.dart';
+ 
+ import 'follow_button.dart';
+-import 'user_profile_screen.dart';
++import 'follow_store.dart';
++import 'nav_guard.dart';
+ import 'people_directory.dart';
+-import 'dm_theme.dart';
++import 'person_row.dart';
++import 'user_profile_screen.dart';
+ 
++/// Everyone you could follow. People you already follow, and people who follow
++/// you (follow back), are never listed here.
+ class SuggestionsScreen extends StatelessWidget {
+   const SuggestionsScreen({super.key});
+ 
+   @override
+   Widget build(BuildContext context) {
+-    // Filter out your own account
+-    final others = kPeople.where((p) => p.handle != kMeHandle).toList();
+-
+     return Scaffold(
+       backgroundColor: Colors.white,
+       appBar: AppBar(
+@@ -30,19 +30,28 @@
+           style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800),
+         ),
+       ),
+-      body: ListView.separated(
+-        padding: const EdgeInsets.all(16),
+-        itemCount: others.length,
+-        separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
+-        itemBuilder: (context, i) {
+-          final p = others[i];
+-          return ListTile(
+-            onTap: () => pushOnce(context, UserProfileScreen.route(p)),
+-            contentPadding: EdgeInsets.zero,
+-            leading: DmAvatar(handle: p.handle, name: p.name, size: 40),
+-            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+-            subtitle: Text(p.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
+-            trailing: FollowButton(handle: p.handle, compact: true),
++      body: ListenableBuilder(
++        listenable: Listenable.merge([FollowStore.instance, PeopleDirectory.instance]),
++        builder: (context, _) {
++          final others = FollowStore.instance.suggestedPeople();
++          if (others.isEmpty) {
++            return const Center(
++              child: Text('No new suggestions right now',
++                  style: TextStyle(color: Color(0xFF8E8E8E))),
++            );
++          }
++          return ListView.separated(
++            padding: const EdgeInsets.symmetric(vertical: 8),
++            itemCount: others.length,
++            separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
++            itemBuilder: (context, i) {
++              final p = others[i];
++              return PersonRow(
++                person: p,
++                onTap: () => pushOnce(context, UserProfileScreen.route(p)),
++                trailing: FollowButton(handle: p.handle, compact: true),
++              );
++            },
+           );
+         },
+       ),
+diff -ruN original/lib/user_profile_screen.dart swifly/lib/user_profile_screen.dart
+--- original/lib/user_profile_screen.dart	2026-11-14 02:31:04.442573108 +0000
++++ swifly/lib/user_profile_screen.dart	2026-11-14 02:32:47.484658133 +0000
+@@ -1,18 +1,22 @@
++import 'dart:io';
++
+ import 'package:flutter/material.dart';
+ import 'package:lucide_icons_flutter/lucide_icons.dart';
+ 
+ import 'chat_screen.dart';
+-import 'nav_guard.dart';
+ import 'connections_screen.dart';
+-import 'native_bridge.dart';
+-import 'discover_panel.dart';
++import 'database_service.dart';
++import 'db_mappers.dart';
++import 'dm_theme.dart';
+ import 'follow_button.dart';
+-import 'responsive.dart';
++import 'follow_store.dart';
+ import 'inbox_store.dart';
+-import 'story_player_screen.dart';
++import 'nav_guard.dart';
++import 'native_bridge.dart';
+ import 'people_directory.dart';
+-import 'dm_theme.dart';
+ import 'post_model.dart';
++import 'responsive.dart';
++import 'story_player_screen.dart';
+ 
+ class UserProfileScreen extends StatefulWidget {
+   final Person user;
+@@ -28,6 +32,57 @@
+ }
+ 
+ class _UserProfileScreenState extends State<UserProfileScreen> {
++  String? _userId;
++  int _followers = 0;
++  int _following = 0;
++  List<Post> _posts = const [];
++  bool _postsLoaded = false;
++
++  @override
++  void initState() {
++    super.initState();
++    _load();
++    FollowStore.instance.addListener(_loadCounts);
++  }
++
++  @override
++  void dispose() {
++    FollowStore.instance.removeListener(_loadCounts);
++    super.dispose();
++  }
++
++  /// Loads the counts, then this person's posts. Counts come from the database,
++  /// so they are right even if this person is not in the phone's cache.
++  Future<void> _load() async {
++    _userId = await DatabaseService.instance.idForHandle(widget.user.handle);
++    await _loadCounts();
++    await _loadPosts();
++  }
++
++  Future<void> _loadCounts() async {
++    try {
++      final c = await DatabaseService.instance.fetchProfileCounts(widget.user.handle);
++      if (!mounted) return;
++      setState(() {
++        _followers = c['followers'] ?? 0;
++        _following = c['following'] ?? 0;
++      });
++    } catch (_) {}
++  }
++
++  Future<void> _loadPosts() async {
++    final id = _userId;
++    if (id == null) {
++      if (mounted) setState(() => _postsLoaded = true);
++      return;
++    }
++    try {
++      final rows = await DatabaseService.instance.fetchPosts(limit: 50, offset: 0, authorId: id);
++      if (mounted) setState(() => _posts = [for (final r in rows) postFromRow(r)]);
++    } catch (_) {}
++    if (mounted) setState(() => _postsLoaded = true);
++  }
++
+   /// Profile picture. With a story it gets a blue ring and opens the story.
+   Widget _storyAvatar(BuildContext context, Person f, R r) {
+     final avatar = DmAvatar(handle: f.handle, name: f.name, size: r.s(88));
+@@ -59,7 +114,6 @@
+   @override
+   Widget build(BuildContext context) {
+     final f = widget.user;
+-    final stats = kPeopleStats[f.handle] ?? (0, 0);
+     final r = R.of(context);
+ 
+     return Scaffold(
+@@ -74,119 +128,213 @@
+         ),
+         title: Text(
+           f.handle,
+-          style: const TextStyle(
+-              color: Colors.black, fontWeight: FontWeight.w800, fontSize: 18),
++          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 18),
+         ),
+       ),
+       body: SingleChildScrollView(
+         padding: EdgeInsets.fromLTRB(r.pad, 10, r.pad, 96),
+         child: ContentWidth(
+           child: Column(
+-          crossAxisAlignment: CrossAxisAlignment.start,
+-          children: [
+-            _storyAvatar(context, f, r),
+-            const SizedBox(height: 14),
+-            Text(f.name,
+-                style: const TextStyle(
+-                    fontSize: 22,
+-                    fontWeight: FontWeight.w800,
+-                    color: Colors.black)),
+-            const SizedBox(height: 4),
+-            Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
+-            const SizedBox(height: 20),
+-            Row(
+-              children: [
+-                _Stat(label: 'Posts', value: '${PostStore.instance.countFor(f.handle)}'),
+-                const SizedBox(width: 32),
+-                GestureDetector(
+-                  onTap: () => pushOnce(
+-                    context,
+-                    fastRoute(
++            crossAxisAlignment: CrossAxisAlignment.start,
++            children: [
++              _storyAvatar(context, f, r),
++              const SizedBox(height: 14),
++              Text(
++                f.name,
++                maxLines: 1,
++                overflow: TextOverflow.ellipsis,
++                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.black),
++              ),
++              const SizedBox(height: 4),
++              Text(f.handle, style: const TextStyle(color: Color(0xFF8E8E8E))),
++              const SizedBox(height: 20),
++              Row(
++                children: [
++                  _Stat(label: 'Posts', value: _postsLoaded ? '${_posts.length}' : '…'),
++                  const SizedBox(width: 32),
++                  GestureDetector(
++                    onTap: () => pushOnce(
++                      context,
++                      fastRoute(
+                         name: 'connections:${f.handle}:followers',
+                         child: ConnectionsScreen(
+-                            initialFollowers: true,
+-                            userHandle: f.handle,
+-                            userName: f.name)),
+-                  ),
+-                  child: _Stat(
+-                      label: 'Followers',
+-                      value: NativeCore.formatCount(stats.$1)),
+-                ),
+-                const SizedBox(width: 32),
+-                GestureDetector(
+-                  onTap: () => pushOnce(
+-                    context,
+-                    fastRoute(
+-                        name: 'connections:${f.handle}:following',
+-                        child: ConnectionsScreen(
+-                            initialFollowers: false,
+-                            userHandle: f.handle,
+-                            userName: f.name)),
++                          initialFollowers: true,
++                          userHandle: f.handle,
++                          userName: f.name,
++                        ),
++                      ),
++                    ),
++                    child: _Stat(label: 'Followers', value: NativeCore.formatCount(_followers)),
+                   ),
+-                  child: _Stat(
+-                      label: 'Following',
+-                      value: NativeCore.formatCount(stats.$2)),
+-                ),
+-              ],
+-            ),
+-            const SizedBox(height: 20),
+-            Row(
+-              children: [
+-                Expanded(child: FollowButton(handle: f.handle, expand: true)),
+-                const SizedBox(width: 12),
+-                Expanded(
+-                  child: ElevatedButton(
+-                    onPressed: () => pushOnce(
++                  const SizedBox(width: 32),
++                  GestureDetector(
++                    onTap: () => pushOnce(
+                       context,
+                       fastRoute(
+-                          name: 'chat:${f.handle}',
+-                          child: ChatScreen(handle: f.handle)),
++                        name: 'connections:${f.handle}:following',
++                        child: ConnectionsScreen(
++                          initialFollowers: false,
++                          userHandle: f.handle,
++                          userName: f.name,
++                        ),
++                      ),
+                     ),
+-                    style: ElevatedButton.styleFrom(
+-                      backgroundColor: const Color(0xFF1D6FDC),
+-                      shape: RoundedRectangleBorder(
+-                          borderRadius: BorderRadius.circular(30)),
+-                      minimumSize: const Size(0, 48),
+-                      maximumSize: const Size(double.infinity, 48),
+-                      padding: EdgeInsets.zero,
+-                      elevation: 0,
++                    child: _Stat(label: 'Following', value: NativeCore.formatCount(_following)),
++                  ),
++                ],
++              ),
++              const SizedBox(height: 20),
++              Row(
++                children: [
++                  Expanded(child: FollowButton(handle: f.handle, expand: true)),
++                  const SizedBox(width: 12),
++                  Expanded(
++                    child: ElevatedButton(
++                      onPressed: () => pushOnce(
++                        context,
++                        fastRoute(name: 'chat:${f.handle}', child: ChatScreen(handle: f.handle)),
++                      ),
++                      style: ElevatedButton.styleFrom(
++                        backgroundColor: const Color(0xFF1D6FDC),
++                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
++                        minimumSize: const Size(0, 48),
++                        maximumSize: const Size(double.infinity, 48),
++                        padding: EdgeInsets.zero,
++                        elevation: 0,
++                      ),
++                      child: const Text(
++                        'Message',
++                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
++                      ),
+                     ),
+-                    child: const Text('Message',
+-                        style: TextStyle(
+-                            color: Colors.white,
+-                            fontWeight: FontWeight.w700)),
+                   ),
+-                ),
+-              ],
+-            ),
+-            const SizedBox(height: 30),
+-            Row(
+-              children: [
+-                const Text('Suggestions People',
+-                    style: TextStyle(
+-                        fontSize: 18,
+-                        fontWeight: FontWeight.w800,
+-                        color: Colors.black)),
+-                const Spacer(),
+-              ],
++                ],
++              ),
++              const SizedBox(height: 30),
++              const Text(
++                'Posts',
++                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black),
++              ),
++              const SizedBox(height: 12),
++              _postsSection(),
++              const SizedBox(height: 30),
++              _suggestionsSection(r),
++            ],
++          ),
++        ),
++      ),
++    );
++  }
++
++  Widget _postsSection() {
++    if (!_postsLoaded) {
++      return const Padding(
++        padding: EdgeInsets.symmetric(vertical: 24),
++        child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)),
++      );
++    }
++    if (_posts.isEmpty) {
++      return const Padding(
++        padding: EdgeInsets.symmetric(vertical: 12),
++        child: Text('No posts yet', style: TextStyle(color: Color(0xFF8E8E8E))),
++      );
++    }
++    return Column(
++      crossAxisAlignment: CrossAxisAlignment.stretch,
++      children: [for (final p in _posts) _ProfilePostCard(post: p)],
++    );
++  }
++
++  /// People to follow next, from the same rule as Discover: never people you
++  /// already follow, and never people who already follow you.
++  Widget _suggestionsSection(R r) {
++    return ListenableBuilder(
++      listenable: Listenable.merge([FollowStore.instance, PeopleDirectory.instance]),
++      builder: (context, _) {
++        final list = [
++          for (final p in FollowStore.instance.suggestedPeople())
++            if (p.handle != widget.user.handle) p,
++        ].take(10).toList();
++        if (list.isEmpty) return const SizedBox.shrink();
++        return Column(
++          crossAxisAlignment: CrossAxisAlignment.start,
++          children: [
++            const Text(
++              'Suggestions People',
++              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black),
+             ),
+             const SizedBox(height: 12),
+             SizedBox(
+               height: r.h(190),
+               child: ListView.builder(
+                 scrollDirection: Axis.horizontal,
+-                itemCount: kPeople.where((p) => p.handle != kMeHandle).take(10).length,
+-                itemBuilder: (context, i) {
+-                  final suggest = kPeople.where((p) => p.handle != kMeHandle).toList()[i];
+-                  if (suggest.handle == f.handle)
+-                    return const SizedBox.shrink();
+-                  return _SuggestionCard(friend: suggest);
+-                },
++                itemCount: list.length,
++                itemBuilder: (context, i) => _SuggestionCard(friend: list[i]),
+               ),
+             ),
+           ],
+-        ),
+-        ),
++        );
++      },
++    );
++  }
++}
++
++/// One of this person's posts: picture (if any), text, and the like and comment counts.
++class _ProfilePostCard extends StatelessWidget {
++  final Post post;
++  const _ProfilePostCard({required this.post});
++
++  @override
++  Widget build(BuildContext context) {
++    final media = post.media.isNotEmpty ? post.media.first : null;
++    final preview = media?.previewPath;
++    return Container(
++      margin: const EdgeInsets.only(bottom: 14),
++      clipBehavior: Clip.antiAlias,
++      decoration: BoxDecoration(
++        color: Colors.white,
++        borderRadius: BorderRadius.circular(16),
++        border: Border.all(color: const Color(0xFFEAEAEA)),
++      ),
++      child: Column(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          if (preview != null)
++            AspectRatio(
++              aspectRatio: 4 / 3,
++              child: Image.file(
++                File(preview),
++                fit: BoxFit.cover,
++                errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFF2F2F2)),
++              ),
++            ),
++          if (post.text.trim().isNotEmpty)
++            Padding(
++              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
++              child: Text(
++                post.text,
++                maxLines: 4,
++                overflow: TextOverflow.ellipsis,
++                style: const TextStyle(color: Colors.black, fontSize: 15),
++              ),
++            ),
++          Padding(
++            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
++            child: Row(
++              children: [
++                const Icon(LucideIcons.heart, size: 14, color: Color(0xFF8E8E8E)),
++                const SizedBox(width: 4),
++                Text('${post.likes}', style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
++                const SizedBox(width: 14),
++                const Icon(LucideIcons.messageCircle, size: 14, color: Color(0xFF8E8E8E)),
++                const SizedBox(width: 4),
++                Text('${post.totalComments}', style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
++                const Spacer(),
++                Text(post.timeLabel, style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E))),
++              ],
++            ),
++          ),
++        ],
+       ),
+     );
+   }
+@@ -212,23 +360,25 @@
+         child: Column(
+           children: [
+             const SizedBox(height: 12),
+-            const CircleAvatar(
+-              radius: 30,
+-              backgroundColor: Colors.black,
+-              child: Icon(LucideIcons.user, color: Colors.white, size: 30),
+-            ),
++            DmAvatar(handle: friend.handle, name: friend.name, size: 60),
+             const SizedBox(height: 8),
+-            Text(
+-              friend.name,
+-              style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
+-              maxLines: 1,
+-              overflow: TextOverflow.ellipsis,
++            Padding(
++              padding: const EdgeInsets.symmetric(horizontal: 8),
++              child: Text(
++                friend.name,
++                maxLines: 1,
++                overflow: TextOverflow.ellipsis,
++                style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
++              ),
+             ),
+-            Text(
+-              friend.handle,
+-              style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E)),
+-              maxLines: 1,
+-              overflow: TextOverflow.ellipsis,
++            Padding(
++              padding: const EdgeInsets.symmetric(horizontal: 8),
++              child: Text(
++                friend.handle,
++                maxLines: 1,
++                overflow: TextOverflow.ellipsis,
++                style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E8E)),
++              ),
+             ),
+             const Spacer(),
+             Padding(
+@@ -251,9 +401,10 @@
+   Widget build(BuildContext context) {
+     return Column(
+       children: [
+-        Text(value,
+-            style: const TextStyle(
+-                fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black)),
++        Text(
++          value,
++          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black),
++        ),
+         const SizedBox(height: 2),
+         Text(label, style: const TextStyle(color: Color(0xFF8E8E8E), fontSize: 13)),
+       ],

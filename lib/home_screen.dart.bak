@@ -844,6 +844,3 @@ class UploadBanner extends StatelessWidget {
     );
   }
 }
-
-
-

@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_config.dart';
+import 'avatar_cache.dart';
 
 /// Every read and write the app makes to Supabase goes through this file.
 /// Tables, columns, policies and triggers: supabase/schema.sql.
@@ -52,6 +53,30 @@ class DatabaseService {
     _byId[id] = who;
     _idByUsername[who.username] = id;
     return who;
+  }
+
+  /// Loads many profiles with ONE query and fills the cache, instead of one query per person.
+  Future<void> _loadWhoMany(Iterable<String> ids) async {
+    final missing = {for (final id in ids) if (id.isNotEmpty && !_byId.containsKey(id)) id}.toList();
+    if (missing.isEmpty) return;
+    final rows = await _db
+        .from('profiles')
+        .select('id,username,display_name,avatar_url')
+        .inFilter('id', missing);
+    for (final r in rows) {
+      final who = _Who.fromRow(Map<String, dynamic>.from(r));
+      _byId[who.id] = who;
+      _idByUsername[who.username] = who.id;
+    }
+  }
+
+  /// Profile id for a handle like '@wilme'. Null if the account does not exist.
+  Future<String?> idForHandle(String handle) async {
+    try {
+      return await _idForHandle(handle);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// '@wilme' -> the profile id of that account.
@@ -322,23 +347,75 @@ class DatabaseService {
     };
   }
 
-  /// Rows: {name, handle, followers_count, following_count}, biggest first.
+  /// Rows: {id, name, handle, avatar_url, followers_count, following_count}, biggest first.
   Future<List<Map<String, dynamic>>> fetchPeople() async {
     final rows = await _db
         .from('profiles')
-        .select('username,display_name,followers_count,following_count,avatar_url')
+        .select('id,username,display_name,followers_count,following_count,avatar_url')
         .order('followers_count', ascending: false)
         .limit(500);
+    return [for (final r in rows) _personRow(Map<String, dynamic>.from(r))];
+  }
+
+  /// People whose @handle or name contains [query]. Never includes the signed-in user.
+  /// Searches the whole database, not only the first 500 people loaded at startup.
+  Future<List<Map<String, dynamic>>> searchPeople(String query, {int limit = 30}) async {
+    final me = _requireMe();
+    final q = query.trim().replaceFirst('@', '').replaceAll(RegExp(r'[,()*"\\%]'), '');
+    if (q.isEmpty) return <Map<String, dynamic>>[];
+    final rows = await _db
+        .from('profiles')
+        .select('id,username,display_name,followers_count,following_count,avatar_url')
+        .neq('id', me)
+        .or('username.ilike.*$q*,display_name.ilike.*$q*')
+        .limit(limit);
+    return [for (final r in rows) _personRow(Map<String, dynamic>.from(r))];
+  }
+
+  /// Followers or following of another person, from the database.
+  /// Rows have the same shape as fetchPeople.
+  Future<List<Map<String, dynamic>>> fetchConnections(String handle, {required bool followers}) async {
+    final userId = await _idForHandle(handle);
+    final rows = followers
+        ? await _db
+            .from('follows')
+            .select('profile:profiles!follower(id,username,display_name,followers_count,following_count,avatar_url)')
+            .eq('followee', userId)
+        : await _db
+            .from('follows')
+            .select('profile:profiles!followee(id,username,display_name,followers_count,following_count,avatar_url)')
+            .eq('follower', userId);
     return [
       for (final r in rows)
-        {
-          'name': _Who.fromRow(Map<String, dynamic>.from(r)).name,
-          'handle': _Who.fromRow(Map<String, dynamic>.from(r)).handle,
-          'avatar_url': r['avatar_url'] ?? '',
-          'followers_count': r['followers_count'] ?? 0,
-          'following_count': r['following_count'] ?? 0,
-        },
+        if (r['profile'] is Map) _personRow(_embedded(r['profile'])),
     ];
+  }
+
+  /// Follower and following counts of one person, straight from their profile row.
+  Future<Map<String, int>> fetchProfileCounts(String handle) async {
+    final userId = await _idForHandle(handle);
+    final row = await _db
+        .from('profiles')
+        .select('followers_count,following_count')
+        .eq('id', userId)
+        .single();
+    return {
+      'followers': (row['followers_count'] as num?)?.toInt() ?? 0,
+      'following': (row['following_count'] as num?)?.toInt() ?? 0,
+    };
+  }
+
+  /// One profile as a row: id, name, handle, avatar_url and the two counts.
+  static Map<String, dynamic> _personRow(Map<String, dynamic> r) {
+    final who = _Who.fromRow(r);
+    return <String, dynamic>{
+      'id': '${r['id'] ?? ''}',
+      'name': who.name,
+      'handle': who.handle,
+      'avatar_url': r['avatar_url'] ?? '',
+      'followers_count': r['followers_count'] ?? 0,
+      'following_count': r['following_count'] ?? 0,
+    };
   }
 
   /// Hashtag names without the #, most popular first.
@@ -349,65 +426,102 @@ class DatabaseService {
 
   /// Posts you are allowed to see (the database decides), newest first, with
   /// comments, replies, and whether you liked or saved each one.
-  Future<List<Map<String, dynamic>>> fetchPosts({int limit = 4, int offset = 0}) async {
+  /// Pass [authorId] to get one person's posts (used on their profile).
+  Future<List<Map<String, dynamic>>> fetchPosts({int limit = 4, int offset = 0, String? authorId}) async {
     final me = _requireMe();
-    final postRows = await _db
+    final base = _db
         .from('posts')
-        .select('id,text,audience,tagged_handles,likes,saves,shares,created_at,author:profiles!author_id(username,display_name)')
+        .select('id,author_id,text,audience,tagged_handles,likes,saves,shares,created_at,author:profiles!author_id(username,display_name,avatar_url)');
+    final filtered = authorId == null ? base : base.eq('author_id', authorId);
+    final postRows = await filtered
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
     if (postRows.isEmpty) return <Map<String, dynamic>>[];
 
     final ids = [for (final r in postRows) '${r['id']}'];
 
-    final commentRows = await _db
-        .from('comments')
-        .select('id,post_id,parent_id,text,created_at,author:profiles!author_id(username,display_name)')
-        .inFilter('post_id', ids)
-        .order('created_at', ascending: true);
-    final likedRows = await _db.from('post_likes').select('post_id').eq('user_id', me).inFilter('post_id', ids);
-    final savedRows = await _db.from('post_saves').select('post_id').eq('user_id', me).inFilter('post_id', ids);
+    // The four lookups below do not depend on each other, so they run together.
+    final results = await Future.wait<List<dynamic>>([
+      _db
+          .from('comments')
+          .select('id,post_id,parent_id,text,created_at,author:profiles!author_id(username,display_name)')
+          .inFilter('post_id', ids)
+          .order('created_at', ascending: true),
+      _db.from('post_likes').select('post_id').eq('user_id', me).inFilter('post_id', ids),
+      _db.from('post_saves').select('post_id').eq('user_id', me).inFilter('post_id', ids),
+      _db
+          .from('post_media')
+          .select('post_id,position,kind,storage_path,thumb_path,width,height,duration_ms,engine')
+          .inFilter('post_id', ids)
+          .order('position', ascending: true),
+    ]);
+    final commentRows = results[0];
+    final likedRows = results[1];
+    final savedRows = results[2];
+    final mediaRows = results[3];
 
-    final liked = {for (final r in likedRows) '${r['post_id']}'};
-    final saved = {for (final r in savedRows) '${r['post_id']}'};
+    final liked = {for (final r in likedRows) '${(r as Map)['post_id']}'};
+    final saved = {for (final r in savedRows) '${(r as Map)['post_id']}'};
 
     // Build every comment first, then attach replies to their parent.
     final byId = <String, Map<String, dynamic>>{};
     for (final r in commentRows) {
-      final author = _Who.fromRow(_embedded(r['author']));
-      byId['${r['id']}'] = <String, dynamic>{
-        'id': '${r['id']}',
+      final row = Map<String, dynamic>.from(r as Map);
+      final author = _Who.fromRow(_embedded(row['author']));
+      byId['${row['id']}'] = <String, dynamic>{
+        'id': '${row['id']}',
         'name': author.name,
         'author_handle': author.handle,
-        'text': '${r['text']}',
-        'created_at': '${r['created_at']}',
+        'text': '${row['text']}',
+        'created_at': '${row['created_at']}',
         'replies': <Map<String, dynamic>>[],
       };
     }
     final topLevel = <String, List<Map<String, dynamic>>>{};
     for (final r in commentRows) {
-      final node = byId['${r['id']}']!;
-      final parent = r['parent_id'];
+      final row = Map<String, dynamic>.from(r as Map);
+      final node = byId['${row['id']}']!;
+      final parent = row['parent_id'];
       if (parent == null) {
-        topLevel.putIfAbsent('${r['post_id']}', () => <Map<String, dynamic>>[]).add(node);
+        topLevel.putIfAbsent('${row['post_id']}', () => <Map<String, dynamic>>[]).add(node);
       } else {
         final p = byId['$parent'];
         if (p != null) (p['replies'] as List<Map<String, dynamic>>).add(node);
       }
     }
 
-    final mediaRows = await _db
-        .from('post_media')
-        .select('post_id,position,kind,storage_path,thumb_path,width,height,duration_ms,engine')
-        .inFilter('post_id', ids)
-        .order('position', ascending: true);
+    // Every media file downloads at the same time. Results keep their order.
+    final mediaEntries = await Future.wait([
+      for (final m in mediaRows) _prepareMedia(Map<String, dynamic>.from(m as Map)),
+    ]);
     final mediaByPost = <String, List<Map<String, dynamic>>>{};
-    for (final m in mediaRows) {
-      final local = await _cachedFile('post-media', '${m['storage_path']}');
-      if (local == null) continue; // could not download: skip it rather than show a broken tile
-      final thumbPath = m['thumb_path'];
-      final thumb = thumbPath == null ? null : await _cachedFile('post-media', '$thumbPath');
-      mediaByPost.putIfAbsent('${m['post_id']}', () => <Map<String, dynamic>>[]).add({
+    for (final e in mediaEntries) {
+      if (e == null) continue; // could not download: skip it rather than show a broken tile
+      mediaByPost.putIfAbsent(e.$1, () => <Map<String, dynamic>>[]).add(e.$2);
+    }
+
+    return [
+      for (final r in postRows)
+        _postMap(
+          Map<String, dynamic>.from(r),
+          liked: liked.contains('${r['id']}'),
+          saved: saved.contains('${r['id']}'),
+          comments: topLevel['${r['id']}'] ?? <Map<String, dynamic>>[],
+          media: mediaByPost['${r['id']}'] ?? <Map<String, dynamic>>[],
+        ),
+    ];
+  }
+
+  /// Downloads (or reads from the phone) one media file and its thumbnail.
+  /// Returns (post id, media map), or null if the file is not available.
+  Future<(String, Map<String, dynamic>)?> _prepareMedia(Map<String, dynamic> m) async {
+    final local = await _cachedFile('post-media', '${m['storage_path']}');
+    if (local == null) return null;
+    final thumbPath = m['thumb_path'];
+    final thumb = thumbPath == null ? null : await _cachedFile('post-media', '$thumbPath');
+    return (
+      '${m['post_id']}',
+      <String, dynamic>{
         'kind': m['kind'],
         'path': local,
         'thumb': thumb,
@@ -415,19 +529,8 @@ class DatabaseService {
         'height': m['height'],
         'duration_ms': m['duration_ms'],
         'engine': m['engine'] ?? '',
-      });
-    }
-
-    return [
-      for (final r in postRows)
-        _postMap(
-          r,
-          liked: liked.contains('${r['id']}'),
-          saved: saved.contains('${r['id']}'),
-          comments: topLevel['${r['id']}'] ?? <Map<String, dynamic>>[],
-          media: mediaByPost['${r['id']}'] ?? <Map<String, dynamic>>[],
-        ),
-    ];
+      },
+    );
   }
 
   Map<String, dynamic> _postMap(
@@ -495,6 +598,12 @@ class DatabaseService {
         .order('created_at', ascending: true)
         .limit(1000);
 
+    // One query for every person in these messages, instead of one per message.
+    await _loadWhoMany([
+      for (final r in rows) '${r['sender']}' == me ? '${r['recipient']}' : '${r['sender']}',
+    ]);
+
+    final thumbs = <String, Future<String?>>{};
     final out = <Map<String, dynamic>>[];
     for (final r in rows) {
       final fromMe = '${r['sender']}' == me;
@@ -513,7 +622,7 @@ class DatabaseService {
           if (first['kind'] == 'video') isVideo = true;
           final thumbPath = first['thumb_path'];
           if (thumbPath != null) {
-            thumb = await _cachedFile('post-media', '$thumbPath');
+            thumb = await thumbs.putIfAbsent('$thumbPath', () => _cachedFile('post-media', '$thumbPath'));
           }
         }
         postData = {
@@ -669,15 +778,20 @@ class DatabaseService {
     for (final r in rows) {
       newest.putIfAbsent('${r['author_id']}', () => Map<String, dynamic>.from(r));
     }
+    final list = newest.values.toList();
+    final photos = await Future.wait<String?>([
+      for (final r in list)
+        r['photo_path'] == null ? Future<String?>.value(null) : _cachedStoryPhoto('${r['photo_path']}'),
+    ]);
     final out = <Map<String, dynamic>>[];
-    for (final r in newest.values) {
+    for (var i = 0; i < list.length; i++) {
+      final r = list[i];
       final who = _Who.fromRow(_embedded(r['author']));
-      final photoPath = r['photo_path'];
       out.add({
         ...r,
         'handle': who.handle,
         'name': who.name,
-        'photo_local': photoPath == null ? null : await _cachedStoryPhoto('$photoPath'),
+        'photo_local': photos[i],
       });
     }
     return out;
@@ -759,31 +873,8 @@ class DatabaseService {
     });
   }
 
-    Future<String?> cacheAvatarImage(String url) async {
-    if (url.isEmpty) return null;
-    try {
-      final dir = await getApplicationSupportDirectory();
-      final safeName = url.split('/').last.split('?').first;
-      final hash = url.hashCode.toRadixString(16);
-      final file = File('${dir.path}/avatars/${hash}_$safeName');
-      if (await file.exists()) return file.path;
-      await file.parent.create(recursive: true);
-      
-      final client = HttpClient();
-      try {
-        final req = await client.getUrl(Uri.parse(url));
-        final res = await req.close();
-        if (res.statusCode == 200) {
-          final bytes = await res.fold<List<int>>([], (p, e) => p..addAll(e));
-          await file.writeAsBytes(bytes);
-          return file.path;
-        }
-      } finally {
-        client.close(force: true);
-      }
-    } catch (_) {}
-    return null;
-  }
+  /// Local copy of a profile picture. Downloads once. Null if it cannot be loaded.
+  Future<String?> cacheAvatarImage(String url) => AvatarCache.instance.pathFor(url);
 
   Future<void> clearLocalMediaCache() async {
     try {

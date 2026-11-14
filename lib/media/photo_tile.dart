@@ -41,6 +41,3 @@ class PhotoTile extends StatelessWidget {
     );
   }
 }
-
-
-

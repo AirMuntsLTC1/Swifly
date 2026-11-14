@@ -210,4 +210,3 @@ serve(async (req) => {
     <p>Keep this token private. Never commit it to GitHub.</p>
   `);
 });
-

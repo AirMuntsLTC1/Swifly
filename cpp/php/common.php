@@ -60,6 +60,3 @@ function swifly_file_size(string $path): int
     $size = @filesize($path);
     return $size === false ? 0 : (int) $size;
 }
-
-
-

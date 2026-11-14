@@ -33,6 +33,20 @@ class PeopleDirectory extends ChangeNotifier {
   Map<String, (int, int)> get stats => _stats;
   List<String> get trending => _trending;
 
+  /// Adds or updates people (for example from a search) without dropping the rest.
+  void merge({
+    List<Person> people = const [],
+    Map<String, (int, int)> stats = const {},
+  }) {
+    final byHandle = {for (final p in _people) p.handle: p};
+    for (final p in people) {
+      byHandle[p.handle] = p;
+    }
+    _people = List.unmodifiable(byHandle.values);
+    _stats = Map.unmodifiable({..._stats, ...stats});
+    notifyListeners();
+  }
+
   void load({
     List<Person> people = const [],
     Map<String, (int, int)> stats = const {},
@@ -48,4 +62,3 @@ class PeopleDirectory extends ChangeNotifier {
 List<Person> get kPeople => PeopleDirectory.instance.people;
 Map<String, (int, int)> get kPeopleStats => PeopleDirectory.instance.stats;
 List<String> get kTrendingTags => PeopleDirectory.instance.trending;
-

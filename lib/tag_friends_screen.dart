@@ -160,6 +160,3 @@ class _TagFriendsScreenState extends State<TagFriendsScreen> {
     );
   }
 }
-
-
-

@@ -48,6 +48,3 @@ class MediaThumb extends StatelessWidget {
     );
   }
 }
-
-
-

@@ -215,4 +215,3 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
     );
   }
 }
-

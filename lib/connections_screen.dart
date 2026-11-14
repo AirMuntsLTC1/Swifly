@@ -2,22 +2,23 @@ import 'package:flutter/material.dart';
 import 'nav_guard.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'database_service.dart';
+import 'db_mappers.dart';
 import 'follow_button.dart';
 import 'follow_store.dart';
-import 'post_model.dart';
-import 'user_profile_screen.dart';
 import 'people_directory.dart';
+import 'person_row.dart';
+import 'user_profile_screen.dart';
 
-/// Followers and Following lists. Both come from [FollowStore], so they update
-/// live when someone follows or unfollows.
-/// Currently shows the signed-in user's lists; [userHandle] is kept for when
-/// other people's lists come from the database.
+/// Followers and Following lists.
+///
+/// - Your own lists (no [userHandle], or your handle) come from [FollowStore] and update live.
+/// - Another person's lists come from the database, for that person.
 class ConnectionsScreen extends StatefulWidget {
   final bool initialFollowers;
-  // Optional. Not used yet. Defaults cannot read kMeHandle/kMeName here because
-  // those values are only known at runtime, not at compile time.
   final String? userHandle;
   final String? userName;
+
   const ConnectionsScreen({
     super.key,
     required this.initialFollowers,
@@ -31,11 +32,44 @@ class ConnectionsScreen extends StatefulWidget {
 
 class _ConnectionsScreenState extends State<ConnectionsScreen> {
   late bool _showFollowers;
+  Future<List<Person>>? _remote;
+
+  bool get _isOtherPerson => widget.userHandle != null && widget.userHandle != kMeHandle;
 
   @override
   void initState() {
     super.initState();
     _showFollowers = widget.initialFollowers;
+    _reloadRemote();
+  }
+
+  /// Loads the other person's list for the current tab. Also merges the people into the directory.
+  void _reloadRemote() {
+    if (!_isOtherPerson) {
+      _remote = null;
+      return;
+    }
+    _remote = DatabaseService.instance
+        .fetchConnections(widget.userHandle!, followers: _showFollowers)
+        .then((rows) {
+      final people = [for (final r in rows) personFromRow(r)];
+      final stats = <String, (int, int)>{
+        for (final r in rows)
+          '${r['handle']}': (
+            (r['followers_count'] as num?)?.toInt() ?? 0,
+            (r['following_count'] as num?)?.toInt() ?? 0,
+          ),
+      };
+      PeopleDirectory.instance.merge(people: people, stats: stats);
+      return people;
+    });
+  }
+
+  void _setTab(bool followers) {
+    setState(() {
+      _showFollowers = followers;
+      _reloadRemote();
+    });
   }
 
   @override
@@ -62,61 +96,75 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: _buildTabButton('Followers', _showFollowers, () {
-                    setState(() => _showFollowers = true);
-                  }),
+                  child: _buildTabButton('Followers', _showFollowers, () => _setTab(true)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildTabButton('Following', !_showFollowers, () {
-                    setState(() => _showFollowers = false);
-                  }),
+                  child: _buildTabButton('Following', !_showFollowers, () => _setTab(false)),
                 ),
               ],
             ),
           ),
           Expanded(
-            child: ListenableBuilder(
-              listenable: FollowStore.instance,
-              builder: (context, _) {
-                final handles = (_showFollowers
-                        ? FollowStore.instance.followerHandles
-                        : FollowStore.instance.followingHandles)
-                    .toList();
-                if (handles.isEmpty) {
-                  return Center(
-                    child: Text(
-                      _showFollowers ? 'No followers yet' : 'Not following anyone yet',
-                      style: const TextStyle(color: Color(0xFF8E8E8E)),
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: handles.length,
-                  separatorBuilder: (_, __) => const Divider(color: Color(0xFFEAEAEA)),
-                  itemBuilder: (context, i) {
-                    final p = personFor(handles[i]);
-                    return ListTile(
-                      onTap: () => pushOnce(context, UserProfileScreen.route(p)),
-                      contentPadding: EdgeInsets.zero,
-                      leading: const CircleAvatar(
-                        backgroundColor: Colors.black,
-                        child: Icon(LucideIcons.user, color: Colors.white),
-                      ),
-                      title: Text(p.name,
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text(p.handle,
-                          style: const TextStyle(color: Color(0xFF8E8E8E))),
-                      trailing: FollowButton(handle: p.handle, compact: true),
-                    );
-                  },
-                );
-              },
-            ),
+            child: _isOtherPerson ? _remoteList() : _myList(),
           ),
         ],
       ),
+    );
+  }
+
+  /// Your own list, live from FollowStore.
+  Widget _myList() {
+    return ListenableBuilder(
+      listenable: FollowStore.instance,
+      builder: (context, _) {
+        final handles = (_showFollowers
+                ? FollowStore.instance.followerHandles
+                : FollowStore.instance.followingHandles)
+            .toList();
+        return _renderPeople([for (final h in handles) personFor(h)], _emptyText());
+      },
+    );
+  }
+
+  /// Another person's list, from the database.
+  Widget _remoteList() {
+    return FutureBuilder<List<Person>>(
+      future: _remote,
+      builder: (context, snap) {
+        if (snap.hasData) return _renderPeople(snap.data!, _emptyText());
+        if (snap.hasError) {
+          return const Center(
+            child: Text('Could not load this list. Check your connection.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF8E8E8E))),
+          );
+        }
+        return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black));
+      },
+    );
+  }
+
+  String _emptyText() => _showFollowers ? 'No followers yet' : 'Not following anyone yet';
+
+  Widget _renderPeople(List<Person> people, String emptyText) {
+    if (people.isEmpty) {
+      return Center(
+        child: Text(emptyText, style: const TextStyle(color: Color(0xFF8E8E8E))),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: people.length,
+      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEAEA)),
+      itemBuilder: (context, i) {
+        final p = people[i];
+        return PersonRow(
+          person: p,
+          onTap: () => pushOnce(context, UserProfileScreen.route(p)),
+          trailing: FollowButton(handle: p.handle, compact: true),
+        );
+      },
     );
   }
 
@@ -141,6 +189,3 @@ class _ConnectionsScreenState extends State<ConnectionsScreen> {
     );
   }
 }
-
-
-
